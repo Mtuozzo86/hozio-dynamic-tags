@@ -1,11 +1,11 @@
 <?php
 /*
 Plugin Name: Hozio Dynamic Tags
-Plugin URI: https://hozio.com
+Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
 Version: 1.0
-Author: Hozio
-Author URI: https://hozio.com
+Author: Hozio Web Dev
+Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
 Text Domain: hozio-dynamic-tags
 */
