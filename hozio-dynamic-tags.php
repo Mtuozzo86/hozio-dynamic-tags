@@ -8,7 +8,10 @@ Author: Hozio Web Dev
 Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
 Text Domain: hozio-dynamic-tags
+GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
+GitHub Branch: main
 */
+
 
 // Ensure WordPress is calling the file
 if (!defined('ABSPATH')) {
