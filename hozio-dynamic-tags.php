@@ -21,6 +21,7 @@ if (!defined('ABSPATH')) {
 // Include the settings page and dynamic tags file
 require_once plugin_dir_path(__FILE__) . 'includes/admin-settings.php';  
 require_once plugin_dir_path(__FILE__) . 'includes/dynamic-tags.php';    
+require_once plugin_dir_path(__FILE__) . 'includes/service-menu-handler.php';    
 
 // Function to display the contact info page
 function hozio_dynamic_tags_contact_info() {
