@@ -20,7 +20,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['angies-list', "Angi's List", 'URL'],
         ['home-advisor', 'Home Advisor', 'URL'],
         ['business-hours', 'Business Hours', 'TEXT'],
-        ['gmb-link', 'GMB Link', 'URL'],  
+        ['gmb-link', 'GMB Link', 'URL'],  // GMB Link added here
         ['facebook', 'Facebook', 'URL'],
         ['instagram', 'Instagram', 'URL'],
         ['twitter', 'Twitter', 'URL'],

@@ -5,13 +5,12 @@ Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
 Version: 1.4
 Author: Hozio Web Dev
-Author URI: https://www.hozio.com/
+Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
 Text Domain: hozio-dynamic-tags
 GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 GitHub Branch: main
 */
-
 
 // Ensure WordPress is calling the file
 if (!defined('ABSPATH')) {
@@ -21,7 +20,6 @@ if (!defined('ABSPATH')) {
 // Include the settings page and dynamic tags file
 require_once plugin_dir_path(__FILE__) . 'includes/admin-settings.php';  
 require_once plugin_dir_path(__FILE__) . 'includes/dynamic-tags.php';    
-require_once plugin_dir_path(__FILE__) . 'includes/service-menu-handler.php';    
 
 // Function to display the contact info page
 function hozio_dynamic_tags_contact_info() {

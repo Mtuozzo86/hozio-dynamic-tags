@@ -18,6 +18,7 @@ function hozio_dynamic_tags_register_settings() {
     register_setting('hozio_dynamic_tags_options', 'hozio_twitter_url');
     register_setting('hozio_dynamic_tags_options', 'hozio_tiktok_url');
     register_setting('hozio_dynamic_tags_options', 'hozio_linkedin_url');
+    register_setting('hozio_dynamic_tags_options', 'hozio_gmb_link');
 }
 
 // Add settings sections and fields
@@ -46,6 +47,8 @@ function hozio_dynamic_tags_settings_init() {
     add_settings_field('hozio_twitter_url', 'Twitter URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_twitter_url']);
     add_settings_field('hozio_tiktok_url', 'TikTok URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_tiktok_url']);
     add_settings_field('hozio_linkedin_url', 'LinkedIn URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_linkedin_url']);
+    add_settings_field('hozio_gmb_link', 'GMB Link', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_gmb_link']);
+    
 }
 
 // Render input fields for the settings
@@ -80,5 +83,13 @@ function hozio_dynamic_tags_settings_page() {
 }
 
 // Register the settings and initialize the fields
+add_action('admin_init', 'hozio_dynamic_tags_register_settings');
+add_action('admin_init', 'hozio_dynamic_tags_settings_init');
+
+
+add_action('admin_init', function() {
+    error_log('Admin init called');
+});
+
 add_action('admin_init', 'hozio_dynamic_tags_register_settings');
 add_action('admin_init', 'hozio_dynamic_tags_settings_init');
