@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 1.4
+Version: 1.3
 Author: Hozio Web Dev
 Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
@@ -79,6 +79,8 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['angies-list', "Angi's List", 'hozio_angies_list_url'],
         ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url'],
         ['sitemap-xml', 'sitemap.xml', ''],
+        ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
+        
     ];
 
     // Register URL-based dynamic tags
