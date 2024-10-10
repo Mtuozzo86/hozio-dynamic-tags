@@ -19,6 +19,7 @@ function hozio_dynamic_tags_register_settings() {
     register_setting('hozio_dynamic_tags_options', 'hozio_tiktok_url');
     register_setting('hozio_dynamic_tags_options', 'hozio_linkedin_url');
     register_setting('hozio_dynamic_tags_options', 'hozio_gmb_link');
+    register_setting('hozio_dynamic_tags_options', 'hozio_to_email_contact_form');
 }
 
 // Add settings sections and fields
@@ -48,7 +49,7 @@ function hozio_dynamic_tags_settings_init() {
     add_settings_field('hozio_tiktok_url', 'TikTok URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_tiktok_url']);
     add_settings_field('hozio_linkedin_url', 'LinkedIn URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_linkedin_url']);
     add_settings_field('hozio_gmb_link', 'GMB Link', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_gmb_link']);
-    
+    add_settings_field('to-email-contact-form', 'To Email(s) Contact Form', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_to_email_contact_form']);
 }
 
 // Render input fields for the settings
