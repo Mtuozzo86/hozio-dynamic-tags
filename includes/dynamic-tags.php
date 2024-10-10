@@ -68,7 +68,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                         } elseif ('email-icon-box' === '" . esc_attr($tag[0]) . "') {
                             echo '<a href=\"mailto:' . esc_attr(get_option('hozio_company_email')) . '\">' . esc_html(get_option('hozio_company_email')) . '</a>';  // Email icon box
                         } elseif ('to-email-contact-form' === '" . esc_attr($tag[0]) . "') {
-                            echo esc_html(get_option('hozio_company_email'));  // To email contact form
+                            echo esc_html(get_option('hozio_to_email_contact_form'));  // To email contact form
                         } elseif ('sitemap-xml' === '" . esc_attr($tag[0]) . "') {
                             echo esc_url(get_option('home_url') . '/sitemap.xml');  // Sitemap
                         } elseif ('yelp' === '" . esc_attr($tag[0]) . "') {
