@@ -2,7 +2,7 @@
 // Function to add services to the menu upon post creation
 function add_service_to_menu($new_status, $old_status, $post) {
     // Verify the post type is 'services'
-    if ($post->post_type != 'services') {
+    if ($post->post_type != 'page2') {
         return;
     }
     // Ensure the post is transitioning to "publish" from another status
@@ -41,7 +41,7 @@ function add_service_to_menu($new_status, $old_status, $post) {
             // Add the new service item under the "Services" parent
             wp_update_nav_menu_item($menu->term_id, 0, array(
                 'menu-item-object-id' => $post->ID,
-                'menu-item-object' => 'services', // Explicitly set to 'services' post type
+                'menu-item-object' => 'page2', // Explicitly set to 'page2' post type
                 'menu-item-type' => 'post_type',
                 'menu-item-title' => $post_title,
                 'menu-item-url' => $post_url,
@@ -70,7 +70,7 @@ function add_service_to_menu($new_status, $old_status, $post) {
         if (!$exists) {
             wp_update_nav_menu_item($menu->term_id, 0, array(
                 'menu-item-object-id' => $post->ID,
-                'menu-item-object' => 'services', // Explicitly set to 'services' post type
+                'menu-item-object' => 'page2', // Explicitly set to 'page2' post type
                 'menu-item-type' => 'post_type',
                 'menu-item-title' => $post_title,
                 'menu-item-url' => $post_url,
