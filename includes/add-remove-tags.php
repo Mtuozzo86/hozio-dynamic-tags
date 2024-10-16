@@ -31,7 +31,7 @@
     $custom_tags = get_option('hozio_custom_tags', []);
     if (!empty($custom_tags)) {
         foreach ($custom_tags as $tag) {
-            echo '<li>' . esc_html($tag['title']) . ' (' . esc_html($tag['type']) . ') - <a href="' . admin_url('admin-post.php?action=hozio_remove_tag&tag=' . esc_attr($tag['value'])) . '">Remove</a></li>';
+            echo '<li>' . esc_html($tag['title']) . ' (' . esc_html($tag['type']) . ') - <a href="' . esc_url(admin_url('admin-post.php?action=hozio_remove_tag&tag=' . esc_attr($tag['value']))) . '" onclick="return confirm(\'Are you sure you want to remove this tag?\');">Remove</a></li>';
         }
     } else {
         echo '<li>No custom tags found.</li>';
@@ -42,7 +42,7 @@
 <script>
     jQuery(document).ready(function($) {
         $('input[name="tag_type"]').change(function() {
-            if ($(this).val() == 'image') {
+            if ($(this).val() === 'image') {
                 $('#image-upload').show();
             } else {
                 $('#image-upload').hide();
