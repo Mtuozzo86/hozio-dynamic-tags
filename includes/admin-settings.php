@@ -20,6 +20,20 @@ function hozio_dynamic_tags_register_settings() {
     register_setting('hozio_dynamic_tags_options', 'hozio_linkedin_url');
     register_setting('hozio_dynamic_tags_options', 'hozio_gmb_link');
     register_setting('hozio_dynamic_tags_options', 'hozio_to_email_contact_form');
+
+    // Dynamically add custom tag settings
+    $custom_tags = get_option('hozio_custom_tags', []);
+    foreach ($custom_tags as $tag) {
+        register_setting('hozio_dynamic_tags_options', 'hozio_' . $tag['value']);
+        add_settings_field(
+            'hozio_' . $tag['value'],
+            $tag['title'],
+            'hozio_dynamic_tags_render_input',
+            'hozio_dynamic_tags',
+            'hozio_dynamic_tags_section',
+            ['label_for' => 'hozio_' . $tag['value']]
+        );
+    }
 }
 
 // Add settings sections and fields
@@ -86,26 +100,3 @@ function hozio_dynamic_tags_settings_page() {
 // Register the settings and initialize the fields
 add_action('admin_init', 'hozio_dynamic_tags_register_settings');
 add_action('admin_init', 'hozio_dynamic_tags_settings_init');
-
-
-add_action('admin_init', function() {
-    error_log('Admin init called');
-});
-
-add_action('admin_init', 'hozio_dynamic_tags_register_settings');
-add_action('admin_init', 'hozio_dynamic_tags_settings_init');
-
-    // Dynamically add custom tag settings
-    $custom_tags = get_option('hozio_custom_tags', []);
-    foreach ($custom_tags as $tag) {
-        register_setting('hozio_dynamic_tags_options', 'hozio_' . $tag['value']);
-        add_settings_field(
-            'hozio_' . $tag['value'],
-            $tag['title'],
-            'hozio_dynamic_tags_render_input',
-            'hozio_dynamic_tags',
-            'hozio_dynamic_tags_section',
-            ['label_for' => 'hozio_' . $tag['value']]
-        );
-    }
-}
