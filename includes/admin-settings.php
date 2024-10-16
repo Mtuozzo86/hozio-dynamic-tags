@@ -2,24 +2,31 @@
 // Register settings for Hozio Dynamic Tags
 function hozio_dynamic_tags_register_settings() {
     // Register a new setting for each of the fields in the settings page
-    register_setting('hozio_dynamic_tags_options', 'hozio_company_phone_1');
-    register_setting('hozio_dynamic_tags_options', 'hozio_company_phone_2');
-    register_setting('hozio_dynamic_tags_options', 'hozio_sms_phone');
-    register_setting('hozio_dynamic_tags_options', 'hozio_company_email');
-    register_setting('hozio_dynamic_tags_options', 'hozio_company_address');
-    register_setting('hozio_dynamic_tags_options', 'hozio_business_hours');
-    register_setting('hozio_dynamic_tags_options', 'hozio_yelp_url');
-    register_setting('hozio_dynamic_tags_options', 'hozio_youtube_url');
-    register_setting('hozio_dynamic_tags_options', 'hozio_angies_list_url');
-    register_setting('hozio_dynamic_tags_options', 'hozio_home_advisor_url');
-    register_setting('hozio_dynamic_tags_options', 'hozio_bbb_url');
-    register_setting('hozio_dynamic_tags_options', 'hozio_facebook_url');
-    register_setting('hozio_dynamic_tags_options', 'hozio_instagram_url');
-    register_setting('hozio_dynamic_tags_options', 'hozio_twitter_url');
-    register_setting('hozio_dynamic_tags_options', 'hozio_tiktok_url');
-    register_setting('hozio_dynamic_tags_options', 'hozio_linkedin_url');
-    register_setting('hozio_dynamic_tags_options', 'hozio_gmb_link');
-    register_setting('hozio_dynamic_tags_options', 'hozio_to_email_contact_form');
+    $fields = [
+        'hozio_company_phone_1',
+        'hozio_company_phone_2',
+        'hozio_sms_phone',
+        'hozio_company_email',
+        'hozio_company_address',
+        'hozio_business_hours',
+        'hozio_yelp_url',
+        'hozio_youtube_url',
+        'hozio_angies_list_url',
+        'hozio_home_advisor_url',
+        'hozio_bbb_url',
+        'hozio_facebook_url',
+        'hozio_instagram_url',
+        'hozio_twitter_url',
+        'hozio_tiktok_url',
+        'hozio_linkedin_url',
+        'hozio_gmb_link',
+        'hozio_to_email_contact_form',
+    ];
+
+    // Register each field
+    foreach ($fields as $field) {
+        register_setting('hozio_dynamic_tags_options', $field);
+    }
 
     // Dynamically add custom tag settings
     $custom_tags = get_option('hozio_custom_tags', []);
@@ -46,24 +53,31 @@ function hozio_dynamic_tags_settings_init() {
     );
 
     // Add fields for each option in the settings
-    add_settings_field('hozio_company_phone_1', 'Company Phone 1', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_company_phone_1']);
-    add_settings_field('hozio_company_phone_2', 'Company Phone 2', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_company_phone_2']);
-    add_settings_field('hozio_sms_phone', 'SMS Phone Number', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_sms_phone']);
-    add_settings_field('hozio_company_email', 'Company Email', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_company_email']);
-    add_settings_field('hozio_company_address', 'Company Address', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_company_address']);
-    add_settings_field('hozio_business_hours', 'Business Hours', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_business_hours']);
-    add_settings_field('hozio_yelp_url', 'Yelp URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_yelp_url']);
-    add_settings_field('hozio_youtube_url', 'YouTube URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_youtube_url']);
-    add_settings_field('hozio_angies_list_url', 'Angi\'s List URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_angies_list_url']);
-    add_settings_field('hozio_home_advisor_url', 'Home Advisor URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_home_advisor_url']);
-    add_settings_field('hozio_bbb_url', 'BBB URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_bbb_url']);
-    add_settings_field('hozio_facebook_url', 'Facebook URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_facebook_url']);
-    add_settings_field('hozio_instagram_url', 'Instagram URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_instagram_url']);
-    add_settings_field('hozio_twitter_url', 'Twitter URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_twitter_url']);
-    add_settings_field('hozio_tiktok_url', 'TikTok URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_tiktok_url']);
-    add_settings_field('hozio_linkedin_url', 'LinkedIn URL', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_linkedin_url']);
-    add_settings_field('hozio_gmb_link', 'GMB Link', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_gmb_link']);
-    add_settings_field('to-email-contact-form', 'To Email(s) Contact Form', 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => 'hozio_to_email_contact_form']);
+    $fields = [
+        'hozio_company_phone_1' => 'Company Phone 1',
+        'hozio_company_phone_2' => 'Company Phone 2',
+        'hozio_sms_phone' => 'SMS Phone Number',
+        'hozio_company_email' => 'Company Email',
+        'hozio_company_address' => 'Company Address',
+        'hozio_business_hours' => 'Business Hours',
+        'hozio_yelp_url' => 'Yelp URL',
+        'hozio_youtube_url' => 'YouTube URL',
+        'hozio_angies_list_url' => "Angi's List URL",
+        'hozio_home_advisor_url' => 'Home Advisor URL',
+        'hozio_bbb_url' => 'BBB URL',
+        'hozio_facebook_url' => 'Facebook URL',
+        'hozio_instagram_url' => 'Instagram URL',
+        'hozio_twitter_url' => 'Twitter URL',
+        'hozio_tiktok_url' => 'TikTok URL',
+        'hozio_linkedin_url' => 'LinkedIn URL',
+        'hozio_gmb_link' => 'GMB Link',
+        'hozio_to_email_contact_form' => 'To Email(s) Contact Form',
+    ];
+
+    // Loop through fields to add settings
+    foreach ($fields as $key => $label) {
+        add_settings_field($key, $label, 'hozio_dynamic_tags_render_input', 'hozio_dynamic_tags', 'hozio_dynamic_tags_section', ['label_for' => $key]);
+    }
 }
 
 // Render input fields for the settings
@@ -100,3 +114,4 @@ function hozio_dynamic_tags_settings_page() {
 // Register the settings and initialize the fields
 add_action('admin_init', 'hozio_dynamic_tags_register_settings');
 add_action('admin_init', 'hozio_dynamic_tags_settings_init');
+?>
