@@ -29,6 +29,56 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['bbb', 'BBB', 'URL'],
     ];
 
+// Register custom dynamic tags
+add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
+    // URL-based tags
+    $url_tags = [
+        ['company-phone-1', 'Company Phone Number 1', 'hozio_company_phone_1', 'tel'],
+        // Existing tags...
+    ];
+
+    // Text-based tags
+    $text_tags = [
+        ['company-phone-1-name', 'Company Phone #1 Name', 'hozio_company_phone_1'],
+        // Existing tags...
+    ];
+
+    // Custom tags
+    $custom_tags = get_option('hozio_custom_tags', []);
+    foreach ($custom_tags as $tag) {
+        $tags[] = [$tag['value'], $tag['title'], 'hozio_' . $tag['value'], $tag['type']];
+    }
+
+    // Register dynamic tags for each type
+    foreach ($url_tags as $tag) {
+        // Same logic as you have to register URL tags
+    }
+
+    foreach ($text_tags as $tag) {
+        // Same logic as you have to register Text tags
+    }
+
+    foreach ($tags as $tag) {
+        $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
+        if (!class_exists($class_name)) {
+            eval("
+                class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                    public function get_name() { return '" . esc_attr($tag[0]) . "'; }
+                    public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
+                    public function get_group() { return 'site'; }
+                    public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::" . ($tag[3] === 'url' ? 'URL_CATEGORY' : ($tag[3] === 'image' ? 'MEDIA_CATEGORY' : 'TEXT_CATEGORY')) . "]; }
+                    protected function register_controls() {}
+                    public function render() {
+                        echo esc_html(get_option('hozio_" . esc_attr($tag[2]) . "'));
+                    }
+                }
+            ");
+            $dynamic_tags->register(new $class_name());
+        }
+    }
+});
+
+    
     foreach ($tags as $tag) {
         $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
         // Check if the class already exists
