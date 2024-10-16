@@ -94,3 +94,18 @@ add_action('admin_init', function() {
 
 add_action('admin_init', 'hozio_dynamic_tags_register_settings');
 add_action('admin_init', 'hozio_dynamic_tags_settings_init');
+
+    // Dynamically add custom tag settings
+    $custom_tags = get_option('hozio_custom_tags', []);
+    foreach ($custom_tags as $tag) {
+        register_setting('hozio_dynamic_tags_options', 'hozio_' . $tag['value']);
+        add_settings_field(
+            'hozio_' . $tag['value'],
+            $tag['title'],
+            'hozio_dynamic_tags_render_input',
+            'hozio_dynamic_tags',
+            'hozio_dynamic_tags_section',
+            ['label_for' => 'hozio_' . $tag['value']]
+        );
+    }
+}
