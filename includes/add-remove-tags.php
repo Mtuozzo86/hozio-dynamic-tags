@@ -14,6 +14,12 @@
     <input type="radio" id="image" name="tag_type" value="image">
     <label for="image">Image</label><br><br>
 
+    <div id="image-upload" style="display: none;">
+        <label for="image-url">Upload Image:</label>
+        <input type="text" id="image-url" name="image_url" readonly>
+        <button type="button" class="upload-image-button">Upload Image</button>
+    </div>
+
     <button type="submit">Add Dynamic Tag</button>
 </form>
 
@@ -32,3 +38,29 @@
     }
     ?>
 </ul>
+
+<script>
+    jQuery(document).ready(function($) {
+        $('input[name="tag_type"]').change(function() {
+            if ($(this).val() == 'image') {
+                $('#image-upload').show();
+            } else {
+                $('#image-upload').hide();
+            }
+        });
+
+        $('.upload-image-button').click(function(e) {
+            e.preventDefault();
+            var imageUploader = wp.media({
+                title: 'Upload Image',
+                button: {
+                    text: 'Use this image'
+                },
+                multiple: false
+            }).open().on('select', function(e) {
+                var uploadedImage = imageUploader.state().get('selection').first().toJSON();
+                $('#image-url').val(uploadedImage.url);
+            });
+        });
+    });
+</script>
