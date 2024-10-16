@@ -143,6 +143,54 @@ function hozio_dynamic_tags_menu() {
     );
 }
 
+// Handle the add tag form submission
+add_action('admin_post_hozio_add_tag', 'hozio_add_dynamic_tag');
+function hozio_add_dynamic_tag() {
+    if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['_wpnonce'], 'hozio_add_tag_nonce')) {
+        wp_die('Unauthorized request');
+    }
+
+    $tag_title = sanitize_text_field($_POST['tag_title']);
+    $tag_type = sanitize_text_field($_POST['tag_type']);
+    $tag_value = sanitize_title($tag_title); // Generate a slug from the title
+
+    $custom_tags = get_option('hozio_custom_tags', []);
+    $custom_tags[] = [
+        'title' => $tag_title,
+        'value' => $tag_value,
+        'type' => $tag_type
+    ];
+
+    update_option('hozio_custom_tags', $custom_tags);
+    wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
+    exit;
+}
+
+// Handle tag removal
+add_action('admin_post_hozio_remove_tag', 'hozio_remove_dynamic_tag');
+function hozio_remove_dynamic_tag() {
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized request');
+    }
+
+    $tag_value = sanitize_text_field($_GET['tag']);
+    $custom_tags = get_option('hozio_custom_tags', []);
+
+    foreach ($custom_tags as $key => $tag) {
+        if ($tag['value'] === $tag_value) {
+            unset($custom_tags[$key]);
+            break;
+        }
+    }
+
+    update_option('hozio_custom_tags', array_values($custom_tags));
+    wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
+    exit;
+}
+    
+    
+    
+    
 // Function for displaying the Add/Remove page content
 function hozio_add_remove_tags_page() {
     include plugin_dir_path(__FILE__) . 'includes/add-remove-tags.php';
