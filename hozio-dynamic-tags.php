@@ -116,6 +116,38 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         }
     }
 
+// Add a custom admin menu
+add_action('admin_menu', 'hozio_dynamic_tags_menu');
+function hozio_dynamic_tags_menu() {
+    $icon_url = plugins_url('assets/hozio-logo.png', __FILE__);
+
+    // Main Dynamic Tags page
+    add_menu_page(
+        'Hozio Dynamic Tags',              
+        'Hozio Dynamic Tags',              
+        'manage_options',                  
+        'hozio-dynamic-tags',              
+        'hozio_dynamic_tags_contact_info', 
+        $icon_url,                         
+        25                                 
+    );
+
+    // Add the Add/Remove submenu
+    add_submenu_page(
+        'hozio-dynamic-tags',              // Parent slug
+        'Add / Remove Dynamic Tags',       // Page title
+        'Add / Remove',                    // Menu title
+        'manage_options',                  // Capability
+        'hozio-add-remove-tags',           // Menu slug
+        'hozio_add_remove_tags_page'       // Function to display content
+    );
+}
+
+// Function for displaying the Add/Remove page content
+function hozio_add_remove_tags_page() {
+    include plugin_dir_path(__FILE__) . 'includes/add-remove-tags.php';
+}
+    
     // Register text-based dynamic tags
     foreach ($text_tags as $tag) {
         $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
