@@ -15,12 +15,12 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         ['email-icon-box', 'Email (Icon Box desc.)', 'TEXT'],
         ['to-email-contact-form', 'To Email(s) Contact Form', 'TEXT'],
         ['sitemap-xml', 'sitemap.xml', 'URL'],
-        ['company-address', 'Company Address', 'TEXT'],
+        ['company-address', 'Company Address', 'TEXT'], // Allow HTML
         ['yelp', 'Yelp', 'URL'],
         ['youtube', 'YouTube', 'URL'],
         ['angies-list', "Angi's List", 'URL'],
         ['home-advisor', 'Home Advisor', 'URL'],
-        ['business-hours', 'Business Hours', 'TEXT'],
+        ['business-hours', 'Business Hours', 'TEXT'], // Allow HTML
         ['gmb-link', 'GMB Link', 'URL'],
         ['facebook', 'Facebook', 'URL'],
         ['instagram', 'Instagram', 'URL'],
@@ -70,15 +70,58 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                     }
 
                     public function render() {
-                        \$value = get_option('hozio_' . str_replace('-', '_', \$this->tag_name));
-                        switch (\$this->tag_type) {
-                            case 'URL':
-                                echo esc_url(\$value);
-                                break;
-                            case 'TEXT':
-                            default:
-                                echo esc_html(\$value);
-                                break;
+                        if ('company-address' === \$this->tag_name) {
+                            echo wp_kses_post(get_option('hozio_company_address'));  // Allow HTML for company address
+                        } elseif ('business-hours' === \$this->tag_name) {
+                            echo wp_kses_post(get_option('hozio_business_hours'));  // Allow HTML for business hours
+                        } elseif ('gmb-link' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_gmb_link'));  // GMB Link
+                        } elseif ('company-phone-1' === \$this->tag_name) {
+                            echo esc_url('tel:' . esc_attr(get_option('hozio_company_phone_1')));  // Company Phone 1 (URL)
+                        } elseif ('phone-number-icon-box' === \$this->tag_name) {
+                            echo '<a href=\"tel:' . esc_attr(get_option('hozio_company_phone_1')) . '\">' . esc_html(get_option('hozio_company_phone_1')) . '</a>';  // Phone number icon box
+                        } elseif ('company-phone-1-name' === \$this->tag_name) {
+                            echo esc_html(get_option('hozio_company_phone_1'));  // Company phone 1 name
+                        } elseif ('company-phone-2' === \$this->tag_name) {
+                            echo esc_url('tel:' . esc_attr(get_option('hozio_company_phone_2')));  // Company Phone 2 (URL)
+                        } elseif ('company-phone-2-name' === \$this->tag_name) {
+                            echo esc_html(get_option('hozio_company_phone_2'));  // Company phone 2 name
+                        } elseif ('sms-phone' === \$this->tag_name) {
+                            echo esc_url('sms:' . esc_attr(get_option('hozio_sms_phone')));  // SMS phone (URL)
+                        } elseif ('sms-icon-box' === \$this->tag_name) {
+                            echo '<a href=\"sms:' . esc_attr(get_option('hozio_sms_phone')) . '\">' . esc_html(get_option('hozio_sms_phone')) . '</a>';  // SMS phone icon box
+                        } elseif ('sms-phone-name' === \$this->tag_name) {
+                            echo esc_html(get_option('hozio_sms_phone'));  // SMS phone name
+                        } elseif ('company-email' === \$this->tag_name) {
+                            echo esc_url('mailto:' . esc_attr(get_option('hozio_company_email')));  // Company email (URL)
+                        } elseif ('email-icon-box' === \$this->tag_name) {
+                            echo '<a href=\"mailto:' . esc_attr(get_option('hozio_company_email')) . '\">' . esc_html(get_option('hozio_company_email')) . '</a>';  // Email icon box
+                        } elseif ('to-email-contact-form' === \$this->tag_name) {
+                            echo esc_html(get_option('hozio_to_email_contact_form'));  // To email contact form
+                        } elseif ('sitemap-xml' === \$this->tag_name) {
+                            echo esc_url(home_url('/sitemap.xml'));  // Sitemap
+                        } elseif ('yelp' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_yelp_url'));  // Yelp URL
+                        } elseif ('youtube' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_youtube_url'));  // YouTube URL
+                        } elseif ('angies-list' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_angies_list_url'));  // Angie's List URL
+                        } elseif ('home-advisor' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_home_advisor_url'));  // Home Advisor URL
+                        } elseif ('bbb' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_bbb_url'));  // BBB URL
+                        } elseif ('facebook' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_facebook_url'));  // Facebook URL
+                        } elseif ('instagram' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_instagram_url'));  // Instagram URL
+                        } elseif ('twitter' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_twitter_url'));  // Twitter URL
+                        } elseif ('tiktok' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_tiktok_url'));  // TikTok URL
+                        } elseif ('linkedin' === \$this->tag_name) {
+                            echo esc_url(get_option('hozio_linkedin_url'));  // LinkedIn URL
+                        } else {
+                            echo esc_html(get_option('hozio_' . str_replace('-', '_', \$this->tag_name)));  // Default to allow HTML output for all others
                         }
                     }
                 }

@@ -1,14 +1,14 @@
 <?php
 /*
 Plugin Name: Hozio Dynamic Tags
-Plugin URI: https://github.com/mtallo22/hozio-dynamic-tags
+Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
 Version: 3.0
 Author: Hozio Web Dev
-Author URI: https://github.com/mtallo22/hozio-dynamic-tags
+Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
 Text Domain: hozio-dynamic-tags
-GitHub Plugin URI: https://github.com/mtallo22/hozio-dynamic-tags
+GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 GitHub Branch: main
 */
 
@@ -136,13 +136,13 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['company-phone-1-name', 'Company Phone #1 Name', 'hozio_company_phone_1'],
         ['company-phone-2-name', 'Company Phone #2 Name', 'hozio_company_phone_2'],
         ['sms-phone-name', 'SMS Phone # Name', 'hozio_sms_phone'],
-        ['company-address', 'Company Address', 'hozio_company_address'],
-        ['business-hours', 'Business Hours', 'hozio_business_hours'],
+        ['company-address', 'Company Address', 'hozio_company_address'], // Allow HTML
+        ['business-hours', 'Business Hours', 'hozio_business_hours'], // Allow HTML
         ['yelp', 'Yelp', 'hozio_yelp_url'],
         ['youtube', 'YouTube', 'hozio_youtube_url'],
         ['angies-list', "Angi's List", 'hozio_angies_list_url'],
         ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url'],
-        ['sitemap-xml', 'sitemap.xml', ''],
+        ['sitemap-xml', 'sitemap.xml', ''], // Sitemap registration
         ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
     ];
 
@@ -158,6 +158,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                     public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY]; }
                     protected function register_controls() {}
                     public function render() {
+                        // Check for tel, sms, and mailto to apply correct prefix
                         if ('tel' === '" . esc_attr($tag[3]) . "') {
                             echo esc_url('tel:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
                         } elseif ('sms' === '" . esc_attr($tag[3]) . "') {
@@ -186,7 +187,15 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                     public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY]; }
                     protected function register_controls() {}
                     public function render() {
-                        echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
+                        if ('company-address' === '" . esc_attr($tag[0]) . "') {
+                            echo wp_kses_post(get_option('hozio_company_address'));  // Allow HTML for company address
+                        } elseif ('business-hours' === '" . esc_attr($tag[0]) . "') {
+                            echo wp_kses_post(get_option('hozio_business_hours'));  // Allow HTML for business hours
+                        } elseif ('sitemap-xml' === '" . esc_attr($tag[0]) . "') {
+                            echo esc_url(home_url('/sitemap.xml'));  // Output the sitemap URL
+                        } else {
+                            echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
+                        }
                     }
                 }
             ");
