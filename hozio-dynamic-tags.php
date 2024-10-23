@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.1
+Version: 3.01
 Author: Hozio Web Dev
 Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
@@ -129,6 +129,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['tiktok', 'TikTok', 'hozio_tiktok_url', 'url'],
         ['linkedin', 'LinkedIn', 'hozio_linkedin_url', 'url'],
         ['bbb', 'BBB', 'hozio_bbb_url', 'url'],
+        ['sitemap-xml', 'Sitemap', 'sitemap_url', 'url'], // Sitemap registration
     ];
 
     // Text-based tags
@@ -142,7 +143,6 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['youtube', 'YouTube', 'hozio_youtube_url'],
         ['angies-list', "Angi's List", 'hozio_angies_list_url'],
         ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url'],
-        ['sitemap-xml', 'sitemap.xml', ''], // Sitemap registration
         ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
     ];
 
@@ -150,7 +150,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
     foreach ($url_tags as $tag) {
         $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
         if (!class_exists($class_name)) {
-            eval("
+             eval("
                 class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
                     public function get_name() { return '" . esc_attr($tag[0]) . "'; }
                     public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
@@ -158,13 +158,14 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                     public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY]; }
                     protected function register_controls() {}
                     public function render() {
-                        // Check for tel, sms, and mailto to apply correct prefix
                         if ('tel' === '" . esc_attr($tag[3]) . "') {
                             echo esc_url('tel:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
                         } elseif ('sms' === '" . esc_attr($tag[3]) . "') {
                             echo esc_url('sms:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
                         } elseif ('mailto' === '" . esc_attr($tag[3]) . "') {
                             echo esc_url('mailto:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                        } elseif ('url' === '" . esc_attr($tag[3]) . "') {
+                            echo esc_url(get_option('" . esc_attr($tag[2]) . "') ?: home_url('/sitemap.xml')); // Default to sitemap URL
                         } else {
                             echo esc_url(get_option('" . esc_attr($tag[2]) . "'));
                         }
@@ -191,8 +192,6 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                             echo wp_kses_post(get_option('hozio_company_address'));  // Allow HTML for company address
                         } elseif ('business-hours' === '" . esc_attr($tag[0]) . "') {
                             echo wp_kses_post(get_option('hozio_business_hours'));  // Allow HTML for business hours
-                        } elseif ('sitemap-xml' === '" . esc_attr($tag[0]) . "') {
-                            echo esc_url(home_url('/sitemap.xml'));  // Output the sitemap URL
                         } else {
                             echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
                         }
@@ -224,4 +223,3 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         }
     }
 });
-?>
