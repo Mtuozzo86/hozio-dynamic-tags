@@ -1,6 +1,6 @@
 <?php
 // Register custom dynamic tags
-add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
+add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
     // Base tags
     $tags = [
         ['company-phone-1', 'Company Phone Number 1', 'URL'],
@@ -34,52 +34,51 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
     $custom_tags = get_option('hozio_custom_tags', []);
     foreach ($custom_tags as $tag) {
         // Ensure the tag type is set correctly
-        $tags[] = [$tag['value'], $tag['title'], 'hozio_' . $tag['value'], strtoupper($tag['type'])];
+        $tags[] = [$tag['value'], $tag['title'], strtoupper($tag['type'])];
     }
 
     // Register dynamic tags
     foreach ($tags as $tag) {
-        $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
+        $tag_slug = str_replace('-', '_', $tag[0]);
+        $class_name = 'My_' . ucwords($tag_slug) . '_Tag';
 
         if (!class_exists($class_name)) {
             eval("
                 class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
-                    public function get_name() { return '" . esc_attr($tag[0]) . "'; }
-                    public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
-                    public function get_group() { return 'site'; }
-                    public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::" . ($tag[2] === 'URL' ? 'URL_CATEGORY' : 'TEXT_CATEGORY') . "]; }
-                    protected function register_controls() {}
+                    private \$tag_name = '" . esc_attr($tag[0]) . "';
+                    private \$tag_title = '" . esc_attr($tag[1]) . "';
+                    private \$tag_type = '" . esc_attr($tag[2]) . "';
+
+                    public function get_name() {
+                        return \$this->tag_name;
+                    }
+
+                    public function get_title() {
+                        return \$this->tag_title;
+                    }
+
+                    public function get_group() {
+                        return 'general';
+                    }
+
+                    public function get_categories() {
+                        return [\$this->tag_type === 'URL' ? \\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY : \\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
+                    }
+
+                    protected function register_controls() {
+                        // No controls needed for now
+                    }
 
                     public function render() {
-                        // Render logic based on tag name
-                        switch ('" . esc_attr($tag[0]) . "') {
-                            case 'company-address':
-                                echo wp_kses_post(get_option('hozio_company_address'));
+                        \$value = get_option('hozio_' . str_replace('-', '_', \$this->tag_name));
+                        switch (\$this->tag_type) {
+                            case 'URL':
+                                echo esc_url(\$value);
                                 break;
-                            case 'business-hours':
-                                echo wp_kses_post(get_option('hozio_business_hours'));
-                                break;
-                            case 'gmb-link':
-                                echo esc_url(get_option('hozio_gmb_link'));
-                                break;
-                            case 'company-phone-1':
-                                echo esc_url('tel:' . esc_attr(get_option('hozio_company_phone_1')));
-                                break;
-                            case 'company-phone-1-name':
-                                echo esc_html(get_option('hozio_company_phone_1'));
-                                break;
-                            case 'company-phone-2':
-                                echo esc_url('tel:' . esc_attr(get_option('hozio_company_phone_2')));
-                                break;
-                            case 'sms-phone':
-                                echo esc_url('sms:' . esc_attr(get_option('hozio_sms_phone')));
-                                break;
-                            case 'company-email':
-                                echo esc_url('mailto:' . esc_attr(get_option('hozio_company_email')));
-                                break;
-                            // Add other cases for existing tags as necessary...
+                            case 'TEXT':
                             default:
-                                echo wp_kses_post(get_option('hozio_' . str_replace('-', '_', $tag[0])));
+                                echo esc_html(\$value);
+                                break;
                         }
                     }
                 }
@@ -87,5 +86,5 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
             $dynamic_tags->register(new $class_name());
         }
     }
-});
+}, 50);
 ?>
