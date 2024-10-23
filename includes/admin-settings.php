@@ -31,14 +31,16 @@ function hozio_dynamic_tags_register_settings() {
     // Dynamically add custom tag settings
     $custom_tags = get_option('hozio_custom_tags', []);
     foreach ($custom_tags as $tag) {
-        register_setting('hozio_dynamic_tags_options', 'hozio_' . $tag['value']);
+        // Register each custom tag as an option
+        $option_name = 'hozio_' . $tag['value'];
+        register_setting('hozio_dynamic_tags_options', $option_name);
         add_settings_field(
-            'hozio_' . $tag['value'],
+            $option_name,
             $tag['title'],
             'hozio_dynamic_tags_render_input',
             'hozio_dynamic_tags',
             'hozio_dynamic_tags_section',
-            ['label_for' => 'hozio_' . $tag['value']]
+            ['label_for' => $option_name]
         );
     }
 }
