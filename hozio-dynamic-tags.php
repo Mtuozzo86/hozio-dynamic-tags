@@ -1,14 +1,14 @@
 <?php
 /*
 Plugin Name: Hozio Dynamic Tags
-Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
+Plugin URI: https://github.com/mtallo22/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 1.5.2
+Version: 3.0
 Author: Hozio Web Dev
-Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
+Author URI: https://github.com/mtallo22/hozio-dynamic-tags
 License: GPL2
 Text Domain: hozio-dynamic-tags
-GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
+GitHub Plugin URI: https://github.com/mtallo22/hozio-dynamic-tags
 GitHub Branch: main
 */
 
@@ -52,6 +52,66 @@ function hozio_dynamic_tags_menu() {
         $icon_url,                         
         25                                 
     );
+
+    // Add the Add/Remove submenu
+    add_submenu_page(
+        'hozio-dynamic-tags',              
+        'Add / Remove Dynamic Tags',       
+        'Add / Remove',                    
+        'manage_options',                  
+        'hozio-add-remove-tags',           
+        'hozio_add_remove_tags_page'       
+    );
+}
+
+// Function for displaying the Add/Remove page content
+function hozio_add_remove_tags_page() {
+    include plugin_dir_path(__FILE__) . 'includes/add-remove-tags.php';
+}
+
+// Handle the add tag form submission
+add_action('admin_post_hozio_add_tag', 'hozio_add_dynamic_tag');
+function hozio_add_dynamic_tag() {
+    if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['_wpnonce'], 'hozio_add_tag_nonce')) {
+        wp_die('Unauthorized request');
+    }
+
+    $tag_title = sanitize_text_field($_POST['tag_title']);
+    $tag_type = sanitize_text_field($_POST['tag_type']);
+    $tag_value = sanitize_title($tag_title); // Generate a slug from the title
+
+    $custom_tags = get_option('hozio_custom_tags', []);
+    $custom_tags[] = [
+        'title' => $tag_title,
+        'value' => $tag_value,
+        'type' => $tag_type
+    ];
+
+    update_option('hozio_custom_tags', $custom_tags);
+    wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
+    exit;
+}
+
+// Handle tag removal
+add_action('admin_post_hozio_remove_tag', 'hozio_remove_dynamic_tag');
+function hozio_remove_dynamic_tag() {
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized request');
+    }
+
+    $tag_value = sanitize_text_field($_GET['tag']);
+    $custom_tags = get_option('hozio_custom_tags', []);
+
+    foreach ($custom_tags as $key => $tag) {
+        if ($tag['value'] === $tag_value) {
+            unset($custom_tags[$key]);
+            break;
+        }
+    }
+
+    update_option('hozio_custom_tags', array_values($custom_tags));
+    wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
+    exit;
 }
 
 // Register custom dynamic tags
@@ -84,7 +144,6 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url'],
         ['sitemap-xml', 'sitemap.xml', ''],
         ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
-        
     ];
 
     // Register URL-based dynamic tags
@@ -99,7 +158,6 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                     public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY]; }
                     protected function register_controls() {}
                     public function render() {
-                        // Check for tel, sms, and mailto to apply correct prefix
                         if ('tel' === '" . esc_attr($tag[3]) . "') {
                             echo esc_url('tel:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
                         } elseif ('sms' === '" . esc_attr($tag[3]) . "') {
@@ -129,6 +187,27 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                     protected function register_controls() {}
                     public function render() {
                         echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
+                    }
+                }
+            ");
+            $dynamic_tags->register(new $class_name());
+        }
+    }
+
+    // Custom tags from settings
+    $custom_tags = get_option('hozio_custom_tags', []);
+    foreach ($custom_tags as $tag) {
+        $class_name = 'My_' . str_replace('-', '_', ucwords($tag['value'], '-')) . '_Tag';
+        if (!class_exists($class_name)) {
+            eval("
+                class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                    public function get_name() { return '" . esc_attr($tag['value']) . "'; }
+                    public function get_title() { return __('" . esc_attr($tag['title']) . "', 'plugin-name'); }
+                    public function get_group() { return 'site'; }
+                    public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::" . ($tag['type'] === 'url' ? 'URL_CATEGORY' : 'TEXT_CATEGORY') . "]; }
+                    protected function register_controls() {}
+                    public function render() {
+                        echo esc_html(get_option('hozio_" . esc_attr($tag['value']) . "'));
                     }
                 }
             ");
