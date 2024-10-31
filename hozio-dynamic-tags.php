@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.11
+Version: 3.12
 Author: Hozio Web Dev
 Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
@@ -21,6 +21,8 @@ if (!defined('ABSPATH')) {
 require_once plugin_dir_path(__FILE__) . 'includes/admin-settings.php';  
 require_once plugin_dir_path(__FILE__) . 'includes/dynamic-tags.php';
 require_once plugin_dir_path(__FILE__) . 'includes/service-menu-handler.php';
+require_once plugin_dir_path(__FILE__) . 'includes/custom-permalink.php';
+
 
 // Hook to add services to menu when status changes
 add_action('transition_post_status', 'add_service_to_menu', 10, 3);
@@ -61,6 +63,16 @@ function hozio_dynamic_tags_menu() {
         'manage_options',                  
         'hozio-add-remove-tags',           
         'hozio_add_remove_tags_page'       
+    );
+
+    // Add a submenu for the custom permalink settings
+    add_submenu_page(
+        'hozio-dynamic-tags',              // Parent slug (assumes main plugin page is 'hozio-dynamic-tags')
+        'Custom Permalink Settings',       // Page title
+        'Blog Permalink Settings',              // Menu title
+        'manage_options',                  // Capability
+        'hozio-permalink-settings',        // Menu slug
+        'hozio_permalink_settings_html'    // Callback function to render HTML
     );
 }
 
@@ -114,6 +126,71 @@ function hozio_remove_dynamic_tag() {
     exit;
 }
 
+// Register the setting to save the enable/disable option for custom permalinks
+add_action('admin_init', 'hozio_custom_permalink_register_setting');
+
+function hozio_custom_permalink_register_setting() {
+    register_setting('hozio_permalink_settings', 'hozio_custom_permalink_enabled');
+}
+
+// Render the settings page HTML for custom permalinks
+function hozio_permalink_settings_html() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    ?>
+    <div class="wrap">
+        <h1>Custom Permalink Settings</h1>
+        <form method="post" action="options.php">
+            <?php
+            settings_fields('hozio_permalink_settings');
+            do_settings_sections('hozio_permalink_settings');
+            ?>
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row">Enable/Disable Custom Blog Permalink</th>
+                    <td>
+                        <input type="checkbox" name="hozio_custom_permalink_enabled" value="1" <?php checked(1, get_option('hozio_custom_permalink_enabled'), true); ?> />
+                    </td>
+                </tr>
+            </table>
+            <p>Enabling this plugin will add the slug "blog" to all posts.</p>
+            <p><strong>Example if enabled:</strong> domain.com/blog/category/post-name</p>
+            <p><strong>Example if disabled:</strong> domain.com/category/post-name</p>
+            <p><em>To remove the category, go to <strong>Settings > Permalinks</strong> and remove "%category%" from the custom structure.</em></p>
+            <?php submit_button(); ?>
+        </form>
+    </div>
+    <?php
+}
+
+// Hook to modify the permalink structure
+add_filter('post_link', 'hozio_custom_post_link', 10, 2);
+
+function hozio_custom_post_link($permalink, $post) {
+    // Check if the custom permalink feature is enabled
+    $is_enabled = get_option('hozio_custom_permalink_enabled');
+
+    if (!$is_enabled) {
+        return $permalink; // Return the default permalink if the feature is disabled
+    }
+
+    // Only apply to posts (blog entries)
+    if ($post->post_type == 'post') {
+        // Log to debug
+        error_log('Custom permalink function is running.');
+
+        // Get the first category of the post
+        $categories = get_the_category($post->ID);
+        if (!empty($categories)) {
+            $category = $categories[0]->slug; // Use the slug of the first category
+            // Modify the permalink to include /blog/category/postname structure
+            $permalink = home_url('/blog/' . $category . '/' . $post->post_name . '/');
+        }
+    }
+    return $permalink;
+}
+
 // Register custom dynamic tags
 add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
     // URL-based tags
@@ -150,8 +227,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
     foreach ($url_tags as $tag) {
         $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
         if (!class_exists($class_name)) {
-             eval("
-                class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+             eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
                     public function get_name() { return '" . esc_attr($tag[0]) . "'; }
                     public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
                     public function get_group() { return 'site'; }
@@ -170,8 +246,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                             echo esc_url(get_option('" . esc_attr($tag[2]) . "'));
                         }
                     }
-                }
-            ");
+                }");
             $dynamic_tags->register(new $class_name());
         }
     }
@@ -180,8 +255,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
     foreach ($text_tags as $tag) {
         $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
         if (!class_exists($class_name)) {
-            eval("
-                class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+            eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
                     public function get_name() { return '" . esc_attr($tag[0]) . "'; }
                     public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
                     public function get_group() { return 'site'; }
@@ -196,8 +270,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                             echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
                         }
                     }
-                }
-            ");
+                }");
             $dynamic_tags->register(new $class_name());
         }
     }
@@ -207,8 +280,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
     foreach ($custom_tags as $tag) {
         $class_name = 'My_' . str_replace('-', '_', ucwords($tag['value'], '-')) . '_Tag';
         if (!class_exists($class_name)) {
-            eval("
-                class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+            eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
                     public function get_name() { return '" . esc_attr($tag['value']) . "'; }
                     public function get_title() { return __('" . esc_attr($tag['title']) . "', 'plugin-name'); }
                     public function get_group() { return 'site'; }
@@ -217,8 +289,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                     public function render() {
                         echo esc_html(get_option('hozio_" . esc_attr($tag['value']) . "'));
                     }
-                }
-            ");
+                }");
             $dynamic_tags->register(new $class_name());
         }
     }
