@@ -40,7 +40,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
     // Register dynamic tags
     foreach ($tags as $tag) {
         $tag_slug = str_replace('-', '_', $tag[0]);
-        $class_name = 'My_' . ucwords($tag_slug) . '_Tag';
+        $class_name = 'My_' . ucwords($tag_slug, '_') . '_Tag';
 
         if (!class_exists($class_name)) {
             eval("
@@ -58,7 +58,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                     }
 
                     public function get_group() {
-                        return 'general';
+                        return 'site'; // Updated group for Elementor compatibility
                     }
 
                     public function get_categories() {
@@ -70,58 +70,58 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                     }
 
                     public function render() {
-                        if ('company-address' === \$this->tag_name) {
-                            echo wp_kses_post(get_option('hozio_company_address'));  // Allow HTML for company address
-                        } elseif ('business-hours' === \$this->tag_name) {
-                            echo wp_kses_post(get_option('hozio_business_hours'));  // Allow HTML for business hours
-                        } elseif ('gmb-link' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_gmb_link'));  // GMB Link
-                        } elseif ('company-phone-1' === \$this->tag_name) {
-                            echo esc_url('tel:' . esc_attr(get_option('hozio_company_phone_1')));  // Company Phone 1 (URL)
-                        } elseif ('phone-number-icon-box' === \$this->tag_name) {
-                            echo '<a href=\"tel:' . esc_attr(get_option('hozio_company_phone_1')) . '\">' . esc_html(get_option('hozio_company_phone_1')) . '</a>';  // Phone number icon box
-                        } elseif ('company-phone-1-name' === \$this->tag_name) {
-                            echo esc_html(get_option('hozio_company_phone_1'));  // Company phone 1 name
-                        } elseif ('company-phone-2' === \$this->tag_name) {
-                            echo esc_url('tel:' . esc_attr(get_option('hozio_company_phone_2')));  // Company Phone 2 (URL)
-                        } elseif ('company-phone-2-name' === \$this->tag_name) {
-                            echo esc_html(get_option('hozio_company_phone_2'));  // Company phone 2 name
-                        } elseif ('sms-phone' === \$this->tag_name) {
-                            echo esc_url('sms:' . esc_attr(get_option('hozio_sms_phone')));  // SMS phone (URL)
-                        } elseif ('sms-icon-box' === \$this->tag_name) {
-                            echo '<a href=\"sms:' . esc_attr(get_option('hozio_sms_phone')) . '\">' . esc_html(get_option('hozio_sms_phone')) . '</a>';  // SMS phone icon box
-                        } elseif ('sms-phone-name' === \$this->tag_name) {
-                            echo esc_html(get_option('hozio_sms_phone'));  // SMS phone name
-                        } elseif ('company-email' === \$this->tag_name) {
-                            echo esc_url('mailto:' . esc_attr(get_option('hozio_company_email')));  // Company email (URL)
-                        } elseif ('email-icon-box' === \$this->tag_name) {
-                            echo '<a href=\"mailto:' . esc_attr(get_option('hozio_company_email')) . '\">' . esc_html(get_option('hozio_company_email')) . '</a>';  // Email icon box
-                        } elseif ('to-email-contact-form' === \$this->tag_name) {
-                            echo esc_html(get_option('hozio_to_email_contact_form'));  // To email contact form
-                        } elseif ('sitemap-xml' === \$this->tag_name) {
-                            echo esc_url(home_url('/sitemap.xml'));  // Sitemap
-                        } elseif ('yelp' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_yelp_url'));  // Yelp URL
-                        } elseif ('youtube' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_youtube_url'));  // YouTube URL
-                        } elseif ('angies-list' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_angies_list_url'));  // Angie's List URL
-                        } elseif ('home-advisor' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_home_advisor_url'));  // Home Advisor URL
-                        } elseif ('bbb' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_bbb_url'));  // BBB URL
-                        } elseif ('facebook' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_facebook_url'));  // Facebook URL
-                        } elseif ('instagram' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_instagram_url'));  // Instagram URL
-                        } elseif ('twitter' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_twitter_url'));  // Twitter URL
-                        } elseif ('tiktok' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_tiktok_url'));  // TikTok URL
-                        } elseif ('linkedin' === \$this->tag_name) {
-                            echo esc_url(get_option('hozio_linkedin_url'));  // LinkedIn URL
-                        } else {
-                            echo esc_html(get_option('hozio_' . str_replace('-', '_', \$this->tag_name)));  // Default to allow HTML output for all others
+                        \$option_value = get_option('hozio_' . \$this->tag_name);
+                        
+                        switch (\$this->tag_name) {
+                            case 'phone-number-icon-box':
+                                // Display Phone Number Icon Box
+                                \$phone = esc_attr(get_option('hozio_company_phone_1'));
+                                echo '<a href=\"tel:' . \$phone . '\">' . esc_html(\$phone) . '</a>';
+                                break;
+
+                            case 'sms-icon-box':
+                                // Display SMS Icon Box
+                                \$sms_phone = esc_attr(get_option('hozio_sms_phone'));
+                                echo '<a href=\"sms:' . \$sms_phone . '\">' . esc_html(\$sms_phone) . '</a>';
+                                break;
+
+                            case 'email-icon-box':
+                                // Display Email Icon Box
+                                \$email = esc_attr(get_option('hozio_company_email'));
+                                echo '<a href=\"mailto:' . \$email . '\">' . esc_html(\$email) . '</a>';
+                                break;
+
+                            case 'company-address':
+                                echo wp_kses_post(\$option_value);  // Allow HTML for company address
+                                break;
+
+                            case 'business-hours':
+                                echo wp_kses_post(\$option_value);  // Allow HTML for business hours
+                                break;
+
+                            case 'gmb-link':
+                                echo esc_url(\$option_value);  // GMB Link
+                                break;
+
+                            case 'company-phone-1':
+                                echo esc_url('tel:' . esc_attr(\$option_value));  // Company Phone 1 (URL)
+                                break;
+
+                            case 'company-phone-2':
+                                echo esc_url('tel:' . esc_attr(\$option_value));  // Company Phone 2 (URL)
+                                break;
+
+                            case 'sms-phone':
+                                echo esc_url('sms:' . esc_attr(\$option_value));  // SMS phone (URL)
+                                break;
+
+                            case 'company-email':
+                                echo esc_url('mailto:' . esc_attr(\$option_value));  // Company email (URL)
+                                break;
+
+                            default:
+                                echo esc_html(\$option_value);  // Default to allow HTML output for all others
+                                break;
                         }
                     }
                 }
