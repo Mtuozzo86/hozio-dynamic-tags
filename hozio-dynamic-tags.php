@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.13
+Version: 3.13.1
 Author: Hozio Web Dev
 Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
@@ -207,6 +207,10 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['linkedin', 'LinkedIn', 'hozio_linkedin_url', 'url'],
         ['bbb', 'BBB', 'hozio_bbb_url', 'url'],
         ['sitemap-xml', 'Sitemap', 'sitemap_url', 'url'], // Sitemap registration
+        ['yelp', 'Yelp', 'hozio_yelp_url'],
+        ['youtube', 'YouTube', 'hozio_youtube_url'],
+        ['angies-list', "Angi's List", 'hozio_angies_list_url'],
+        ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url'],
     ];
 
     // Text-based tags
@@ -216,10 +220,6 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['sms-phone-name', 'SMS Phone # Name', 'hozio_sms_phone'],
         ['company-address', 'Company Address', 'hozio_company_address'], // Allow HTML
         ['business-hours', 'Business Hours', 'hozio_business_hours'], // Allow HTML
-        ['yelp', 'Yelp', 'hozio_yelp_url'],
-        ['youtube', 'YouTube', 'hozio_youtube_url'],
-        ['angies-list', "Angi's List", 'hozio_angies_list_url'],
-        ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url'],
         ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
     ];
 
