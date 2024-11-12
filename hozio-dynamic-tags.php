@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.13.1
+Version: 3.13.2
 Author: Hozio Web Dev
 Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
@@ -224,10 +224,11 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
     ];
 
     // Register URL-based dynamic tags
-    foreach ($url_tags as $tag) {
+foreach ($url_tags as $tag) {
+    if (isset($tag[3])) { // Check if the 4th index exists
         $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
         if (!class_exists($class_name)) {
-             eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+            eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
                     public function get_name() { return '" . esc_attr($tag[0]) . "'; }
                     public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
                     public function get_group() { return 'site'; }
@@ -235,11 +236,11 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                     protected function register_controls() {}
                     public function render() {
                         if ('tel' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url('tel:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            echo esc_url('tel:' . esc_attr(get_option('" . esc_attr($tag[2]) . "'))); 
                         } elseif ('sms' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url('sms:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            echo esc_url('sms:' . esc_attr(get_option('" . esc_attr($tag[2]) . "'))); 
                         } elseif ('mailto' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url('mailto:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            echo esc_url('mailto:' . esc_attr(get_option('" . esc_attr($tag[2]) . "'))); 
                         } elseif ('url' === '" . esc_attr($tag[3]) . "') {
                             echo esc_url(get_option('" . esc_attr($tag[2]) . "') ?: home_url('/sitemap.xml')); // Default to sitemap URL
                         } else {
@@ -250,9 +251,11 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
             $dynamic_tags->register(new $class_name());
         }
     }
+}
 
-    // Register text-based dynamic tags
-    foreach ($text_tags as $tag) {
+// Register text-based dynamic tags
+foreach ($text_tags as $tag) {
+    if (isset($tag[2])) { // Check if the 3rd index exists
         $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
         if (!class_exists($class_name)) {
             eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
@@ -274,6 +277,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
             $dynamic_tags->register(new $class_name());
         }
     }
+}
 
     // Custom tags from settings
     $custom_tags = get_option('hozio_custom_tags', []);
