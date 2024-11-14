@@ -12,68 +12,61 @@ GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 GitHub Branch: main
 */
 
-// Ensure WordPress is calling the file
 if (!defined('ABSPATH')) {
-    exit;
+    exit; // Exit if accessed directly
 }
 
-// Include the settings page and dynamic tags file
-require_once plugin_dir_path(__FILE__) . 'includes/admin-settings.php';  
+// Include necessary files
+require_once plugin_dir_path(__FILE__) . 'includes/admin-settings.php';
 require_once plugin_dir_path(__FILE__) . 'includes/dynamic-tags.php';
 require_once plugin_dir_path(__FILE__) . 'includes/service-menu-handler.php';
 require_once plugin_dir_path(__FILE__) . 'includes/custom-permalink.php';
 
+// Add the custom admin menu
+function hozio_dynamic_tags_menu() {
+    add_menu_page(
+        'Hozio Dynamic Tags Settings',
+        'Hozio Dynamic Tags',
+        'manage_options',
+        'hozio_dynamic_tags',
+        'hozio_dynamic_tags_contact_info',
+        plugins_url('assets/hozio-logo.png', __FILE__),
+        25
+    );
 
-// Hook to add services to menu when status changes
-add_action('transition_post_status', 'add_service_to_menu', 10, 3);
+    add_submenu_page(
+        'hozio_dynamic_tags',
+        'Add / Remove Dynamic Tags',
+        'Add / Remove',
+        'manage_options',
+        'hozio-add-remove-tags',
+        'hozio_add_remove_tags_page'
+    );
 
-// Function to display the contact info page
-function hozio_dynamic_tags_contact_info() {
-    hozio_dynamic_tags_settings_page();
+    add_submenu_page(
+        'hozio_dynamic_tags',
+        'Custom Permalink Settings',
+        'Blog Permalink Settings',
+        'manage_options',
+        'hozio-permalink-settings',
+        'hozio_permalink_settings_html'
+    );
 }
+
+add_action('admin_menu', 'hozio_dynamic_tags_menu');
+
 
 // Add a settings link under the plugin details
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'hozio_dynamic_tags_action_links');
 function hozio_dynamic_tags_action_links($links) {
-    $settings_link = '<a href="admin.php?page=hozio_dynamic_tags_contact_info">Contact Info</a>';
+    $settings_link = '<a href="admin.php?page=hozio_dynamic_tags">Settings</a>';
     array_unshift($links, $settings_link);
     return $links;
 }
 
-// Add the custom admin menu
-add_action('admin_menu', 'hozio_dynamic_tags_menu');
-function hozio_dynamic_tags_menu() {
-    $icon_url = plugins_url('assets/hozio-logo.png', __FILE__);
-
-    add_menu_page(
-        'Hozio Dynamic Tags',              
-        'Hozio Dynamic Tags',              
-        'manage_options',                  
-        'hozio-dynamic-tags',              
-        'hozio_dynamic_tags_contact_info', 
-        $icon_url,                         
-        25                                 
-    );
-
-    // Add the Add/Remove submenu
-    add_submenu_page(
-        'hozio-dynamic-tags',              
-        'Add / Remove Dynamic Tags',       
-        'Add / Remove',                    
-        'manage_options',                  
-        'hozio-add-remove-tags',           
-        'hozio_add_remove_tags_page'       
-    );
-
-    // Add a submenu for the custom permalink settings
-    add_submenu_page(
-        'hozio-dynamic-tags',              // Parent slug (assumes main plugin page is 'hozio-dynamic-tags')
-        'Custom Permalink Settings',       // Page title
-        'Blog Permalink Settings',              // Menu title
-        'manage_options',                  // Capability
-        'hozio-permalink-settings',        // Menu slug
-        'hozio_permalink_settings_html'    // Callback function to render HTML
-    );
+// Function to display the settings page
+function hozio_dynamic_tags_contact_info() {
+    hozio_dynamic_tags_settings_page();
 }
 
 // Function for displaying the Add/Remove page content
@@ -90,7 +83,7 @@ function hozio_add_dynamic_tag() {
 
     $tag_title = sanitize_text_field($_POST['tag_title']);
     $tag_type = sanitize_text_field($_POST['tag_type']);
-    $tag_value = sanitize_title($tag_title); // Generate a slug from the title
+    $tag_value = sanitize_title($tag_title);
 
     $custom_tags = get_option('hozio_custom_tags', []);
     $custom_tags[] = [
@@ -128,7 +121,6 @@ function hozio_remove_dynamic_tag() {
 
 // Register the setting to save the enable/disable option for custom permalinks
 add_action('admin_init', 'hozio_custom_permalink_register_setting');
-
 function hozio_custom_permalink_register_setting() {
     register_setting('hozio_permalink_settings', 'hozio_custom_permalink_enabled');
 }
@@ -166,34 +158,23 @@ function hozio_permalink_settings_html() {
 
 // Hook to modify the permalink structure
 add_filter('post_link', 'hozio_custom_post_link', 10, 2);
-
 function hozio_custom_post_link($permalink, $post) {
-    // Check if the custom permalink feature is enabled
     $is_enabled = get_option('hozio_custom_permalink_enabled');
 
-    if (!$is_enabled) {
-        return $permalink; // Return the default permalink if the feature is disabled
+    if (!$is_enabled || $post->post_type !== 'post') {
+        return $permalink;
     }
 
-    // Only apply to posts (blog entries)
-    if ($post->post_type == 'post') {
-        // Log to debug
-        error_log('Custom permalink function is running.');
-
-        // Get the first category of the post
-        $categories = get_the_category($post->ID);
-        if (!empty($categories)) {
-            $category = $categories[0]->slug; // Use the slug of the first category
-            // Modify the permalink to include /blog/category/postname structure
-            $permalink = home_url('/blog/' . $category . '/' . $post->post_name . '/');
-        }
+    $categories = get_the_category($post->ID);
+    if (!empty($categories)) {
+        $category = $categories[0]->slug;
+        $permalink = home_url('/blog/' . $category . '/' . $post->post_name . '/');
     }
     return $permalink;
 }
 
 // Register custom dynamic tags
 add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
-    // URL-based tags
     $url_tags = [
         ['company-phone-1', 'Company Phone Number 1', 'hozio_company_phone_1', 'tel'],
         ['company-phone-2', 'Company Phone Number 2', 'hozio_company_phone_2', 'tel'],
@@ -206,29 +187,18 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['tiktok', 'TikTok', 'hozio_tiktok_url', 'url'],
         ['linkedin', 'LinkedIn', 'hozio_linkedin_url', 'url'],
         ['bbb', 'BBB', 'hozio_bbb_url', 'url'],
-        ['sitemap-xml', 'Sitemap', 'sitemap_url', 'url'], // Sitemap registration
+        ['sitemap-xml', 'Sitemap', 'sitemap_url', 'url'],
         ['yelp', 'Yelp', 'hozio_yelp_url'],
         ['youtube', 'YouTube', 'hozio_youtube_url'],
         ['angies-list', "Angi's List", 'hozio_angies_list_url'],
         ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url'],
     ];
 
-    // Text-based tags
-    $text_tags = [
-        ['company-phone-1-name', 'Company Phone #1 Name', 'hozio_company_phone_1'],
-        ['company-phone-2-name', 'Company Phone #2 Name', 'hozio_company_phone_2'],
-        ['sms-phone-name', 'SMS Phone # Name', 'hozio_sms_phone'],
-        ['company-address', 'Company Address', 'hozio_company_address'], // Allow HTML
-        ['business-hours', 'Business Hours', 'hozio_business_hours'], // Allow HTML
-        ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
-    ];
-
-    // Register URL-based dynamic tags
-foreach ($url_tags as $tag) {
-    if (isset($tag[3])) { // Check if the 4th index exists
-        $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
-        if (!class_exists($class_name)) {
-            eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+    foreach ($url_tags as $tag) {
+        if (isset($tag[3])) {
+            $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
+            if (!class_exists($class_name)) {
+                eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
                     public function get_name() { return '" . esc_attr($tag[0]) . "'; }
                     public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
                     public function get_group() { return 'site'; }
@@ -242,23 +212,31 @@ foreach ($url_tags as $tag) {
                         } elseif ('mailto' === '" . esc_attr($tag[3]) . "') {
                             echo esc_url('mailto:' . esc_attr(get_option('" . esc_attr($tag[2]) . "'))); 
                         } elseif ('url' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url(get_option('" . esc_attr($tag[2]) . "') ?: home_url('/sitemap.xml')); // Default to sitemap URL
+                            echo esc_url(get_option('" . esc_attr($tag[2]) . "') ?: home_url('/sitemap.xml'));
                         } else {
                             echo esc_url(get_option('" . esc_attr($tag[2]) . "'));
                         }
                     }
                 }");
-            $dynamic_tags->register(new $class_name());
+                $dynamic_tags->register(new $class_name());
+            }
         }
     }
-}
 
-// Register text-based dynamic tags
-foreach ($text_tags as $tag) {
-    if (isset($tag[2])) { // Check if the 3rd index exists
-        $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
-        if (!class_exists($class_name)) {
-            eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+    $text_tags = [
+        ['company-phone-1-name', 'Company Phone #1 Name', 'hozio_company_phone_1'],
+        ['company-phone-2-name', 'Company Phone #2 Name', 'hozio_company_phone_2'],
+        ['sms-phone-name', 'SMS Phone # Name', 'hozio_sms_phone'],
+        ['company-address', 'Company Address', 'hozio_company_address'],
+        ['business-hours', 'Business Hours', 'hozio_business_hours'],
+        ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
+    ];
+
+    foreach ($text_tags as $tag) {
+        if (isset($tag[2])) {
+            $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
+            if (!class_exists($class_name)) {
+                eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
                     public function get_name() { return '" . esc_attr($tag[0]) . "'; }
                     public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
                     public function get_group() { return 'site'; }
@@ -266,35 +244,39 @@ foreach ($text_tags as $tag) {
                     protected function register_controls() {}
                     public function render() {
                         if ('company-address' === '" . esc_attr($tag[0]) . "') {
-                            echo wp_kses_post(get_option('hozio_company_address'));  // Allow HTML for company address
+                            echo wp_kses_post(get_option('hozio_company_address'));
                         } elseif ('business-hours' === '" . esc_attr($tag[0]) . "') {
-                            echo wp_kses_post(get_option('hozio_business_hours'));  // Allow HTML for business hours
+                            echo wp_kses_post(get_option('hozio_business_hours'));
                         } else {
                             echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
                         }
                     }
                 }");
-            $dynamic_tags->register(new $class_name());
-        }
-    }
-}
-
-    // Custom tags from settings
-    $custom_tags = get_option('hozio_custom_tags', []);
-    foreach ($custom_tags as $tag) {
-        $class_name = 'My_' . str_replace('-', '_', ucwords($tag['value'], '-')) . '_Tag';
-        if (!class_exists($class_name)) {
-            eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
-                    public function get_name() { return '" . esc_attr($tag['value']) . "'; }
-                    public function get_title() { return __('" . esc_attr($tag['title']) . "', 'plugin-name'); }
-                    public function get_group() { return 'site'; }
-                    public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::" . ($tag['type'] === 'url' ? 'URL_CATEGORY' : 'TEXT_CATEGORY') . "]; }
-                    protected function register_controls() {}
-                    public function render() {
-                        echo esc_html(get_option('hozio_" . esc_attr($tag['value']) . "'));
-                    }
-                }");
-            $dynamic_tags->register(new $class_name());
+                $dynamic_tags->register(new $class_name());
+            }
         }
     }
 });
+
+// Output custom inline CSS for the last menu item
+add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_css');
+function hozio_dynamic_nav_menu_inline_css() {
+    ?>
+    <style type="text/css">
+        #toggle-menu li:last-of-type > .elementor-item {
+            background-color: var(--e-global-color-secondary, #FFFFFF) !important;
+            color: <?php echo esc_attr(get_option('hozio_nav_text_color', 'black')); ?> !important;
+            padding: 25px 24px;
+            font-weight: 600;
+            font-size: 17px;
+            text-align: center;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        #toggle-menu li:last-of-type > .elementor-item:hover {
+            background-color: var(--e-global-color-secondary, #FFFFFF) !important;
+            color: <?php echo esc_attr(get_option('hozio_nav_text_color', 'black')); ?> !important;
+        }
+    </style>
+    <?php
+}
+?>
