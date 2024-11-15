@@ -92,11 +92,11 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                                 break;
 
                             case 'company-address':
-                                echo wp_kses_post(\$option_value);  // Allow HTML for company address
+                                echo esc_url(\$option_value);  // Allow HTML for company address
                                 break;
 
                             case 'business-hours':
-                                echo wp_kses_post(\$option_value);  // Allow HTML for business hours
+                                echo esc_url(\$option_value);  // Allow HTML for business hours
                                 break;
 
                             case 'gmb-link':
