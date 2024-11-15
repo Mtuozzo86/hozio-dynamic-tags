@@ -7,8 +7,8 @@ function hozio_dynamic_tags_register_settings() {
         'hozio_company_phone_2',
         'hozio_sms_phone',
         'hozio_company_email',
-        'hozio_company_address',
-        'hozio_business_hours',
+        'hozio_company_address',   // Allow HTML (we'll handle it below)
+        'hozio_business_hours',    // Allow HTML (we'll handle it below)
         'hozio_yelp_url',
         'hozio_youtube_url',
         'hozio_angies_list_url',
@@ -46,8 +46,8 @@ function hozio_dynamic_tags_settings_init() {
         'hozio_company_phone_2' => 'Company Phone 2',
         'hozio_sms_phone' => 'SMS Phone Number',
         'hozio_company_email' => 'Company Email',
-        'hozio_company_address' => 'Company Address',
-        'hozio_business_hours' => 'Business Hours',
+        'hozio_company_address' => 'Company Address', // Regular input field
+        'hozio_business_hours' => 'Business Hours',    // Regular input field
         'hozio_yelp_url' => 'Yelp URL',
         'hozio_youtube_url' => 'YouTube URL',
         'hozio_angies_list_url' => "Angi's List URL",
@@ -60,7 +60,6 @@ function hozio_dynamic_tags_settings_init() {
         'hozio_linkedin_url' => 'LinkedIn URL',
         'hozio_gmb_link' => 'GMB Link',
         'hozio_to_email_contact_form' => 'To Email(s) Contact Form',
-        'hozio_nav_text_color' => 'Toggle Menu Text Color'
     ];
 
     foreach ($fields as $key => $label) {
@@ -80,20 +79,12 @@ add_action('admin_init', 'hozio_dynamic_tags_settings_init');
 // Render input fields for text settings
 function hozio_dynamic_tags_render_input($args) {
     $option = get_option($args['label_for']);
-    // Use a textarea for fields that need HTML content
-    if ($args['label_for'] === 'hozio_company_address' || $args['label_for'] === 'hozio_business_hours') {
-        printf(
-            '<textarea id="%1$s" name="%1$s" class="large-text" rows="4">%2$s</textarea>',
-            esc_attr($args['label_for']),
-            esc_textarea($option)
-        );
-    } else {
-        printf(
-            '<input type="text" id="%1$s" name="%1$s" value="%2$s" class="regular-text" />',
-            esc_attr($args['label_for']),
-            esc_attr($option)
-        );
-    }
+    // Use regular input fields for all fields, including Company Address and Business Hours
+    printf(
+        '<input type="text" id="%1$s" name="%1$s" value="%2$s" class="regular-text" />',
+        esc_attr($args['label_for']),
+        esc_attr($option)
+    );
 }
 
 // Display the settings page
@@ -106,7 +97,7 @@ function hozio_dynamic_tags_settings_page() {
             wp_nonce_field('hozio_save_settings_nonce', 'hozio_save_settings_nonce_field');
             settings_fields('hozio_dynamic_tags_options');
             do_settings_sections('hozio_dynamic_tags');
-            echo '<input type="hidden" name="action" value="hozio_save_settings" />';
+            echo '<input type="hidden" name="action" value="hozio_save_settings" />'; // Ensure the form is submitted correctly
             submit_button(__('Save Settings', 'hozio-dynamic-tags'));
             ?>
         </form>
@@ -155,5 +146,3 @@ function hozio_dynamic_tags_save_settings() {
 }
 
 add_action('admin_post_hozio_save_settings', 'hozio_dynamic_tags_save_settings');
-
-?>
