@@ -80,11 +80,20 @@ add_action('admin_init', 'hozio_dynamic_tags_settings_init');
 // Render input fields for text settings
 function hozio_dynamic_tags_render_input($args) {
     $option = get_option($args['label_for']);
-    printf(
-        '<input type="text" id="%1$s" name="%1$s" value="%2$s" class="regular-text" />',
-        esc_attr($args['label_for']),
-        esc_attr($option)
-    );
+    // Use a textarea for fields that need HTML content
+    if ($args['label_for'] === 'hozio_company_address' || $args['label_for'] === 'hozio_business_hours') {
+        printf(
+            '<textarea id="%1$s" name="%1$s" class="large-text" rows="4">%2$s</textarea>',
+            esc_attr($args['label_for']),
+            esc_textarea($option)
+        );
+    } else {
+        printf(
+            '<input type="text" id="%1$s" name="%1$s" value="%2$s" class="regular-text" />',
+            esc_attr($args['label_for']),
+            esc_attr($option)
+        );
+    }
 }
 
 // Display the settings page
