@@ -7,8 +7,8 @@ function hozio_dynamic_tags_register_settings() {
         'hozio_company_phone_2',
         'hozio_sms_phone',
         'hozio_company_email',
-        'hozio_company_address',   // Allow HTML (we'll handle it below)
-        'hozio_business_hours',    // Allow HTML (we'll handle it below)
+        'hozio_company_address',   // Allow HTML
+        'hozio_business_hours',    // Allow HTML
         'hozio_yelp_url',
         'hozio_youtube_url',
         'hozio_angies_list_url',
@@ -46,8 +46,8 @@ function hozio_dynamic_tags_settings_init() {
         'hozio_company_phone_2' => 'Company Phone 2',
         'hozio_sms_phone' => 'SMS Phone Number',
         'hozio_company_email' => 'Company Email',
-        'hozio_company_address' => 'Company Address', // Regular input field
-        'hozio_business_hours' => 'Business Hours',    // Regular input field
+        'hozio_company_address' => 'Company Address', // Allow HTML input
+        'hozio_business_hours' => 'Business Hours',    // Allow HTML input
         'hozio_yelp_url' => 'Yelp URL',
         'hozio_youtube_url' => 'YouTube URL',
         'hozio_angies_list_url' => "Angi's List URL",
@@ -79,12 +79,21 @@ add_action('admin_init', 'hozio_dynamic_tags_settings_init');
 // Render input fields for text settings
 function hozio_dynamic_tags_render_input($args) {
     $option = get_option($args['label_for']);
-    // Use regular input fields for all fields, including Company Address and Business Hours
-    printf(
-        '<input type="text" id="%1$s" name="%1$s" value="%2$s" class="regular-text" />',
-        esc_attr($args['label_for']),
-        esc_attr($option)
-    );
+    // Use textarea for fields that accept HTML like Company Address and Business Hours
+    if ($args['label_for'] === 'hozio_company_address' || $args['label_for'] === 'hozio_business_hours') {
+        printf(
+            '<textarea id="%1$s" name="%1$s" class="large-text" rows="4">%2$s</textarea>',
+            esc_attr($args['label_for']),
+            esc_textarea($option)
+        );
+    } else {
+        // Regular text input for non-HTML fields
+        printf(
+            '<input type="text" id="%1$s" name="%1$s" value="%2$s" class="regular-text" />',
+            esc_attr($args['label_for']),
+            esc_attr($option)
+        );
+    }
 }
 
 // Display the settings page
