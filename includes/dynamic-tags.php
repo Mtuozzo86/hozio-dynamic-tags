@@ -72,6 +72,22 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                     public function render() {
                         \$option_value = get_option('hozio_' . \$this->tag_name);
                         
+                        // Define allowed HTML tags for rendering dynamic content
+                        \$allowed_tags = array(
+                            'br' => array(),
+                            'a' => array(
+                                'href' => array(),
+                                'title' => array(),
+                            ),
+                            'b' => array(),
+                            'i' => array(),
+                            'p' => array(),
+                            'ul' => array(),
+                            'ol' => array(),
+                            'li' => array(),
+                            // Add other tags you want to allow here
+                        );
+
                         switch (\$this->tag_name) {
                             case 'phone-number-icon-box':
                                 // Display Phone Number Icon Box
@@ -92,11 +108,13 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                                 break;
 
                             case 'company-address':
-                                echo esc_url(\$option_value);  // Allow HTML for company address
+                                // Allow HTML for company address
+                                echo wp_kses(\$option_value, \$allowed_tags); 
                                 break;
 
                             case 'business-hours':
-                                echo esc_url(\$option_value);  // Allow HTML for business hours
+                                // Allow HTML for business hours
+                                echo wp_kses(\$option_value, \$allowed_tags); 
                                 break;
 
                             case 'gmb-link':
