@@ -54,6 +54,22 @@ function hozio_dynamic_tags_menu() {
 
 add_action('admin_menu', 'hozio_dynamic_tags_menu');
 
+// Add custom CSS for the plugin's settings page
+function hozio_dynamic_tags_custom_styles() {
+    ?>
+    <style type="text/css">
+        /* Adjust the width of the textarea fields */
+        #hozio_company_address, #hozio_business_hours {
+            width: 100%;
+            max-width: 350px;
+            min-width: 300px;
+        }
+    </style>
+    <?php
+}
+
+add_action('admin_head', 'hozio_dynamic_tags_custom_styles');
+
 // Add a settings link under the plugin details
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'hozio_dynamic_tags_action_links');
 function hozio_dynamic_tags_action_links($links) {
@@ -81,16 +97,29 @@ function hozio_add_dynamic_tag() {
 
     $tag_title = sanitize_text_field($_POST['tag_title']);
     $tag_type = sanitize_text_field($_POST['tag_type']);
-    $tag_value = sanitize_title($tag_title);
+    $tag_value = sanitize_title($tag_title); // Ensure the tag's value is sanitized for use as a key
 
+    // Fetch the existing tags from the options table
     $custom_tags = get_option('hozio_custom_tags', []);
+    
+    // Check if tag already exists to prevent duplicates
+    foreach ($custom_tags as $tag) {
+        if ($tag['value'] === $tag_value) {
+            wp_die('This tag already exists.');
+        }
+    }
+
+    // Add the new tag to the array
     $custom_tags[] = [
         'title' => $tag_title,
         'value' => $tag_value,
         'type' => $tag_type
     ];
 
+    // Update the tags in the options table
     update_option('hozio_custom_tags', $custom_tags);
+
+    // Redirect back to the add/remove tags page
     wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
     exit;
 }
@@ -102,9 +131,11 @@ function hozio_remove_dynamic_tag() {
         wp_die('Unauthorized request');
     }
 
+    // Get the tag value to be removed
     $tag_value = sanitize_text_field($_GET['tag']);
     $custom_tags = get_option('hozio_custom_tags', []);
 
+    // Loop through tags and remove the one that matches
     foreach ($custom_tags as $key => $tag) {
         if ($tag['value'] === $tag_value) {
             unset($custom_tags[$key]);
@@ -112,7 +143,10 @@ function hozio_remove_dynamic_tag() {
         }
     }
 
+    // Update the tags in the options table after removal
     update_option('hozio_custom_tags', array_values($custom_tags));
+
+    // Redirect back to the add/remove tags page
     wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
     exit;
 }
