@@ -1,7 +1,7 @@
 <?php
 // Register settings for Hozio Dynamic Tags
 function hozio_dynamic_tags_register_settings() {
-    // Register each setting
+    // Register each setting for the default fields
     $fields = [
         'hozio_company_phone_1',
         'hozio_company_phone_2',
@@ -27,6 +27,12 @@ function hozio_dynamic_tags_register_settings() {
 
     foreach ($fields as $field) {
         register_setting('hozio_dynamic_tags_options', $field);
+    }
+    
+    // Register custom dynamic tags settings
+    $custom_tags = get_option('hozio_custom_tags', []);
+    foreach ($custom_tags as $tag) {
+        register_setting('hozio_dynamic_tags_options', 'hozio_' . $tag['value']);
     }
 }
 
@@ -72,6 +78,19 @@ function hozio_dynamic_tags_settings_init() {
             ['label_for' => $key]
         );
     }
+
+    // Add input fields for custom dynamic tags
+    $custom_tags = get_option('hozio_custom_tags', []);
+    foreach ($custom_tags as $tag) {
+        add_settings_field(
+            'hozio_' . $tag['value'],
+            $tag['title'],
+            'hozio_dynamic_tags_render_input',
+            'hozio_dynamic_tags',
+            'hozio_dynamic_tags_section',
+            ['label_for' => 'hozio_' . $tag['value']]
+        );
+    }
 }
 
 add_action('admin_init', 'hozio_dynamic_tags_settings_init');
@@ -79,6 +98,7 @@ add_action('admin_init', 'hozio_dynamic_tags_settings_init');
 // Render input fields for text settings
 function hozio_dynamic_tags_render_input($args) {
     $option = get_option($args['label_for']);
+    
     // Use textarea for fields that accept HTML like Company Address and Business Hours
     if ($args['label_for'] === 'hozio_company_address' || $args['label_for'] === 'hozio_business_hours') {
         printf(
@@ -121,6 +141,7 @@ function hozio_dynamic_tags_save_settings() {
         wp_die('Nonce verification failed');
     }
 
+    // Save values for all fields
     $fields = [
         'hozio_company_phone_1',
         'hozio_company_phone_2',
@@ -146,15 +167,24 @@ function hozio_dynamic_tags_save_settings() {
 
     foreach ($fields as $field) {
         if (isset($_POST[$field])) {
-            // Use wp_kses_post for HTML fields to allow safe HTML
+            // For HTML fields (like company address and business hours), allow HTML
             if ($field === 'hozio_company_address' || $field === 'hozio_business_hours') {
-                update_option($field, wp_kses_post($_POST[$field])); // Allow HTML in these fields
+                update_option($field, wp_kses_post($_POST[$field])); // Allow HTML
             } else {
-                update_option($field, sanitize_text_field($_POST[$field])); // Sanitize other fields as plain text
+                update_option($field, sanitize_text_field($_POST[$field])); // Sanitize plain text
             }
         }
     }
 
+    // Save the custom dynamic tag values
+    $custom_tags = get_option('hozio_custom_tags', []);
+    foreach ($custom_tags as $tag) {
+        if (isset($_POST['hozio_' . $tag['value']])) {
+            update_option('hozio_' . $tag['value'], sanitize_text_field($_POST['hozio_' . $tag['value']]));
+        }
+    }
+
+    // Redirect back to the settings page after saving
     wp_redirect(admin_url('admin.php?page=hozio_dynamic_tags'));
     exit;
 }
