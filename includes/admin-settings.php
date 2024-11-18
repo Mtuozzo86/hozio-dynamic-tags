@@ -146,7 +146,12 @@ function hozio_dynamic_tags_save_settings() {
 
     foreach ($fields as $field) {
         if (isset($_POST[$field])) {
-            update_option($field, sanitize_text_field($_POST[$field]));
+            // Use wp_kses_post for HTML fields to allow safe HTML
+            if ($field === 'hozio_company_address' || $field === 'hozio_business_hours') {
+                update_option($field, wp_kses_post($_POST[$field])); // Allow HTML in these fields
+            } else {
+                update_option($field, sanitize_text_field($_POST[$field])); // Sanitize other fields as plain text
+            }
         }
     }
 
