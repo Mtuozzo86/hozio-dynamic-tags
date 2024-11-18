@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.13.12
+Version: 3.13.3
 Author: Hozio Web Dev
 Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
@@ -256,3 +256,25 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         }
     }
 });
+
+// Output custom inline CSS for the last menu item
+add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_css');
+function hozio_dynamic_nav_menu_inline_css() {
+    ?>
+    <style type="text/css">
+        #toggle-menu li:last-of-type > .elementor-item {
+            background-color: var(--e-global-color-secondary, #FFFFFF) !important;
+            color: <?php echo esc_attr(get_option('hozio_nav_text_color', 'black')); ?> !important;
+            padding: 25px 24px;
+            font-weight: 600;
+            font-size: 17px;
+            text-align: center;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        #toggle-menu li:last-of-type > .elementor-item:hover {
+            background-color: var(--e-global-color-secondary, #FFFFFF) !important;
+            color: <?php echo esc_attr(get_option('hozio_nav_text_color', 'black')); ?> !important;
+        }
+    </style>
+    <?php
+}
