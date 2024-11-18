@@ -1,7 +1,7 @@
 <?php
 // Register custom dynamic tags
 add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
-    // Base tags
+    // Base tags (default set of tags)
     $tags = [
         ['company-phone-1', 'Company Phone Number 1', 'URL'],
         ['company-phone-1-name', 'Company Phone #1 Name', 'TEXT'],
@@ -30,10 +30,11 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         ['bbb', 'BBB', 'URL'],
     ];
 
-    // Add custom tags from options
+    // Fetch custom tags from the options table
     $custom_tags = get_option('hozio_custom_tags', []);
+    
+    // Add custom tags from the database
     foreach ($custom_tags as $tag) {
-        // Ensure the tag type is set correctly
         $tags[] = [$tag['value'], $tag['title'], strtoupper($tag['type'])];
     }
 
@@ -58,10 +59,11 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                     }
 
                     public function get_group() {
-                        return 'site'; // Updated group for Elementor compatibility
+                        return 'site'; // Group for Elementor compatibility
                     }
 
                     public function get_categories() {
+                        // Return category based on type: URL or TEXT
                         return [\$this->tag_type === 'URL' ? \\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY : \\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
                     }
 
@@ -70,9 +72,10 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                     }
 
                     public function render() {
+                        // Get the tag value from the options table
                         \$option_value = get_option('hozio_' . \$this->tag_name);
                         
-                        // Define allowed HTML tags for rendering dynamic content
+                        // Define allowed HTML tags for rendering dynamic content (HTML content)
                         \$allowed_tags = array(
                             'br' => array(),
                             'a' => array(
@@ -88,6 +91,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                             // Add other tags you want to allow here
                         );
 
+                        // Render the tag based on its name and type
                         switch (\$this->tag_name) {
                             case 'phone-number-icon-box':
                                 // Display Phone Number Icon Box
@@ -118,34 +122,40 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                                 break;
 
                             case 'gmb-link':
-                                echo esc_url(\$option_value);  // GMB Link
+                                // Display the GMB link
+                                echo esc_url(\$option_value);
                                 break;
 
                             case 'company-phone-1':
-                                echo esc_url('tel:' . esc_attr(\$option_value));  // Company Phone 1 (URL)
+                                // Display Company Phone 1 (URL)
+                                echo esc_url('tel:' . esc_attr(\$option_value));  
                                 break;
 
                             case 'company-phone-2':
-                                echo esc_url('tel:' . esc_attr(\$option_value));  // Company Phone 2 (URL)
+                                // Display Company Phone 2 (URL)
+                                echo esc_url('tel:' . esc_attr(\$option_value));  
                                 break;
 
                             case 'sms-phone':
-                                echo esc_url('sms:' . esc_attr(\$option_value));  // SMS phone (URL)
+                                // Display SMS phone (URL)
+                                echo esc_url('sms:' . esc_attr(\$option_value));  
                                 break;
 
                             case 'company-email':
-                                echo esc_url('mailto:' . esc_attr(\$option_value));  // Company email (URL)
+                                // Display Company email (URL)
+                                echo esc_url('mailto:' . esc_attr(\$option_value));  
                                 break;
 
                             default:
-                                echo esc_html(\$option_value);  // Default to allow HTML output for all others
+                                // Default: display the value as text (with sanitization for HTML)
+                                echo esc_html(\$option_value);  
                                 break;
                         }
                     }
                 }
             ");
+            // Register the dynamic tag
             $dynamic_tags->register(new $class_name());
         }
     }
 }, 50);
-?>
