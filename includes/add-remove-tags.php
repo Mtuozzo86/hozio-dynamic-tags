@@ -10,15 +10,7 @@
     <input type="radio" id="text" name="tag_type" value="text" required>
     <label for="text">Text</label><br>
     <input type="radio" id="url" name="tag_type" value="url">
-    <label for="url">URL</label><br>
-    <input type="radio" id="image" name="tag_type" value="image">
-    <label for="image">Image</label><br><br>
-
-    <div id="image-upload" style="display: none;">
-        <label for="image-url">Upload Image:</label>
-        <input type="text" id="image-url" name="image_url" readonly>
-        <button type="button" class="upload-image-button">Upload Image</button>
-    </div>
+    <label for="url">URL</label><br><br>
 
     <button type="submit">Add Dynamic Tag</button>
 </form>
@@ -28,9 +20,15 @@
 <h2>Existing Tags</h2>
 <ul>
     <?php
+    // Retrieve saved custom tags from the options table
     $custom_tags = get_option('hozio_custom_tags', []);
+    
+    // Debugging: Log the tags to ensure they're fetched correctly (remove after fixing)
+    // error_log(print_r($custom_tags, true));  // Log to wp-content/debug.log
+
     if (!empty($custom_tags)) {
         foreach ($custom_tags as $tag) {
+            // Display each tag with a remove link
             echo '<li>' . esc_html($tag['title']) . ' (' . esc_html($tag['type']) . ') - <a href="' . esc_url(admin_url('admin-post.php?action=hozio_remove_tag&tag=' . esc_attr($tag['value']))) . '" onclick="return confirm(\'Are you sure you want to remove this tag?\');">Remove</a></li>';
         }
     } else {
@@ -41,26 +39,6 @@
 
 <script>
     jQuery(document).ready(function($) {
-        $('input[name="tag_type"]').change(function() {
-            if ($(this).val() === 'image') {
-                $('#image-upload').show();
-            } else {
-                $('#image-upload').hide();
-            }
-        });
-
-        $('.upload-image-button').click(function(e) {
-            e.preventDefault();
-            var imageUploader = wp.media({
-                title: 'Upload Image',
-                button: {
-                    text: 'Use this image'
-                },
-                multiple: false
-            }).open().on('select', function(e) {
-                var uploadedImage = imageUploader.state().get('selection').first().toJSON();
-                $('#image-url').val(uploadedImage.url);
-            });
-        });
+        // You can add custom JS if needed, but it's not required here
     });
 </script>
