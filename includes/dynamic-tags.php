@@ -228,7 +228,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                 ? $this->calculate_years_of_experience()
                 : get_option('hozio_' . $dynamic_tag_two, '');
 
-            echo wp_kses_post($before_text . ' ' . $value_one . ' ' . $between_text . ' ' . $value_two . ' ' . $after_text);
+            echo wp_kses_post($before_text . '' . $value_one . '' . $between_text . '' . $value_two . '' . $after_text);
         }
 
         private function get_dynamic_tag_options() {
