@@ -21,8 +21,8 @@ function hozio_dynamic_tags_register_settings() {
         'hozio_linkedin_url',
         'hozio_gmb_link',
         'hozio_to_email_contact_form',
-        'hozio_nav_text_color',
-        'hozio_nav_text_color_hex'
+        'hozio_nav_text_color',    // Text Color field
+        'hozio_start_year',        // Start Year field
     ];
 
     foreach ($fields as $field) {
@@ -66,6 +66,8 @@ function hozio_dynamic_tags_settings_init() {
         'hozio_linkedin_url' => 'LinkedIn URL',
         'hozio_gmb_link' => 'GMB Link',
         'hozio_to_email_contact_form' => 'To Email(s) Contact Form',
+        'hozio_nav_text_color' => 'Navigation Text Color', // Text Color field
+        'hozio_start_year' => 'Start Year',              // Start Year field
     ];
 
     foreach ($fields as $key => $label) {
@@ -97,17 +99,35 @@ add_action('admin_init', 'hozio_dynamic_tags_settings_init');
 
 // Render input fields for text settings
 function hozio_dynamic_tags_render_input($args) {
-    $option = get_option($args['label_for']);
-    
-    // Use textarea for fields that accept HTML like Company Address and Business Hours
-    if ($args['label_for'] === 'hozio_company_address' || $args['label_for'] === 'hozio_business_hours') {
+    $option = get_option($args['label_for'], '');
+
+    // Render specific field types
+    if ($args['label_for'] === 'hozio_start_year') {
+        // Get the stored start year from the database
+        $stored_start_year = get_option('hozio_start_year', '');
+        
+        // Calculate the difference (Years of Experience)
+        $current_year = (int) date('Y');
+        $years_of_experience = ($stored_start_year) ? $current_year - (int) $stored_start_year : 0;
+
+        // Render the input field for Start Year
+        printf(
+            '<input type="number" id="%1$s" name="%1$s" value="%2$s" class="small-text" min="1900" max="%3$s" />
+            <p><strong>Years of Experience:</strong> %4$s</p>',
+            esc_attr($args['label_for']),       // Field ID
+            esc_attr($stored_start_year),       // Current Start Year value
+            esc_attr($current_year),            // Maximum allowed year
+            esc_html($years_of_experience)      // Display calculated Years of Experience
+        );
+    } elseif ($args['label_for'] === 'hozio_company_address' || $args['label_for'] === 'hozio_business_hours') {
+        // Textarea for fields allowing HTML
         printf(
             '<textarea id="%1$s" name="%1$s" class="large-text" rows="4">%2$s</textarea>',
             esc_attr($args['label_for']),
             esc_textarea($option)
         );
     } else {
-        // Regular text input for non-HTML fields
+        // Regular text input for all other fields
         printf(
             '<input type="text" id="%1$s" name="%1$s" value="%2$s" class="regular-text" />',
             esc_attr($args['label_for']),
@@ -162,12 +182,12 @@ function hozio_dynamic_tags_save_settings() {
         'hozio_gmb_link',
         'hozio_to_email_contact_form',
         'hozio_nav_text_color',
-        'hozio_nav_text_color_hex'
+        'hozio_start_year', // Save Start Year field
     ];
 
     foreach ($fields as $field) {
         if (isset($_POST[$field])) {
-            // For HTML fields (like company address and business hours), allow HTML
+            // For HTML fields, allow HTML
             if ($field === 'hozio_company_address' || $field === 'hozio_business_hours') {
                 update_option($field, wp_kses_post($_POST[$field])); // Allow HTML
             } else {

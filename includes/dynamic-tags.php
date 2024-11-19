@@ -14,7 +14,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         ['company-email', 'Company Email', 'URL'],
         ['email-icon-box', 'Email (Icon Box desc.)', 'TEXT'],
         ['to-email-contact-form', 'To Email(s) Contact Form', 'TEXT'],
-        ['sitemap-xml', 'sitemap.xml', 'URL'],
+        ['sitemap-xml', 'Sitemap', 'URL'],
         ['company-address', 'Company Address', 'TEXT'], // Allow HTML
         ['yelp', 'Yelp', 'URL'],
         ['youtube', 'YouTube', 'URL'],
@@ -28,6 +28,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         ['tiktok', 'TikTok', 'URL'],
         ['linkedin', 'LinkedIn', 'URL'],
         ['bbb', 'BBB', 'URL'],
+        ['years-of-experience', 'Years of Experience', 'TEXT'], // Dynamic tag for calculated value
     ];
 
     // Fetch custom tags from the options table
@@ -44,118 +45,213 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         $class_name = 'My_' . ucwords($tag_slug, '_') . '_Tag';
 
         if (!class_exists($class_name)) {
-            eval("
-                class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
-                    private \$tag_name = '" . esc_attr($tag[0]) . "';
-                    private \$tag_title = '" . esc_attr($tag[1]) . "';
-                    private \$tag_type = '" . esc_attr($tag[2]) . "';
+            eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                private \$tag_name = '" . esc_attr($tag[0]) . "';
+                private \$tag_title = '" . esc_attr($tag[1]) . "';
+                private \$tag_type = '" . esc_attr($tag[2]) . "';
 
-                    public function get_name() {
-                        return \$this->tag_name;
-                    }
+                public function get_name() {
+                    return \$this->tag_name;
+                }
 
-                    public function get_title() {
-                        return \$this->tag_title;
-                    }
+                public function get_title() {
+                    return \$this->tag_title;
+                }
 
-                    public function get_group() {
-                        return 'site'; // Group for Elementor compatibility
-                    }
+                public function get_group() {
+                    return 'site'; // Group for Elementor compatibility
+                }
 
-                    public function get_categories() {
-                        // Return category based on type: URL or TEXT
-                        return [\$this->tag_type === 'URL' ? \\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY : \\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
-                    }
+                public function get_categories() {
+                    return [\$this->tag_type === 'URL' ? \\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY : \\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
+                }
 
-                    protected function register_controls() {
-                        // No controls needed for now
-                    }
+                protected function register_controls() {}
 
-                    public function render() {
-                        // Get the tag value from the options table
-                        \$option_value = get_option('hozio_' . \$this->tag_name);
+                public function render() {
+                    if (\$this->tag_name === 'years-of-experience') {
+                        // Fetch the stored start year
+                        \$start_year = get_option('hozio_start_year', 2010); // Default to 2010 if not set
+                        \$current_year = (int) date('Y');
                         
-                        // Define allowed HTML tags for rendering dynamic content (HTML content)
-                        \$allowed_tags = array(
-                            'br' => array(),
-                            'a' => array(
-                                'href' => array(),
-                                'title' => array(),
-                            ),
-                            'b' => array(),
-                            'i' => array(),
-                            'p' => array(),
-                            'ul' => array(),
-                            'ol' => array(),
-                            'li' => array(),
-                            // Add other tags you want to allow here
-                        );
+                        // Calculate years of experience
+                        \$years_of_experience = \$current_year - (int) \$start_year;
 
-                        // Render the tag based on its name and type
-                        switch (\$this->tag_name) {
-                            case 'phone-number-icon-box':
-                                // Display Phone Number Icon Box
-                                \$phone = esc_attr(get_option('hozio_company_phone_1'));
-                                echo '<a href=\"tel:' . \$phone . '\">' . esc_html(\$phone) . '</a>';
-                                break;
+                        // Output the calculated value
+                        echo esc_html(\$years_of_experience);
+                        return;
+                    }
 
-                            case 'sms-icon-box':
-                                // Display SMS Icon Box
-                                \$sms_phone = esc_attr(get_option('hozio_sms_phone'));
-                                echo '<a href=\"sms:' . \$sms_phone . '\">' . esc_html(\$sms_phone) . '</a>';
-                                break;
+                    // Fetch the option value for other tags
+                    \$option_value = get_option('hozio_' . \$this->tag_name);
+                    \$allowed_tags = [
+                        'br' => [],
+                        'a' => ['href' => [], 'title' => []],
+                        'b' => [], 'i' => [],
+                        'p' => [], 'ul' => [], 'ol' => [], 'li' => [],
+                    ];
 
-                            case 'email-icon-box':
-                                // Display Email Icon Box
-                                \$email = esc_attr(get_option('hozio_company_email'));
-                                echo '<a href=\"mailto:' . \$email . '\">' . esc_html(\$email) . '</a>';
-                                break;
+                    // Render the content based on the tag type
+                    switch (\$this->tag_name) {
+                        case 'phone-number-icon-box':
+                            \$phone = esc_attr(get_option('hozio_company_phone_1'));
+                            echo '<a href=\"tel:' . \$phone . '\">' . esc_html(\$phone) . '</a>';
+                            break;
 
-                            case 'company-address':
-                                // Allow HTML for company address
-                                echo wp_kses(\$option_value, \$allowed_tags); 
-                                break;
+                        case 'sms-icon-box':
+                            \$sms_phone = esc_attr(get_option('hozio_sms_phone'));
+                            echo '<a href=\"sms:' . \$sms_phone . '\">' . esc_html(\$sms_phone) . '</a>';
+                            break;
 
-                            case 'business-hours':
-                                // Allow HTML for business hours
-                                echo wp_kses(\$option_value, \$allowed_tags); 
-                                break;
+                        case 'email-icon-box':
+                            \$email = esc_attr(get_option('hozio_company_email'));
+                            echo '<a href=\"mailto:' . \$email . '\">' . esc_html(\$email) . '</a>';
+                            break;
 
-                            case 'gmb-link':
-                                // Display the GMB link
-                                echo esc_url(\$option_value);
-                                break;
+                        case 'company-address':
+                            echo wp_kses(\$option_value, \$allowed_tags);
+                            break;
 
-                            case 'company-phone-1':
-                                // Display Company Phone 1 (URL)
-                                echo esc_url('tel:' . esc_attr(\$option_value));  
-                                break;
+                        case 'business-hours':
+                            echo wp_kses(\$option_value, \$allowed_tags);
+                            break;
 
-                            case 'company-phone-2':
-                                // Display Company Phone 2 (URL)
-                                echo esc_url('tel:' . esc_attr(\$option_value));  
-                                break;
+                        case 'gmb-link':
+                            echo esc_url(\$option_value);
+                            break;
 
-                            case 'sms-phone':
-                                // Display SMS phone (URL)
-                                echo esc_url('sms:' . esc_attr(\$option_value));  
-                                break;
+                        case 'company-phone-1':
+                            echo esc_url('tel:' . esc_attr(\$option_value));
+                            break;
 
-                            case 'company-email':
-                                // Display Company email (URL)
-                                echo esc_url('mailto:' . esc_attr(\$option_value));  
-                                break;
+                        case 'company-phone-2':
+                            echo esc_url('tel:' . esc_attr(\$option_value));
+                            break;
 
-                            default:
-                                // Default: display the value as text (with sanitization for HTML)
-                                echo esc_html(\$option_value);  
-                                break;
-                        }
+                        case 'sms-phone':
+                            echo esc_url('sms:' . esc_attr(\$option_value));
+                            break;
+
+                        case 'company-email':
+                            echo esc_url('mailto:' . esc_attr(\$option_value));
+                            break;
+
+                        default:
+                            echo esc_html(\$option_value);
+                            break;
                     }
                 }
-            ");
-            // Register the dynamic tag
+            }");
             $dynamic_tags->register(new $class_name());
         }
     }
+
+    // Register composite dynamic tag
+    class Hozio_Composite_Tag extends \Elementor\Core\DynamicTags\Tag {
+        public function get_name() {
+            return 'hozio_composite_tag';
+        }
+
+        public function get_title() {
+            return __('Composite Dynamic Tag', 'hozio');
+        }
+
+        public function get_group() {
+            return 'site';
+        }
+
+        public function get_categories() {
+            return [\Elementor\Modules\DynamicTags\Module::TEXT_CATEGORY];
+        }
+
+        protected function register_controls() {
+            $this->add_control(
+                'before_text',
+                [
+                    'label' => __('Before Text', 'hozio'),
+                    'type' => \Elementor\Controls_Manager::TEXT,
+                    'default' => '',
+                ]
+            );
+
+            $this->add_control(
+                'dynamic_tag_one',
+                [
+                    'label' => __('Dynamic Tag 1', 'hozio'),
+                    'type' => \Elementor\Controls_Manager::SELECT,
+                    'options' => $this->get_dynamic_tag_options(),
+                    'default' => '',
+                ]
+            );
+
+            $this->add_control(
+                'between_text',
+                [
+                    'label' => __('Between Text', 'hozio'),
+                    'type' => \Elementor\Controls_Manager::TEXT,
+                    'default' => '',
+                ]
+            );
+
+            $this->add_control(
+                'dynamic_tag_two',
+                [
+                    'label' => __('Dynamic Tag 2', 'hozio'),
+                    'type' => \Elementor\Controls_Manager::SELECT,
+                    'options' => $this->get_dynamic_tag_options(),
+                    'default' => '',
+                ]
+            );
+
+            $this->add_control(
+                'after_text',
+                [
+                    'label' => __('After Text', 'hozio'),
+                    'type' => \Elementor\Controls_Manager::TEXT,
+                    'default' => '',
+                ]
+            );
+        }
+
+        public function render() {
+            $before_text = $this->get_settings('before_text');
+            $dynamic_tag_one = $this->get_settings('dynamic_tag_one');
+            $between_text = $this->get_settings('between_text');
+            $dynamic_tag_two = $this->get_settings('dynamic_tag_two');
+            $after_text = $this->get_settings('after_text');
+
+            // Fetch values for dynamic tags
+            $value_one = ($dynamic_tag_one === 'years-of-experience')
+                ? $this->calculate_years_of_experience()
+                : get_option('hozio_' . $dynamic_tag_one, '');
+            $value_two = ($dynamic_tag_two === 'years-of-experience')
+                ? $this->calculate_years_of_experience()
+                : get_option('hozio_' . $dynamic_tag_two, '');
+
+            echo wp_kses_post($before_text . ' ' . $value_one . ' ' . $between_text . ' ' . $value_two . ' ' . $after_text);
+        }
+
+        private function get_dynamic_tag_options() {
+            $options = [];
+
+            // Add built-in dynamic tags
+            $options['years-of-experience'] = __('Years of Experience', 'hozio');
+
+            // Fetch custom tags from the options table
+            $custom_tags = get_option('hozio_custom_tags', []);
+            foreach ($custom_tags as $tag) {
+                $options[$tag['value']] = $tag['title'];
+            }
+
+            return $options;
+        }
+
+        private function calculate_years_of_experience() {
+            $start_year = get_option('hozio_start_year', 0);
+            $current_year = (int) date('Y');
+            return ($start_year > 0) ? $current_year - (int) $start_year : 0;
+        }
+    }
+
+    $dynamic_tags->register(new Hozio_Composite_Tag());
 }, 50);

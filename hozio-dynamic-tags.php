@@ -230,26 +230,41 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         if (isset($tag[3])) {
             $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
             if (!class_exists($class_name)) {
-                eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
-                    public function get_name() { return '" . esc_attr($tag[0]) . "'; }
-                    public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
-                    public function get_group() { return 'site'; }
-                    public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY]; }
-                    protected function register_controls() {}
-                    public function render() {
-                        if ('tel' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url('tel:' . esc_attr(get_option('" . esc_attr($tag[2]) . "'))); 
-                        } elseif ('sms' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url('sms:' . esc_attr(get_option('" . esc_attr($tag[2]) . "'))); 
-                        } elseif ('mailto' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url('mailto:' . esc_attr(get_option('" . esc_attr($tag[2]) . "'))); 
-                        } elseif ('url' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url(get_option('" . esc_attr($tag[2]) . "') ?: home_url('/sitemap.xml'));
-                        } else {
-                            echo esc_url(get_option('" . esc_attr($tag[2]) . "'));
+                eval("
+                    class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                        public function get_name() {
+                            return '" . esc_attr($tag[0]) . "';
+                        }
+
+                        public function get_title() {
+                            return __('" . esc_attr($tag[1]) . "', 'plugin-name');
+                        }
+
+                        public function get_group() {
+                            return 'site';
+                        }
+
+                        public function get_categories() {
+                            return [\\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY];
+                        }
+
+                        protected function register_controls() {}
+
+                        public function render() {
+                            if ('tel' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url('tel:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            } elseif ('sms' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url('sms:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            } elseif ('mailto' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url('mailto:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            } elseif ('url' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url(get_option('" . esc_attr($tag[2]) . "') ?: home_url('/sitemap.xml'));
+                            } else {
+                                echo esc_url(get_option('" . esc_attr($tag[2]) . "'));
+                            }
                         }
                     }
-                }");
+                ");
                 $dynamic_tags->register(new $class_name());
             }
         }
@@ -262,28 +277,50 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['company-address', 'Company Address', 'hozio_company_address'],
         ['business-hours', 'Business Hours', 'hozio_business_hours'],
         ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
+        ['years-of-experience', 'Years of Experience', 'hozio_start_year'],
     ];
 
     foreach ($text_tags as $tag) {
         if (isset($tag[2])) {
             $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
+
             if (!class_exists($class_name)) {
-                eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
-                    public function get_name() { return '" . esc_attr($tag[0]) . "'; }
-                    public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
-                    public function get_group() { return 'site'; }
-                    public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY]; }
-                    protected function register_controls() {}
-                    public function render() {
-                        if ('company-address' === '" . esc_attr($tag[0]) . "') {
-                            echo wp_kses_post(get_option('hozio_company_address'));
-                        } elseif ('business-hours' === '" . esc_attr($tag[0]) . "') {
-                            echo wp_kses_post(get_option('hozio_business_hours'));
-                        } else {
-                            echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
+                eval("
+                    class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                        public function get_name() {
+                            return '" . esc_attr($tag[0]) . "';
+                        }
+
+                        public function get_title() {
+                            return __('" . esc_attr($tag[1]) . "', 'plugin-name');
+                        }
+
+                        public function get_group() {
+                            return 'site';
+                        }
+
+                        public function get_categories() {
+                            return [\\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
+                        }
+
+                        protected function register_controls() {}
+
+                        public function render() {
+                            if ('years-of-experience' === '" . esc_attr($tag[0]) . "') {
+                                \$start_year = get_option('hozio_start_year', 0);
+                                \$current_year = (int) date('Y');
+                                \$years_of_experience = (\$start_year > 0) ? \$current_year - (int) \$start_year : 0;
+                                echo esc_html(\$years_of_experience);
+                            } elseif ('company-address' === '" . esc_attr($tag[0]) . "') {
+                                echo wp_kses_post(get_option('hozio_company_address'));
+                            } elseif ('business-hours' === '" . esc_attr($tag[0]) . "') {
+                                echo wp_kses_post(get_option('hozio_business_hours'));
+                            } else {
+                                echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
+                            }
                         }
                     }
-                }");
+                ");
                 $dynamic_tags->register(new $class_name());
             }
         }
