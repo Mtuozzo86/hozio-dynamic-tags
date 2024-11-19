@@ -3,9 +3,8 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.13.2
+Version: 3.13.5
 Author: Hozio Web Dev
-Author URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 License: GPL2
 Text Domain: hozio-dynamic-tags
 GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
@@ -55,6 +54,21 @@ function hozio_dynamic_tags_menu() {
 
 add_action('admin_menu', 'hozio_dynamic_tags_menu');
 
+// Add custom CSS for the plugin's settings page
+function hozio_dynamic_tags_custom_styles() {
+    ?>
+    <style type="text/css">
+        /* Adjust the width of the textarea fields */
+        #hozio_company_address, #hozio_business_hours {
+            width: 100%;
+            max-width: 350px;
+            min-width: 300px;
+        }
+    </style>
+    <?php
+}
+
+add_action('admin_head', 'hozio_dynamic_tags_custom_styles');
 
 // Add a settings link under the plugin details
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'hozio_dynamic_tags_action_links');
@@ -83,16 +97,29 @@ function hozio_add_dynamic_tag() {
 
     $tag_title = sanitize_text_field($_POST['tag_title']);
     $tag_type = sanitize_text_field($_POST['tag_type']);
-    $tag_value = sanitize_title($tag_title);
+    $tag_value = sanitize_title($tag_title); // Ensure the tag's value is sanitized for use as a key
 
+    // Fetch the existing tags from the options table
     $custom_tags = get_option('hozio_custom_tags', []);
+    
+    // Check if tag already exists to prevent duplicates
+    foreach ($custom_tags as $tag) {
+        if ($tag['value'] === $tag_value) {
+            wp_die('This tag already exists.');
+        }
+    }
+
+    // Add the new tag to the array
     $custom_tags[] = [
         'title' => $tag_title,
         'value' => $tag_value,
         'type' => $tag_type
     ];
 
+    // Update the tags in the options table
     update_option('hozio_custom_tags', $custom_tags);
+
+    // Redirect back to the add/remove tags page
     wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
     exit;
 }
@@ -104,9 +131,11 @@ function hozio_remove_dynamic_tag() {
         wp_die('Unauthorized request');
     }
 
+    // Get the tag value to be removed
     $tag_value = sanitize_text_field($_GET['tag']);
     $custom_tags = get_option('hozio_custom_tags', []);
 
+    // Loop through tags and remove the one that matches
     foreach ($custom_tags as $key => $tag) {
         if ($tag['value'] === $tag_value) {
             unset($custom_tags[$key]);
@@ -114,7 +143,10 @@ function hozio_remove_dynamic_tag() {
         }
     }
 
+    // Update the tags in the options table after removal
     update_option('hozio_custom_tags', array_values($custom_tags));
+
+    // Redirect back to the add/remove tags page
     wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
     exit;
 }
@@ -198,26 +230,41 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         if (isset($tag[3])) {
             $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
             if (!class_exists($class_name)) {
-                eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
-                    public function get_name() { return '" . esc_attr($tag[0]) . "'; }
-                    public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
-                    public function get_group() { return 'site'; }
-                    public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY]; }
-                    protected function register_controls() {}
-                    public function render() {
-                        if ('tel' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url('tel:' . esc_attr(get_option('" . esc_attr($tag[2]) . "'))); 
-                        } elseif ('sms' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url('sms:' . esc_attr(get_option('" . esc_attr($tag[2]) . "'))); 
-                        } elseif ('mailto' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url('mailto:' . esc_attr(get_option('" . esc_attr($tag[2]) . "'))); 
-                        } elseif ('url' === '" . esc_attr($tag[3]) . "') {
-                            echo esc_url(get_option('" . esc_attr($tag[2]) . "') ?: home_url('/sitemap.xml'));
-                        } else {
-                            echo esc_url(get_option('" . esc_attr($tag[2]) . "'));
+                eval("
+                    class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                        public function get_name() {
+                            return '" . esc_attr($tag[0]) . "';
+                        }
+
+                        public function get_title() {
+                            return __('" . esc_attr($tag[1]) . "', 'plugin-name');
+                        }
+
+                        public function get_group() {
+                            return 'site';
+                        }
+
+                        public function get_categories() {
+                            return [\\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY];
+                        }
+
+                        protected function register_controls() {}
+
+                        public function render() {
+                            if ('tel' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url('tel:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            } elseif ('sms' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url('sms:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            } elseif ('mailto' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url('mailto:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            } elseif ('url' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url(get_option('" . esc_attr($tag[2]) . "') ?: home_url('/sitemap.xml'));
+                            } else {
+                                echo esc_url(get_option('" . esc_attr($tag[2]) . "'));
+                            }
                         }
                     }
-                }");
+                ");
                 $dynamic_tags->register(new $class_name());
             }
         }
@@ -230,28 +277,50 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['company-address', 'Company Address', 'hozio_company_address'],
         ['business-hours', 'Business Hours', 'hozio_business_hours'],
         ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
+        ['years-of-experience', 'Years of Experience', 'hozio_start_year'],
     ];
 
     foreach ($text_tags as $tag) {
         if (isset($tag[2])) {
             $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
+
             if (!class_exists($class_name)) {
-                eval("class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
-                    public function get_name() { return '" . esc_attr($tag[0]) . "'; }
-                    public function get_title() { return __('" . esc_attr($tag[1]) . "', 'plugin-name'); }
-                    public function get_group() { return 'site'; }
-                    public function get_categories() { return [\\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY]; }
-                    protected function register_controls() {}
-                    public function render() {
-                        if ('company-address' === '" . esc_attr($tag[0]) . "') {
-                            echo wp_kses_post(get_option('hozio_company_address'));
-                        } elseif ('business-hours' === '" . esc_attr($tag[0]) . "') {
-                            echo wp_kses_post(get_option('hozio_business_hours'));
-                        } else {
-                            echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
+                eval("
+                    class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                        public function get_name() {
+                            return '" . esc_attr($tag[0]) . "';
+                        }
+
+                        public function get_title() {
+                            return __('" . esc_attr($tag[1]) . "', 'plugin-name');
+                        }
+
+                        public function get_group() {
+                            return 'site';
+                        }
+
+                        public function get_categories() {
+                            return [\\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
+                        }
+
+                        protected function register_controls() {}
+
+                        public function render() {
+                            if ('years-of-experience' === '" . esc_attr($tag[0]) . "') {
+                                \$start_year = get_option('hozio_start_year', 0);
+                                \$current_year = (int) date('Y');
+                                \$years_of_experience = (\$start_year > 0) ? \$current_year - (int) \$start_year : 0;
+                                echo esc_html(\$years_of_experience);
+                            } elseif ('company-address' === '" . esc_attr($tag[0]) . "') {
+                                echo wp_kses_post(get_option('hozio_company_address'));
+                            } elseif ('business-hours' === '" . esc_attr($tag[0]) . "') {
+                                echo wp_kses_post(get_option('hozio_business_hours'));
+                            } else {
+                                echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
+                            }
                         }
                     }
-                }");
+                ");
                 $dynamic_tags->register(new $class_name());
             }
         }
@@ -279,4 +348,3 @@ function hozio_dynamic_nav_menu_inline_css() {
     </style>
     <?php
 }
-?>
