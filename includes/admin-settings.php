@@ -1,14 +1,14 @@
 <?php
 // Register settings for Hozio Dynamic Tags
 function hozio_dynamic_tags_register_settings() {
-    // Register each setting
+    // Register each setting for the default fields
     $fields = [
         'hozio_company_phone_1',
         'hozio_company_phone_2',
         'hozio_sms_phone',
         'hozio_company_email',
-        'hozio_company_address',
-        'hozio_business_hours',
+        'hozio_company_address',   // Allow HTML
+        'hozio_business_hours',    // Allow HTML
         'hozio_yelp_url',
         'hozio_youtube_url',
         'hozio_angies_list_url',
@@ -21,12 +21,18 @@ function hozio_dynamic_tags_register_settings() {
         'hozio_linkedin_url',
         'hozio_gmb_link',
         'hozio_to_email_contact_form',
-        'hozio_nav_text_color',
-        'hozio_nav_text_color_hex'
+        'hozio_nav_text_color',    // Text Color field
+        'hozio_start_year',        // Start Year field
     ];
 
     foreach ($fields as $field) {
         register_setting('hozio_dynamic_tags_options', $field);
+    }
+    
+    // Register custom dynamic tags settings
+    $custom_tags = get_option('hozio_custom_tags', []);
+    foreach ($custom_tags as $tag) {
+        register_setting('hozio_dynamic_tags_options', 'hozio_' . $tag['value']);
     }
 }
 
@@ -46,8 +52,8 @@ function hozio_dynamic_tags_settings_init() {
         'hozio_company_phone_2' => 'Company Phone 2',
         'hozio_sms_phone' => 'SMS Phone Number',
         'hozio_company_email' => 'Company Email',
-        'hozio_company_address' => 'Company Address',
-        'hozio_business_hours' => 'Business Hours',
+        'hozio_company_address' => 'Company Address', // Allow HTML input
+        'hozio_business_hours' => 'Business Hours',    // Allow HTML input
         'hozio_yelp_url' => 'Yelp URL',
         'hozio_youtube_url' => 'YouTube URL',
         'hozio_angies_list_url' => "Angi's List URL",
@@ -60,7 +66,8 @@ function hozio_dynamic_tags_settings_init() {
         'hozio_linkedin_url' => 'LinkedIn URL',
         'hozio_gmb_link' => 'GMB Link',
         'hozio_to_email_contact_form' => 'To Email(s) Contact Form',
-        'hozio_nav_text_color' => 'Toggle Menu Text Color'
+        'hozio_nav_text_color' => 'Navigation Text Color', // Text Color field
+        'hozio_start_year' => 'Start Year',              // Start Year field
     ];
 
     foreach ($fields as $key => $label) {
@@ -73,18 +80,60 @@ function hozio_dynamic_tags_settings_init() {
             ['label_for' => $key]
         );
     }
+
+    // Add input fields for custom dynamic tags
+    $custom_tags = get_option('hozio_custom_tags', []);
+    foreach ($custom_tags as $tag) {
+        add_settings_field(
+            'hozio_' . $tag['value'],
+            $tag['title'],
+            'hozio_dynamic_tags_render_input',
+            'hozio_dynamic_tags',
+            'hozio_dynamic_tags_section',
+            ['label_for' => 'hozio_' . $tag['value']]
+        );
+    }
 }
 
 add_action('admin_init', 'hozio_dynamic_tags_settings_init');
 
 // Render input fields for text settings
 function hozio_dynamic_tags_render_input($args) {
-    $option = get_option($args['label_for']);
-    printf(
-        '<input type="text" id="%1$s" name="%1$s" value="%2$s" class="regular-text" />',
-        esc_attr($args['label_for']),
-        esc_attr($option)
-    );
+    $option = get_option($args['label_for'], '');
+
+    // Render specific field types
+    if ($args['label_for'] === 'hozio_start_year') {
+        // Get the stored start year from the database
+        $stored_start_year = get_option('hozio_start_year', '');
+        
+        // Calculate the difference (Years of Experience)
+        $current_year = (int) date('Y');
+        $years_of_experience = ($stored_start_year) ? $current_year - (int) $stored_start_year : 0;
+
+        // Render the input field for Start Year
+        printf(
+            '<input type="number" id="%1$s" name="%1$s" value="%2$s" class="small-text" min="1900" max="%3$s" />
+            <p><strong>Years of Experience:</strong> %4$s</p>',
+            esc_attr($args['label_for']),       // Field ID
+            esc_attr($stored_start_year),       // Current Start Year value
+            esc_attr($current_year),            // Maximum allowed year
+            esc_html($years_of_experience)      // Display calculated Years of Experience
+        );
+    } elseif ($args['label_for'] === 'hozio_company_address' || $args['label_for'] === 'hozio_business_hours') {
+        // Textarea for fields allowing HTML
+        printf(
+            '<textarea id="%1$s" name="%1$s" class="large-text" rows="4">%2$s</textarea>',
+            esc_attr($args['label_for']),
+            esc_textarea($option)
+        );
+    } else {
+        // Regular text input for all other fields
+        printf(
+            '<input type="text" id="%1$s" name="%1$s" value="%2$s" class="regular-text" />',
+            esc_attr($args['label_for']),
+            esc_attr($option)
+        );
+    }
 }
 
 // Display the settings page
@@ -97,7 +146,7 @@ function hozio_dynamic_tags_settings_page() {
             wp_nonce_field('hozio_save_settings_nonce', 'hozio_save_settings_nonce_field');
             settings_fields('hozio_dynamic_tags_options');
             do_settings_sections('hozio_dynamic_tags');
-            echo '<input type="hidden" name="action" value="hozio_save_settings" />';
+            echo '<input type="hidden" name="action" value="hozio_save_settings" />'; // Ensure the form is submitted correctly
             submit_button(__('Save Settings', 'hozio-dynamic-tags'));
             ?>
         </form>
@@ -112,6 +161,7 @@ function hozio_dynamic_tags_save_settings() {
         wp_die('Nonce verification failed');
     }
 
+    // Save values for all fields
     $fields = [
         'hozio_company_phone_1',
         'hozio_company_phone_2',
@@ -132,19 +182,31 @@ function hozio_dynamic_tags_save_settings() {
         'hozio_gmb_link',
         'hozio_to_email_contact_form',
         'hozio_nav_text_color',
-        'hozio_nav_text_color_hex'
+        'hozio_start_year', // Save Start Year field
     ];
 
     foreach ($fields as $field) {
         if (isset($_POST[$field])) {
-            update_option($field, sanitize_text_field($_POST[$field]));
+            // For HTML fields, allow HTML
+            if ($field === 'hozio_company_address' || $field === 'hozio_business_hours') {
+                update_option($field, wp_kses_post($_POST[$field])); // Allow HTML
+            } else {
+                update_option($field, sanitize_text_field($_POST[$field])); // Sanitize plain text
+            }
         }
     }
 
+    // Save the custom dynamic tag values
+    $custom_tags = get_option('hozio_custom_tags', []);
+    foreach ($custom_tags as $tag) {
+        if (isset($_POST['hozio_' . $tag['value']])) {
+            update_option('hozio_' . $tag['value'], sanitize_text_field($_POST['hozio_' . $tag['value']]));
+        }
+    }
+
+    // Redirect back to the settings page after saving
     wp_redirect(admin_url('admin.php?page=hozio_dynamic_tags'));
     exit;
 }
 
 add_action('admin_post_hozio_save_settings', 'hozio_dynamic_tags_save_settings');
-
-?>
