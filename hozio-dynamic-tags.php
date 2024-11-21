@@ -220,10 +220,10 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
         ['linkedin', 'LinkedIn', 'hozio_linkedin_url', 'url'],
         ['bbb', 'BBB', 'hozio_bbb_url', 'url'],
         ['sitemap-xml', 'Sitemap', 'sitemap_url', 'url'],
-        ['yelp', 'Yelp', 'hozio_yelp_url'],
-        ['youtube', 'YouTube', 'hozio_youtube_url'],
-        ['angies-list', "Angi's List", 'hozio_angies_list_url'],
-        ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url'],
+        ['yelp', 'Yelp', 'hozio_yelp_url', 'url'],
+        ['youtube', 'YouTube', 'hozio_youtube_url', 'url'],
+        ['angies-list', "Angi's List", 'hozio_angies_list_url', 'url'],
+        ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url', 'url'],
     ];
 
     foreach ($url_tags as $tag) {
