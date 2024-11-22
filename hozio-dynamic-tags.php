@@ -351,7 +351,7 @@ function hozio_dynamic_nav_menu_inline_css() {
 
 add_action('admin_head', 'hozio_set_icon');
 function hozio_set_icon() {
-    $icon_url = plugins_url('assets/hozio-logo-large.png', __FILE__); // Update with correct path
+    $icon_url = plugins_url('assets/hozio-logo.gif', __FILE__); // Update with correct path
     echo '<style>
         .plugin-title img[src*="geopattern-icon"] {
             content: url("' . esc_url($icon_url) . '") !important;
