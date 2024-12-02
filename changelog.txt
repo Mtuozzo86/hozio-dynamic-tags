@@ -1,0 +1,8 @@
+= 3.14.5 (2024-12-02) =
+* Added functionality to sync pages with parent "Services" to WordPress navigation menus.
+* Implemented automatic removal of menu items when a page associated with "Services" is deleted, preventing "Invalid" menu items from appearing.
+* Enhanced the sync mechanism to update menus when a page's parent changes, ensuring menu consistency.
+* Ensured that all existing child pages of the "Services" parent are included in the relevant menus upon plugin activation or update.
+* Updated the process for handling pages under the "Services" parent, ensuring they are correctly placed within the main menu, toggle menu, and services menu based on their position and parent-child relationship.
+
+This update improves the overall user experience by automatically managing menu items associated with "Services" pages and removing invalid menu items when pages are deleted.
