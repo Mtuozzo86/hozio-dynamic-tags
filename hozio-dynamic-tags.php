@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.14.53
+Version: 3.14.52
 Author: Hozio Web Dev
 License: GPL2
 Text Domain: hozio-dynamic-tags
@@ -327,6 +327,40 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
     }
 });
 
+    // Register services_children dynamic tag (fixed value)
+    $class_name = 'My_Services_Children_Tag';
+
+    if (!class_exists($class_name)) {
+        eval("
+            class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                public function get_name() {
+                    return 'services_children';
+                }
+
+                public function get_title() {
+                    return __('Services Children', 'plugin-name');
+                }
+
+                public function get_group() {
+                    return 'site';
+                }
+
+                public function get_categories() {
+                    return [\\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
+                }
+
+                protected function register_controls() {}
+
+                public function render() {
+                    // Render the fixed value for services_children
+                    echo 'services_children';
+                }
+            }
+        ");
+        $dynamic_tags->register(new $class_name());
+    }
+});
+
 // Output custom inline CSS for the last menu item
 add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_css');
 function hozio_dynamic_nav_menu_inline_css() {
@@ -360,6 +394,8 @@ function hozio_set_icon() {
         }
     </style>';
 }
+
+
 
 // Modify the query for child pages of "Services" when the query ID is "services_children"
 add_action('elementor/query/services_children', function ($query) {
