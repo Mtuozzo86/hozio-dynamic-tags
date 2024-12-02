@@ -338,7 +338,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
                 }
 
                 public function get_title() {
-                    return __('Services Children', 'plugin-name');
+                    return __('Query ID Service Child Pages', 'plugin-name');
                 }
 
                 public function get_group() {
