@@ -146,6 +146,33 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         }
     }
 
+
+   $class_name = 'My_Services_Children_Tag';
+    if (!class_exists($class_name)) {
+        eval("
+            class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                public function get_name() {
+                    return 'services_children';
+                }
+                public function get_title() {
+                    return __('Query ID Service Child Pages', 'plugin-name');
+                }
+                public function get_group() {
+                    return 'site';
+                }
+                public function get_categories() {
+                    return [\\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
+                }
+                protected function register_controls() {}
+                public function render() {
+                    // Directly output the fixed value for 'services_children'
+                    echo 'services_children';
+                }
+            }
+        ");
+        $dynamic_tags->register(new $class_name());
+    }
+
     // Register composite dynamic tag
     class Hozio_Composite_Tag extends \Elementor\Core\DynamicTags\Tag {
         public function get_name() {
@@ -255,3 +282,31 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
 
     $dynamic_tags->register(new Hozio_Composite_Tag());
 }, 50);
+
+
+function register_services_children_dynamic_tag($tags) {
+    if (class_exists('Elementor\DynamicTags\Tag')) {
+        class Services_Children_Dynamic_Tag extends \Elementor\DynamicTags\Tag {
+            public function get_name() {
+                return 'services_children';
+            }
+            public function get_title() {
+                return 'Query ID Service Child Pages';
+            }
+            public function render() {
+                // Replace the below logic with the actual code to fetch and display the services children dynamically.
+                $post_id = get_the_ID(); // Get the current post ID
+                $children = get_post_meta($post_id, '_services_children', true); // Assume services_children is stored as post meta
+                
+                if ($children) {
+                    echo esc_html($children); // Output the value
+                } else {
+                    echo 'No services available';
+                }
+            }
+        }
+        // Register the custom dynamic tag
+        $tags->register(new Services_Children_Dynamic_Tag());
+    }
+}
+add_action('elementor/dynamic_tags/register', 'register_services_children_dynamic_tag');
