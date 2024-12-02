@@ -2,7 +2,7 @@
 
 == Changelog ==
 
-= 3.14.52 (2024-12-02) =
+= 3.14.53 (2024-12-02) =
 * Added functionality to sync pages with parent "Services" to WordPress navigation menus.
 * Implemented automatic removal of menu items when a page associated with "Services" is deleted, preventing "Invalid" menu items from appearing.
 * Enhanced the sync mechanism to update menus when a page's parent changes, ensuring menu consistency.
