@@ -29,9 +29,6 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         ['linkedin', 'LinkedIn', 'URL'],
         ['bbb', 'BBB', 'URL'],
         ['years-of-experience', 'Years of Experience', 'TEXT'], // Dynamic tag for calculated value
-        ['business-hours', 'Business Hours', 'TEXT'], // Allow HTML
-        ['trustindex-slider', 'Trust Index Slider', 'TEXT'],
-        ['trustindex-hero-button', 'Trust Index Hero Button', 'TEXT'],
     ];
 
     // Fetch custom tags from the options table
@@ -118,13 +115,6 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                         case 'business-hours':
                             echo wp_kses(\$option_value, \$allowed_tags);
                             break;
-                        case 'trustindex-slider':
-                            echo wp_kses(\$option_value, \$allowed_tags);
-                            break;
-
-                        case 'trustindex-hero-button':
-                            echo wp_kses(\$option_value, \$allowed_tags);
-                            break;
 
                         case 'gmb-link':
                             echo esc_url(\$option_value);
@@ -154,38 +144,6 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
             }");
             $dynamic_tags->register(new $class_name());
         }
-    }
-
-    $class_name = 'My_Services_Children_Tag';
-
-    if (!class_exists($class_name)) {
-        eval("
-            class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
-                public function get_name() {
-                    return 'services_children';
-                }
-
-                public function get_title() {
-                    return __('Query ID Service Child Pages', 'plugin-name');
-                }
-
-                public function get_group() {
-                    return 'site';
-                }
-
-                public function get_categories() {
-                    return [\\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
-                }
-
-                protected function register_controls() {}
-
-                public function render() {
-                    // Directly output the fixed value for 'services_children'
-                    echo 'services_children';
-                }
-            }
-        ");
-        $dynamic_tags->register(new $class_name());
     }
 
     // Register composite dynamic tag
@@ -297,35 +255,3 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
 
     $dynamic_tags->register(new Hozio_Composite_Tag());
 }, 50);
-
-
-function register_services_children_dynamic_tag($tags) {
-    if (class_exists('Elementor\DynamicTags\Tag')) {
-        class Services_Children_Dynamic_Tag extends \Elementor\DynamicTags\Tag {
-
-            public function get_name() {
-                return 'services_children';
-            }
-
-            public function get_title() {
-                return 'Services Children';
-            }
-
-            public function render() {
-                // Replace the below logic with the actual code to fetch and display the services children dynamically.
-                $post_id = get_the_ID(); // Get the current post ID
-                $children = get_post_meta($post_id, '_services_children', true); // Assume services_children is stored as post meta
-                
-                if ($children) {
-                    echo esc_html($children); // Output the value
-                } else {
-                    echo 'No services available';
-                }
-            }
-        }
-
-        // Register the custom dynamic tag
-        $tags->register(new Services_Children_Dynamic_Tag());
-    }
-}
-add_action('elementor/dynamic_tags/register', 'register_services_children_dynamic_tag');
