@@ -29,6 +29,9 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         ['linkedin', 'LinkedIn', 'URL'],
         ['bbb', 'BBB', 'URL'],
         ['years-of-experience', 'Years of Experience', 'TEXT'], // Dynamic tag for calculated value
+        ['business-hours', 'Business Hours', 'TEXT'], // Allow HTML
+        ['trustindex-slider', 'Trust Index Slider', 'TEXT'],
+        ['trustindex-hero-button', 'Trust Index Hero Button', 'TEXT'],
     ];
 
     // Fetch custom tags from the options table
@@ -113,6 +116,13 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                             break;
 
                         case 'business-hours':
+                            echo wp_kses(\$option_value, \$allowed_tags);
+                            break;
+                        case 'trustindex-slider':
+                            echo wp_kses(\$option_value, \$allowed_tags);
+                            break;
+
+                        case 'trustindex-hero-button':
                             echo wp_kses(\$option_value, \$allowed_tags);
                             break;
 
