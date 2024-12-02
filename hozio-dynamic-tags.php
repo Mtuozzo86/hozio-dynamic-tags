@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.14.51
+Version: 3.14.52
 Author: Hozio Web Dev
 License: GPL2
 Text Domain: hozio-dynamic-tags
@@ -360,3 +360,15 @@ function hozio_set_icon() {
         }
     </style>';
 }
+
+// Modify the query for child pages of "Services" when the query ID is "services_children"
+add_action('elementor/query/services_children', function ($query) {
+    // Get the ID of the "Services" page by its slug
+    $parent_page_id = get_page_by_path('services')->ID; // Replace 'services' with your parent slug
+
+    // Set the query to only include pages
+    $query->set('post_type', 'page');
+
+    // Set the query to only include child pages of the "Services" page
+    $query->set('post_parent', $parent_page_id);
+});
