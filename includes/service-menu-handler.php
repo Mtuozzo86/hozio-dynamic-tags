@@ -6,19 +6,12 @@ function sync_service_pages_to_menus($post_id, $post_after, $post_before) {
         return;
     }
 
-    // Get the "Services" parent page ID using WP_Query
-    $services_page = new WP_Query([
-        'post_type' => 'page',
-        'posts_per_page' => 1,
-        'post_title' => 'Services',
-    ]);
-
-    if (!$services_page->have_posts()) {
+    // Get the "Services" parent page ID
+    $services_page = get_page_by_title('Services');
+    if (!$services_page) {
         return; // Exit if the "Services" page doesn't exist
     }
-
-    // Get the Services page ID
-    $services_page_id = $services_page->posts[0]->ID;
+    $services_page_id = $services_page->ID;
 
     // Define the menus to update
     $menu_names = ['Main Menu', 'Main Menu Toggle', 'Services'];
@@ -108,17 +101,12 @@ function sync_service_pages_to_menus($post_id, $post_after, $post_before) {
 
 // Ensure all existing pages with "Services" parent are in menus
 function ensure_existing_service_pages_in_menus() {
-    $services_page = new WP_Query([
-        'post_type' => 'page',
-        'posts_per_page' => 1,
-        'post_title' => 'Services',
-    ]);
-
-    if (!$services_page->have_posts()) {
+    $services_page = get_page_by_title('Services');
+    if (!$services_page) {
         return; // Exit if the "Services" page doesn't exist
     }
 
-    $services_page_id = $services_page->posts[0]->ID;
+    $services_page_id = $services_page->ID;
     $menu_names = ['Main Menu', 'Main Menu Toggle', 'Services'];
 
     // Get all child pages of "Services"
