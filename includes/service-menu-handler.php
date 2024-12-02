@@ -1,83 +1,180 @@
 <?php
-// Function to add services to the menu upon post creation
-function add_service_to_menu($new_status, $old_status, $post) {
-    // Verify the post type is 'services'
-    if ($post->post_type != 'page2') {
+// Function to handle adding/removing pages with parent "Services" to/from menus
+function sync_service_pages_to_menus($post_id, $post_after, $post_before) {
+    // Ensure we're working with a "page" post type
+    if (get_post_type($post_id) !== 'page') {
         return;
     }
-    // Ensure the post is transitioning to "publish" from another status
-    if ($new_status != 'publish' || $old_status == 'publish') {
-        return;
+
+    // Get the "Services" parent page ID
+    $services_page = get_page_by_title('Services');
+    if (!$services_page) {
+        return; // Exit if the "Services" page doesn't exist
     }
-    // Get the post title and permalink
-    $post_title = get_the_title($post->ID);
-    $post_url = get_permalink($post->ID);
-    // Define the menus to update (Main and Main Menu Toggle menus)
-    $menu_names_with_parent = ['Main Menu', 'Main Menu Toggle'];
-    foreach ($menu_names_with_parent as $menu_name) {
-        // Get the menu object
-        $menu = wp_get_nav_menu_object($menu_name);
-        if (!$menu) {
-            continue;
-        }
-        $menu_items = wp_get_nav_menu_items($menu->term_id);
-        $parent_item_id = null;
-        $exists = false;
-        // Find the "Services" parent item and check for duplicates
-        foreach ($menu_items as $item) {
-            if ($item->title == 'Services') {
-                $parent_item_id = $item->ID;
+    $services_page_id = $services_page->ID;
+
+    // Define the menus to update
+    $menu_names = ['Main Menu', 'Main Menu Toggle', 'Services'];
+
+    // Get post details
+    $post_title = get_the_title($post_id);
+    $post_url = get_permalink($post_id);
+
+    // Check if the parent was changed
+    $parent_after = $post_after->post_parent;
+    $parent_before = $post_before->post_parent;
+
+    // Handle adding the page to menus
+    if ($parent_after === $services_page_id) {
+        foreach ($menu_names as $menu_name) {
+            $menu = wp_get_nav_menu_object($menu_name);
+            if ($menu) {
+                $menu_items = wp_get_nav_menu_items($menu->term_id);
+                $parent_item_id = null;
+                $exists = false;
+                $special_item_position = null;
+
+                // Determine positions for the "Services" menu and "Services" parent item
+                foreach ($menu_items as $item) {
+                    if ($menu_name !== 'Services' && $item->title === 'Services') {
+                        $parent_item_id = $item->ID; // Parent for Main Menu and Main Menu Toggle
+                    }
+                    if ($menu_name === 'Services' && strpos($item->title, 'See All Services') !== false) {
+                        $special_item_position = $item->menu_order; // For Services menu
+                    }
+                    if ($item->title === $post_title && $item->url === $post_url) {
+                        $exists = true; // Check for duplicates
+                        break;
+                    }
+                }
+
+                // Skip if the item already exists
+                if ($exists) {
+                    continue;
+                }
+
+                // Add the new service item
+                if ($menu_name !== 'Services') {
+                    // For Main Menu and Main Menu Toggle: Add above "See All Services"
+                    wp_update_nav_menu_item($menu->term_id, 0, array(
+                        'menu-item-object-id' => $post_id,
+                        'menu-item-object' => 'page',
+                        'menu-item-type' => 'post_type',
+                        'menu-item-title' => $post_title,
+                        'menu-item-url' => $post_url,
+                        'menu-item-status' => 'publish',
+                        'menu-item-parent-id' => $parent_item_id,
+                        'menu-item-position' => $special_item_position ? $special_item_position - 1 : 1, // Above "See All Services"
+                    ));
+                } else {
+                    // For Services Menu: Add above everything
+                    wp_update_nav_menu_item($menu->term_id, 0, array(
+                        'menu-item-object-id' => $post_id,
+                        'menu-item-object' => 'page',
+                        'menu-item-type' => 'post_type',
+                        'menu-item-title' => $post_title,
+                        'menu-item-url' => $post_url,
+                        'menu-item-status' => 'publish',
+                        'menu-item-position' => 1, // Always at the top
+                    ));
+                }
             }
-            if ($item->title == $post_title && $item->url == $post_url) {
-                $exists = true;
-                break;
-            }
-        }
-        // Skip adding the item if it already exists
-        if ($exists) {
-            continue;
-        }
-        if ($parent_item_id) {
-            // Add the new service item under the "Services" parent
-            wp_update_nav_menu_item($menu->term_id, 0, array(
-                'menu-item-object-id' => $post->ID,
-                'menu-item-object' => 'page2', // Explicitly set to 'page2' post type
-                'menu-item-type' => 'post_type',
-                'menu-item-title' => $post_title,
-                'menu-item-url' => $post_url,
-                'menu-item-status' => 'publish',
-                'menu-item-parent-id' => $parent_item_id,
-                'menu-item-position' => 1, // Add it at the top of the list
-            ));
         }
     }
-    // Add the new service item to the bottom of the "Services" menu without a parent
-    $services_menu_name = 'Services'; // Assuming "Services" is the correct name of the Services menu
-    $menu = wp_get_nav_menu_object($services_menu_name);
-    if ($menu) {
-        $menu_items = wp_get_nav_menu_items($menu->term_id);
-        $max_position = 0;
-        $exists = false;
-        // Check if the item already exists in the "Services" menu
-        foreach ($menu_items as $item) {
-            if ($item->title == $post_title && $item->url == $post_url) {
-                $exists = true;
-                break;
+
+    // Handle removing the page from menus if parent is no longer "Services"
+    if ($parent_before === $services_page_id && $parent_after !== $services_page_id) {
+        foreach ($menu_names as $menu_name) {
+            $menu = wp_get_nav_menu_object($menu_name);
+            if ($menu) {
+                $menu_items = wp_get_nav_menu_items($menu->term_id);
+                foreach ($menu_items as $item) {
+                    if ($item->title === $post_title && $item->url === $post_url) {
+                        wp_delete_post($item->ID, true); // Remove the menu item
+                        break;
+                    }
+                }
             }
-            $max_position = max($max_position, $item->menu_order);
-        }
-        // Skip adding the item if it already exists
-        if (!$exists) {
-            wp_update_nav_menu_item($menu->term_id, 0, array(
-                'menu-item-object-id' => $post->ID,
-                'menu-item-object' => 'page2', // Explicitly set to 'page2' post type
-                'menu-item-type' => 'post_type',
-                'menu-item-title' => $post_title,
-                'menu-item-url' => $post_url,
-                'menu-item-status' => 'publish',
-                'menu-item-position' => $max_position + 1, // Add it at the bottom of the list with no parent
-            ));
         }
     }
 }
-add_action('transition_post_status', 'add_service_to_menu', 10, 3);
+
+// Ensure all existing pages with "Services" parent are in menus
+function ensure_existing_service_pages_in_menus() {
+    $services_page = get_page_by_title('Services');
+    if (!$services_page) {
+        return; // Exit if the "Services" page doesn't exist
+    }
+
+    $services_page_id = $services_page->ID;
+    $menu_names = ['Main Menu', 'Main Menu Toggle', 'Services'];
+
+    // Get all child pages of "Services"
+    $child_pages = get_pages(array('child_of' => $services_page_id));
+    foreach ($child_pages as $page) {
+        $post_id = $page->ID;
+        $post_title = $page->post_title;
+        $post_url = get_permalink($post_id);
+
+        foreach ($menu_names as $menu_name) {
+            $menu = wp_get_nav_menu_object($menu_name);
+            if ($menu) {
+                $menu_items = wp_get_nav_menu_items($menu->term_id);
+                $parent_item_id = null;
+                $exists = false;
+                $special_item_position = null;
+
+                // Determine positions for the "Services" menu and "Services" parent item
+                foreach ($menu_items as $item) {
+                    if ($menu_name !== 'Services' && $item->title === 'Services') {
+                        $parent_item_id = $item->ID; // Parent for Main Menu and Main Menu Toggle
+                    }
+                    if ($menu_name === 'Services' && strpos($item->title, 'See All Services') !== false) {
+                        $special_item_position = $item->menu_order; // For Services menu
+                    }
+                    if ($item->title === $post_title && $item->url === $post_url) {
+                        $exists = true; // Check for duplicates
+                        break;
+                    }
+                }
+
+                // Skip if the item already exists
+                if ($exists) {
+                    continue;
+                }
+
+                // Add the new service item
+                if ($menu_name !== 'Services') {
+                    // For Main Menu and Main Menu Toggle: Add above "See All Services"
+                    wp_update_nav_menu_item($menu->term_id, 0, array(
+                        'menu-item-object-id' => $post_id,
+                        'menu-item-object' => 'page',
+                        'menu-item-type' => 'post_type',
+                        'menu-item-title' => $post_title,
+                        'menu-item-url' => $post_url,
+                        'menu-item-status' => 'publish',
+                        'menu-item-parent-id' => $parent_item_id,
+                        'menu-item-position' => $special_item_position ? $special_item_position - 1 : 1, // Above "See All Services"
+                    ));
+                } else {
+                    // For Services Menu: Add above everything
+                    wp_update_nav_menu_item($menu->term_id, 0, array(
+                        'menu-item-object-id' => $post_id,
+                        'menu-item-object' => 'page',
+                        'menu-item-type' => 'post_type',
+                        'menu-item-title' => $post_title,
+                        'menu-item-url' => $post_url,
+                        'menu-item-status' => 'publish',
+                        'menu-item-position' => 1, // Always at the top
+                    ));
+                }
+            }
+        }
+    }
+}
+
+// Hook into the 'post_updated' action to handle parent changes
+add_action('post_updated', 'sync_service_pages_to_menus', 10, 3);
+
+// Run on plugin activation to ensure existing pages are added to menus
+register_activation_hook(__FILE__, 'ensure_existing_service_pages_in_menus');
