@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.15.1
+Version: 3.15.2
 Author: Hozio Web Dev
 License: GPL2
 Text Domain: hozio-dynamic-tags
@@ -20,6 +20,7 @@ require_once plugin_dir_path(__FILE__) . 'includes/admin-settings.php';
 require_once plugin_dir_path(__FILE__) . 'includes/dynamic-tags.php';
 require_once plugin_dir_path(__FILE__) . 'includes/service-menu-handler.php';
 require_once plugin_dir_path(__FILE__) . 'includes/custom-permalink.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/custom-taxonomies.php';
 
 // Add the custom admin menu
 function hozio_dynamic_tags_menu() {
