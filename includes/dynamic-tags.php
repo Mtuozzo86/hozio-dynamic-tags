@@ -146,8 +146,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         }
     }
 
-
-   $class_name = 'My_Services_Children_Tag';
+    $class_name = 'My_Services_Children_Tag';
     if (!class_exists($class_name)) {
         eval("
             class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
@@ -263,6 +262,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
 
             // Add built-in dynamic tags
             $options['years-of-experience'] = __('Years of Experience', 'hozio');
+            $options['page-title'] = __('Page Title', 'hozio'); // Add Page Title option
 
             // Fetch custom tags from the options table
             $custom_tags = get_option('hozio_custom_tags', []);
@@ -282,7 +282,6 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
 
     $dynamic_tags->register(new Hozio_Composite_Tag());
 }, 50);
-
 
 function register_services_children_dynamic_tag($tags) {
     if (class_exists('Elementor\DynamicTags\Tag')) {
