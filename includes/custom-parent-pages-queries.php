@@ -44,6 +44,15 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
             ],
         ]);
 
+        // Add meta_query to ensure 'location' field is not empty
+        $query->set('meta_query', [
+            [
+                'key'     => 'location',
+                'value'   => '',
+                'compare' => '!=',
+            ],
+        ]);
+
         // Exclude the parent page from the query results (we don't want to display the parent page in the loop)
         $query->set('post__not_in', [$current_page_id]); // Exclude the current page (parent) from the query
     }
