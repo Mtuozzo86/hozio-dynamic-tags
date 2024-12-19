@@ -66,7 +66,7 @@ function hozio_dynamic_tags_settings_init() {
         'hozio_linkedin_url' => 'LinkedIn URL',
         'hozio_gmb_link' => 'GMB Link',
         'hozio_to_email_contact_form' => 'To Email(s) Contact Form',
-        'hozio_nav_text_color' => 'Toggle Menu Last Item Text Color', // Text Color field
+        'hozio_nav_text_color' => 'Toggle Menu Last Item & CTA Widget Button Text Color', // Text Color field
         'hozio_start_year' => 'Start Year',              // Start Year field
     ];
 
