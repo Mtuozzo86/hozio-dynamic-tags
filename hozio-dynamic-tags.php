@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.16.1
+Version: 3.16.2
 Author: Hozio Web Dev
 License: GPL2
 Text Domain: hozio-dynamic-tags
@@ -363,14 +363,15 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
     }
 });
 
-// Output custom inline CSS for the last menu item
-add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_css');
-function hozio_dynamic_nav_menu_inline_css() {
+add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_styles');
+function hozio_dynamic_nav_menu_inline_styles() {
+    $text_color = esc_attr(get_option('hozio_nav_text_color', 'black')); // Dynamically retrieve text color
     ?>
     <style type="text/css">
+        /* Style for the last menu item */
         #toggle-menu li:last-of-type > .elementor-item {
             background-color: var(--e-global-color-secondary, #FFFFFF) !important;
-            color: <?php echo esc_attr(get_option('hozio_nav_text_color', 'black')); ?> !important;
+            color: <?php echo $text_color; ?> !important;
             padding: 25px 24px;
             font-weight: 600;
             font-size: 17px;
@@ -379,9 +380,42 @@ function hozio_dynamic_nav_menu_inline_css() {
         }
         #toggle-menu li:last-of-type > .elementor-item:hover {
             background-color: var(--e-global-color-secondary, #FFFFFF) !important;
-            color: <?php echo esc_attr(get_option('hozio_nav_text_color', 'black')); ?> !important;
+            color: <?php echo $text_color; ?> !important;
+        }
+
+    <style type="text/css">
+        /* Apply the dynamic text color to the default state */
+        #cta-text-color .elementor-cta__button,
+        #cta-text-color .elementor-ribbon-inner {
+            color: <?php echo $text_color; ?> !important; /* Apply dynamic color to the default state */
+        }
+
+        /* Completely avoid overriding hover styles */
+        #cta-text-color .elementor-cta__button:hover,
+        #cta-text-color .elementor-ribbon-inner:hover {
+            color: auto !important; /* Allow Elementor's hover settings to take full effect */
         }
     </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const textColor = '<?php echo esc_js($text_color); ?>';
+            const elements = document.querySelectorAll('#cta-text-color .elementor-cta__button, #cta-text-color .elementor-ribbon-inner');
+
+            elements.forEach(function (element) {
+                // Set default color dynamically
+                element.style.color = textColor;
+
+                // Let Elementor handle hover styles completely
+                element.addEventListener('mouseenter', function () {
+                    element.style.color = ''; // Clear dynamic styles on hover
+                });
+
+                element.addEventListener('mouseleave', function () {
+                    element.style.color = textColor; // Reapply dynamic color after hover
+                });
+            });
+        });
+    </script>
     <?php
 }
 
