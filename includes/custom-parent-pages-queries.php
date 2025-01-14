@@ -1,59 +1,56 @@
 <?php
 add_action('elementor/query/dynamic_parent_pages_query', function($query) {
-    // Get the current page ID (Service Page One)
+    // Get the current page ID
     $current_page_id = get_the_ID();
+    error_log('Current page ID: ' . $current_page_id);
 
-    // Get the current page slug (title used for the taxonomy term)
+    // Get the current page slug
     $current_page_slug = basename(get_permalink($current_page_id));
-
-    // Debugging: Log the current page slug
     error_log('Current page slug: ' . $current_page_slug);
 
-    // Fetch the terms assigned to the current page (parent_pages taxonomy)
-    $terms = get_the_terms($current_page_id, 'parent_pages'); // Get terms for the current page
+    // Fetch the terms assigned to the current page in the parent_pages taxonomy
+    $terms = get_the_terms($current_page_id, 'parent_pages');
+    error_log('Fetched terms: ' . print_r($terms, true));
 
-    // Debugging: Log the fetched terms
-    if ($terms) {
-        error_log('Fetched terms: ' . implode(', ', wp_list_pluck($terms, 'slug')));
-    } else {
-        error_log('No terms found for the current page.');
+    // Handle WP_Error
+    if (is_wp_error($terms) || empty($terms)) {
+        error_log('No valid terms found.');
+        return;
     }
 
-    // Find the term that matches the current page's slug
-    $parent_term = null;
+    // Find the exact matching term based on the parent term + page slug
+    $matching_term = null;
     foreach ($terms as $term) {
-        if ($term->slug === $current_page_slug) {
-            $parent_term = $term;
-            break; // Exit loop once the matching term is found
+        $expected_slug = $term->parent ? get_term($term->parent)->slug . '-' . $current_page_slug : '';
+        if ($term->slug === $expected_slug) {
+            $matching_term = $term;
+            break;
         }
     }
 
-    // If the correct term is found, modify the query to get the child pages
-    if ($parent_term) {
-        // Debugging: Log the parent term slug
-        error_log('Parent term slug: ' . $parent_term->slug);
+    // Log the matching term, or log if no match was found
+    if ($matching_term) {
+        error_log('Matching term found: ' . print_r($matching_term, true));
+    } else {
+        error_log('No matching term found for expected slug: ' . $expected_slug);
+        return;
+    }
 
-        // Fetch child pages assigned to the current taxonomy term
-        $query->set('post_type', 'page'); // Ensure only pages are queried
+    // If a matching term is found, modify the query to get only pages assigned to that exact term
+    if ($matching_term) {
+        $query->set('post_type', 'page');
         $query->set('tax_query', [
             [
-                'taxonomy' => 'parent_pages', // The taxonomy to filter by
-                'field'    => 'slug',
-                'terms'    => $parent_term->slug, // Use the slug of the current term to find matching pages
+                'taxonomy' => 'parent_pages',
+                'field'    => 'term_id',
+                'terms'    => $matching_term->term_id,
                 'operator' => 'IN',
             ],
         ]);
+        error_log('Tax query set with term ID: ' . $matching_term->term_id);
 
-        // Add meta_query to ensure 'location' field is not empty
-        $query->set('meta_query', [
-            [
-                'key'     => 'location',
-                'value'   => '',
-                'compare' => '!=',
-            ],
-        ]);
-
-        // Exclude the parent page from the query results (we don't want to display the parent page in the loop)
-        $query->set('post__not_in', [$current_page_id]); // Exclude the current page (parent) from the query
+        // Exclude the parent page from the query results
+        $query->set('post__not_in', [$current_page_id]);
+        error_log('Excluding current page ID from query results: ' . $current_page_id);
     }
 });
