@@ -44,6 +44,7 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
                     'operator' => 'IN',
                 ],
             ]);
+            $query->set('post__not_in', [$current_page_id]); // Exclude the current page
             error_log('Tax query set with term ID: ' . $matching_term->term_id);
         }
 
@@ -87,7 +88,7 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
                 ],
             ]);
 
-            $query->set('post__not_in', [$current_page_id]);
+            $query->set('post__not_in', [$current_page_id]); // Exclude the current page
         }
     }
 });
