@@ -94,41 +94,83 @@ function filter_pages_by_partial_taxonomy($query) {
 }
 add_action('pre_get_posts', 'filter_pages_by_partial_taxonomy');
 
-
-
 add_action( 'elementor/query/page_tax_query', function( $query ) {
-    error_log( 'Debug: Elementor query hook triggered for page_tax_query' );
+    // Get allowed post types from options
+    $allowed_post_types = get_option( 'hozio_selected_post_types', [] );
+
+    if ( ! empty( $allowed_post_types ) ) {
+        $query->set( 'post_type', $allowed_post_types );
+        error_log( 'Debug: Allowed Post Types: ' . print_r( $allowed_post_types, true ) );
+    } else {
+        error_log( 'Debug: No allowed post types found in options.' );
+    }
 
     // Get the current post ID
     $current_post_id = get_the_ID();
-    error_log( 'Debug: Current Post ID: ' . print_r( $current_post_id, true ) );
-
-    // Fetch the ACF field value
-    $acf_taxonomy_value = get_field( 'page_taxonomy', $current_post_id ); // Correct ACF field name
-    error_log( 'Debug: ACF Field "page_taxonomy" Value (raw): ' . print_r( $acf_taxonomy_value, true ) );
-
-    // Ensure the ACF field value exists
-    if ( ! empty( $acf_taxonomy_value ) ) {
-        // Split the field value into an array if it contains multiple slugs separated by commas
-        $taxonomy_terms = array_map( 'trim', explode( ',', $acf_taxonomy_value ) );
-        error_log( 'Debug: ACF Field "page_taxonomy" Value (as array): ' . print_r( $taxonomy_terms, true ) );
-
-        $tax_query = [
-            [
-                'taxonomy' => 'parent_pages',
-                'field'    => 'slug', // Adjust 'slug' if needed (e.g., to 'name' or 'term_id')
-                'terms'    => $taxonomy_terms,
-                'operator' => 'IN', // Ensures that any of the slugs match
-            ],
-        ];
-        error_log( 'Debug: Tax Query Array: ' . print_r( $tax_query, true ) );
-
-        $query->set( 'tax_query', $tax_query );
-        error_log( 'Debug: Query modified with tax_query' );
-    } else {
-        $query->set( 'post__in', [0] );
-        error_log( 'Debug: No ACF Field "page_taxonomy" Value found, query set to return no results' );
+    if ( ! $current_post_id ) {
+        error_log( 'Debug: No current post ID found.' );
+        return;
     }
 
-    error_log( 'Debug: Final Query Vars: ' . print_r( $query->query_vars, true ) );
+    // Fetch the ACF field value
+    $acf_taxonomy_value = get_field( 'acf_taxonomy', $current_post_id );
+
+    if ( empty( $acf_taxonomy_value ) ) {
+        error_log( 'Debug: No value retrieved from ACF field.' );
+        return;
+    }
+
+    // Process the ACF value (split, trim, and sanitize)
+    $taxonomy_terms = array_map( function( $term ) {
+        // Replace unwanted characters and sanitize
+        $term = trim( $term ); // Trim leading/trailing spaces
+        $term = str_replace( '.', '-', $term ); // Replace periods with dashes
+        return sanitize_title( $term ); // Convert to slug format
+    }, explode( ',', $acf_taxonomy_value ) );
+
+    // Debug: Log the sanitized taxonomy terms
+    error_log( 'Debug: Tax Query Array (sanitized): ' . print_r( $taxonomy_terms, true ) );
+
+    // Ensure terms exist before adding to query
+    if ( ! empty( $taxonomy_terms ) ) {
+        $query->set( 'tax_query', [
+            [
+                'taxonomy' => 'acf-taxonomy', // Replace with your taxonomy name
+                'field'    => 'slug',
+                'terms'    => $taxonomy_terms,
+                'operator' => 'IN',
+            ],
+        ]);
+        error_log( 'Debug: Tax Query added to query_vars.' );
+    } else {
+        error_log( 'Debug: No valid taxonomy terms found after sanitization.' );
+    }
 });
+
+
+
+// Add a custom column to display taxonomies
+function add_taxonomy_column( $columns ) {
+    $columns['acf_taxonomy'] = 'ACF Taxonomy'; // Add a new column with a label
+    return $columns;
+}
+add_filter( 'manage_product_posts_columns', 'add_taxonomy_column' ); // Replace 'product' with your post type
+
+// Populate the custom taxonomy column
+function populate_taxonomy_column( $column, $post_id ) {
+    if ( 'acf_taxonomy' === $column ) {
+        // Fetch terms associated with the taxonomy
+        $terms = get_the_terms( $post_id, 'acf-taxonomy' ); // Replace 'acf-taxonomy' with your taxonomy name
+
+        if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
+            // Display taxonomy terms as a comma-separated list
+            $term_list = join( ', ', wp_list_pluck( $terms, 'name' ) );
+            echo esc_html( $term_list );
+        } else {
+            echo '—'; // Display a dash if no terms are assigned
+        }
+    }
+}
+add_action( 'manage_product_posts_custom_column', 'populate_taxonomy_column', 10, 2 ); // Replace 'product' with your post type
+
+
