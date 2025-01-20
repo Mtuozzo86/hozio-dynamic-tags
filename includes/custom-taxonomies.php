@@ -93,3 +93,42 @@ function filter_pages_by_partial_taxonomy($query) {
     }
 }
 add_action('pre_get_posts', 'filter_pages_by_partial_taxonomy');
+
+
+
+add_action( 'elementor/query/page_tax_query', function( $query ) {
+    error_log( 'Debug: Elementor query hook triggered for page_tax_query' );
+
+    // Get the current post ID
+    $current_post_id = get_the_ID();
+    error_log( 'Debug: Current Post ID: ' . print_r( $current_post_id, true ) );
+
+    // Fetch the ACF field value
+    $acf_taxonomy_value = get_field( 'page_taxonomy', $current_post_id ); // Correct ACF field name
+    error_log( 'Debug: ACF Field "page_taxonomy" Value (raw): ' . print_r( $acf_taxonomy_value, true ) );
+
+    // Ensure the ACF field value exists
+    if ( ! empty( $acf_taxonomy_value ) ) {
+        // Split the field value into an array if it contains multiple slugs separated by commas
+        $taxonomy_terms = array_map( 'trim', explode( ',', $acf_taxonomy_value ) );
+        error_log( 'Debug: ACF Field "page_taxonomy" Value (as array): ' . print_r( $taxonomy_terms, true ) );
+
+        $tax_query = [
+            [
+                'taxonomy' => 'parent_pages',
+                'field'    => 'slug', // Adjust 'slug' if needed (e.g., to 'name' or 'term_id')
+                'terms'    => $taxonomy_terms,
+                'operator' => 'IN', // Ensures that any of the slugs match
+            ],
+        ];
+        error_log( 'Debug: Tax Query Array: ' . print_r( $tax_query, true ) );
+
+        $query->set( 'tax_query', $tax_query );
+        error_log( 'Debug: Query modified with tax_query' );
+    } else {
+        $query->set( 'post__in', [0] );
+        error_log( 'Debug: No ACF Field "page_taxonomy" Value found, query set to return no results' );
+    }
+
+    error_log( 'Debug: Final Query Vars: ' . print_r( $query->query_vars, true ) );
+});
