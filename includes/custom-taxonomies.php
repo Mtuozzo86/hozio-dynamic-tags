@@ -94,6 +94,7 @@ function filter_pages_by_partial_taxonomy($query) {
 }
 add_action('pre_get_posts', 'filter_pages_by_partial_taxonomy');
 
+// Elementor Query: Filter posts by allowed post types and ACF taxonomy terms
 add_action( 'elementor/query/page_tax_query', function( $query ) {
     // Get allowed post types from options
     $allowed_post_types = get_option( 'hozio_selected_post_types', [] );
@@ -122,7 +123,6 @@ add_action( 'elementor/query/page_tax_query', function( $query ) {
 
     // Process the ACF value (split, trim, and sanitize)
     $taxonomy_terms = array_map( function( $term ) {
-        // Replace unwanted characters and sanitize
         $term = trim( $term ); // Trim leading/trailing spaces
         $term = str_replace( '.', '-', $term ); // Replace periods with dashes
         return sanitize_title( $term ); // Convert to slug format
@@ -148,29 +148,35 @@ add_action( 'elementor/query/page_tax_query', function( $query ) {
 });
 
 
+// Add custom columns for taxonomies in the admin post list
+function add_taxonomy_columns( $columns ) {
+    // Fetch all public taxonomies
+    $taxonomies = get_taxonomies( [ 'public' => true ], 'objects' );
 
-// Add a custom column to display taxonomies
-function add_taxonomy_column( $columns ) {
-    $columns['acf_taxonomy'] = 'ACF Taxonomy'; // Add a new column with a label
+    // Add a column for each taxonomy
+    foreach ( $taxonomies as $taxonomy ) {
+        $columns[ $taxonomy->name ] = $taxonomy->label;
+    }
+
     return $columns;
 }
-add_filter( 'manage_product_posts_columns', 'add_taxonomy_column' ); // Replace 'product' with your post type
+add_filter( 'manage_product_posts_columns', 'add_taxonomy_columns' ); // Replace 'product' with your post type
 
-// Populate the custom taxonomy column
-function populate_taxonomy_column( $column, $post_id ) {
-    if ( 'acf_taxonomy' === $column ) {
-        // Fetch terms associated with the taxonomy
-        $terms = get_the_terms( $post_id, 'acf-taxonomy' ); // Replace 'acf-taxonomy' with your taxonomy name
+
+// Populate custom taxonomy columns with terms
+function populate_taxonomy_columns( $column, $post_id ) {
+    // Check if the column is a taxonomy
+    if ( taxonomy_exists( $column ) ) {
+        // Fetch terms for the taxonomy
+        $terms = wp_get_post_terms( $post_id, $column, [ 'fields' => 'names' ] );
 
         if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
-            // Display taxonomy terms as a comma-separated list
-            $term_list = join( ', ', wp_list_pluck( $terms, 'name' ) );
-            echo esc_html( $term_list );
+            echo esc_html( implode( ', ', $terms ) ); // Display terms as a comma-separated list
         } else {
             echo '—'; // Display a dash if no terms are assigned
         }
     }
 }
-add_action( 'manage_product_posts_custom_column', 'populate_taxonomy_column', 10, 2 ); // Replace 'product' with your post type
+add_action( 'manage_product_posts_custom_column', 'populate_taxonomy_columns', 10, 2 ); // Replace 'product' with your post type
 
 
