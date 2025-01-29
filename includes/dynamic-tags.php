@@ -146,6 +146,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         }
     }
 
+    // Register the new Google Ads Thank You Page dynamic tag
     class My_Google_Ads_Thank_You_Page_Tag extends \Elementor\Core\DynamicTags\Tag {
         public function get_name() {
             return 'google_ads_thank_you_page';
@@ -181,7 +182,8 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
             echo esc_url($thank_you_url);
         }
     }
-
+	
+    $dynamic_tags->register(new My_Google_Ads_Thank_You_Page_Tag());
     $class_name = 'My_Services_Children_Tag';
     if (!class_exists($class_name)) {
         eval("
