@@ -146,44 +146,42 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         }
     }
 
-    // Register the new Google Ads Thank You Page dynamic tag
-    class My_Google_Ads_Thank_You_Page_Tag extends \Elementor\Core\DynamicTags\Tag {
-        public function get_name() {
-            return 'google_ads_thank_you_page';
-        }
+	class My_Google_Ads_Thank_You_Page_Tag extends \Elementor\Core\DynamicTags\Tag {
+		public function get_name() {
+			return 'google_ads_thank_you_page';
+		}
 
-        public function get_title() {
-            return __('Google Ads Thank You Page', 'elementor');
-        }
+		public function get_title() {
+			return __('Google Ads Thank You Page', 'elementor');
+		}
 
-        public function get_group() {
-            return 'site';
-        }
+		public function get_group() {
+			return 'site';
+		}
 
-        public function get_categories() {
-            return [\Elementor\Modules\DynamicTags\Module::URL_CATEGORY];
-        }
+		public function get_categories() {
+			return [\Elementor\Modules\DynamicTags\Module::URL_CATEGORY];
+		}
 
-        protected function register_controls() {
-            // No controls needed for this tag
-        }
+		protected function register_controls() {
+			// No controls needed for this tag
+		}
 
-        public function render() {
-            // Get the current site URL
-            $site_url = get_site_url();
+		public function render() {
+			// Get the current site URL
+			$site_url = get_site_url();
 
-            // Get the email value dynamically (assuming it's available in the form submission)
-            $email = isset($_POST['email']) ? sanitize_email($_POST['email']) : '';
+			// Get the email value dynamically (assuming it's available in the form submission)
+			$email = isset($_POST['email']) ? sanitize_email($_POST['email']) : '';
 
-            // Construct the thank you page URL
-            $thank_you_url = $site_url . '/thank-you/?email=' . urlencode($email);
+			// Construct the thank you page URL
+			$thank_you_url = $site_url . '/thank-you/?email=' . urlencode($email);
 
-            // Output the URL
-            echo esc_url($thank_you_url);
-        }
-    }
-	
-    $dynamic_tags->register(new My_Google_Ads_Thank_You_Page_Tag());
+			// Output the URL
+			echo esc_url($thank_you_url);
+		}
+	}
+
     $class_name = 'My_Services_Children_Tag';
     if (!class_exists($class_name)) {
         eval("
