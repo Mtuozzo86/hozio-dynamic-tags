@@ -182,6 +182,10 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
 		}
 	}
 
+    // Register the dynamic tag
+    $dynamic_tags->register(new My_Google_Ads_Thank_You_Page_Tag());
+});
+
     $class_name = 'My_Services_Children_Tag';
     if (!class_exists($class_name)) {
         eval("
