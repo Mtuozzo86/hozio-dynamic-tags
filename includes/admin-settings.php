@@ -25,12 +25,19 @@ function hozio_dynamic_tags_register_settings() {
         'hozio_start_year',        // Start Year field
     ];
 
-    foreach ($custom_tags as $tag) {
-        if (isset($_POST['hozio_' . $tag['value']])) {
-            // Allow safe HTML input, including <script> tags
-            update_option('hozio_' . $tag['value'], wp_kses_post($_POST['hozio_' . $tag['value']]));
+    // Make sure $custom_tags is defined and initialized
+    $custom_tags = get_option('hozio_custom_tags', []);
+
+    // Check if $custom_tags is an array before using foreach
+    if (is_array($custom_tags)) {
+        foreach ($custom_tags as $tag) {
+            if (isset($_POST['hozio_' . $tag['value']])) {
+                // Allow safe HTML input, including <script> tags
+                update_option('hozio_' . $tag['value'], wp_kses_post($_POST['hozio_' . $tag['value']]));
+            }
         }
     }
+
     
     foreach ($fields as $field) {
         register_setting('hozio_dynamic_tags_options', $field);
