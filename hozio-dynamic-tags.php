@@ -3,7 +3,7 @@
 Plugin Name: Hozio Dynamic Tags
 Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.18
+Version: 3.19
 Author: Hozio Web Dev
 License: GPL2
 Text Domain: hozio-dynamic-tags
@@ -519,3 +519,26 @@ add_action('elementor/query/services_children', function ($query) {
     // Set the query to only include child pages of the "Services" page
     $query->set('post_parent', $parent_page_id);
 });
+
+
+
+
+// Shortcode to display ACF fields from a specific page (by page ID)
+function show_final_cta_from_page( $atts ) {
+    $atts = shortcode_atts( array(
+        'field' => '',
+        'page_id' => '', // You'll add the page ID here
+    ), $atts, 'final_cta' );
+
+    if( empty($atts['page_id']) ) return '';
+
+    // Get field value from the specific page ID
+    $field_value = get_field( $atts['field'], (int)$atts['page_id'] );
+
+    if( $field_value ) {
+        return wp_kses_post( $field_value );
+    }
+
+    return '';
+}
+add_shortcode( 'final_cta', 'show_final_cta_from_page' );
