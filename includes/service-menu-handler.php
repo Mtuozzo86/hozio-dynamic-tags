@@ -1,22 +1,27 @@
 <?php
-// Sync pages based on taxonomy assignment to menus
+/**
+ * Sync pages based on the "service-pages-loop-item" taxonomy assignment to menus.
+ * Only pages that have (or once had) the "service-pages-loop-item" term in the "parent_pages"
+ * taxonomy will be auto-added or removed from the specified menus.
+ */
+
 function sync_service_taxonomy_to_menus( $post_id ) {
-    // Avoid running on autosaves, revisions, or non-page post types
+    // Avoid running on autosaves, revisions, or non-page post types.
     if ( wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
         return;
     }
     if ( 'page' !== get_post_type( $post_id ) ) {
         return;
     }
-    
-    // Define the menus to update
+
+    // Define the menus to update.
     $menu_names = array( 'Main Menu', 'Main Menu Toggle', 'Services' );
     
-    // Get post details
+    // Get post details.
     $post_title = get_the_title( $post_id );
     $post_url   = get_permalink( $post_id );
     
-    // Check if the page has the taxonomy term "service-pages-loop-item"
+    // Check if the page has the "service-pages-loop-item" term (in taxonomy "parent_pages").
     $terms = get_the_terms( $post_id, 'parent_pages' );
     $has_service_term = false;
     if ( $terms && ! is_wp_error( $terms ) ) {
@@ -28,39 +33,44 @@ function sync_service_taxonomy_to_menus( $post_id ) {
         }
     }
     
-    // Loop through each menu to add or remove the page accordingly
+    // Loop through each menu to add or remove the page accordingly.
     foreach ( $menu_names as $menu_name ) {
         $menu = wp_get_nav_menu_object( $menu_name );
         if ( ! $menu ) {
             continue;
         }
         $menu_items = wp_get_nav_menu_items( $menu->term_id );
-        $exists = false;
+        $found_item = false;
+        $auto_item   = null; // Only auto‑added items (marked with our meta flag).
         $parent_item_id = null;
         $special_item_position = null;
         
         if ( $menu_items ) {
             foreach ( $menu_items as $item ) {
-                // For Main Menu and Main Menu Toggle, use "Services" as the parent
+                // For Main Menu and Main Menu Toggle, use the item titled "Services" as the parent.
                 if ( 'Services' !== $menu_name && 'Services' === $item->title ) {
                     $parent_item_id = $item->ID;
                 }
-                // For the Services menu, determine the position using "See All Services"
+                // For the Services menu, determine the position using an item titled "See All Services".
                 if ( 'Services' === $menu_name && strpos( $item->title, 'See All Services' ) !== false ) {
                     $special_item_position = $item->menu_order;
                 }
-                // Check if the menu item already exists
+                // Check if an item matching this page already exists.
                 if ( $item->title === $post_title && $item->url === $post_url ) {
-                    $exists = true;
+                    $found_item = true;
+                    // Only consider items that we auto‑added.
+                    if ( get_post_meta( $item->ID, '_auto_service_sync', true ) === '1' ) {
+                        $auto_item = $item;
+                    }
                 }
             }
         }
         
         if ( $has_service_term ) {
-            // If the page has the term and isn't already in the menu, add it.
-            if ( ! $exists ) {
+            // If the page currently has the term and the menu item doesn't exist, add it.
+            if ( ! $found_item ) {
                 if ( 'Services' !== $menu_name ) {
-                    wp_update_nav_menu_item( $menu->term_id, 0, array(
+                    $new_item_id = wp_update_nav_menu_item( $menu->term_id, 0, array(
                         'menu-item-object-id' => $post_id,
                         'menu-item-object'    => 'page',
                         'menu-item-type'      => 'post_type',
@@ -71,7 +81,7 @@ function sync_service_taxonomy_to_menus( $post_id ) {
                         'menu-item-position'  => $special_item_position ? $special_item_position - 1 : 1,
                     ) );
                 } else {
-                    wp_update_nav_menu_item( $menu->term_id, 0, array(
+                    $new_item_id = wp_update_nav_menu_item( $menu->term_id, 0, array(
                         'menu-item-object-id' => $post_id,
                         'menu-item-object'    => 'page',
                         'menu-item-type'      => 'post_type',
@@ -81,22 +91,45 @@ function sync_service_taxonomy_to_menus( $post_id ) {
                         'menu-item-position'  => 1,
                     ) );
                 }
+                // Mark this menu item as auto‑added.
+                if ( $new_item_id && ! is_wp_error( $new_item_id ) ) {
+                    update_post_meta( $new_item_id, '_auto_service_sync', '1' );
+                }
             }
         } else {
-            // If the page no longer has the taxonomy term, remove it from the menu.
-            if ( $exists ) {
-                foreach ( $menu_items as $item ) {
-                    if ( $item->title === $post_title && $item->url === $post_url ) {
-                        wp_delete_post( $item->ID, true );
-                        break;
-                    }
-                }
+            // If the page does NOT have the term, then only remove it if it was auto‑added.
+            if ( $found_item && $auto_item ) {
+                wp_delete_post( $auto_item->ID, true );
             }
         }
     }
 }
 
-// Ensure all existing pages with the taxonomy term are synced to the menus
+/**
+ * When taxonomy terms are set/changed on a page, update its menu sync.
+ *
+ * This hook fires when terms are updated for a given taxonomy.
+ */
+function sync_service_taxonomy_on_term_update( $object_id, $terms, $tt_ids, $taxonomy, $append, $old_tt_ids ) {
+    if ( 'parent_pages' !== $taxonomy ) {
+        return;
+    }
+    sync_service_taxonomy_to_menus( $object_id );
+}
+add_action( 'set_object_terms', 'sync_service_taxonomy_on_term_update', 10, 6 );
+
+/**
+ * Also hook into wp_after_insert_post to catch updates after the post (and its taxonomy data) are saved.
+ */
+add_action( 'wp_after_insert_post', function( $post_id, $post, $update ) {
+    if ( 'page' === get_post_type( $post_id ) ) {
+        sync_service_taxonomy_to_menus( $post_id );
+    }
+}, 10, 3 );
+
+/**
+ * On plugin activation, sync all existing pages that have the service-pages-loop-item term.
+ */
 function ensure_existing_service_taxonomy_pages_in_menus() {
     $args = array(
         'post_type'      => 'page',
@@ -118,10 +151,5 @@ function ensure_existing_service_taxonomy_pages_in_menus() {
         wp_reset_postdata();
     }
 }
-
-// Hook into the save_post action so the function runs whenever a page is saved
-add_action( 'save_post', 'sync_service_taxonomy_to_menus' );
-
-// Run on plugin activation to ensure existing pages with the term are added to the menus
 register_activation_hook( __FILE__, 'ensure_existing_service_taxonomy_pages_in_menus' );
 ?>
