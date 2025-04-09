@@ -2,7 +2,7 @@
 /**
  * Sync pages based on the "service-pages-loop-item" taxonomy assignment to menus.
  * Only pages that have (or once had) the "service-pages-loop-item" term in the "parent_pages"
- * taxonomy will be auto-added or removed from the specified menus.
+ * taxonomy will be auto‑added or removed from the specified menus.
  */
 
 function sync_service_taxonomy_to_menus( $post_id ) {
@@ -13,7 +13,16 @@ function sync_service_taxonomy_to_menus( $post_id ) {
     if ( 'page' !== get_post_type( $post_id ) ) {
         return;
     }
-
+    
+    // Attempt to get the taxonomy terms for "parent_pages".
+    $terms = get_the_terms( $post_id, 'parent_pages' );
+    // If no taxonomy data exists yet (may happen when WP All Import runs), schedule a delayed check.
+    if ( empty( $terms ) ) {
+        // Schedule a single event 5 seconds later to re-run the sync.
+        wp_schedule_single_event( time() + 5, 'sync_service_taxonomy_delayed', array( $post_id ) );
+        return;
+    }
+    
     // Define the menus to update.
     $menu_names = array( 'Main Menu', 'Main Menu Toggle', 'Services' );
     
@@ -21,8 +30,7 @@ function sync_service_taxonomy_to_menus( $post_id ) {
     $post_title = get_the_title( $post_id );
     $post_url   = get_permalink( $post_id );
     
-    // Check if the page has the "service-pages-loop-item" term (in taxonomy "parent_pages").
-    $terms = get_the_terms( $post_id, 'parent_pages' );
+    // Check if the page has the "service-pages-loop-item" term.
     $has_service_term = false;
     if ( $terms && ! is_wp_error( $terms ) ) {
         foreach ( $terms as $term ) {
@@ -41,7 +49,7 @@ function sync_service_taxonomy_to_menus( $post_id ) {
         }
         $menu_items = wp_get_nav_menu_items( $menu->term_id );
         $found_item = false;
-        $auto_item   = null; // Only auto‑added items (marked with our meta flag).
+        $auto_item  = null; // Only auto‑added items (marked with our meta flag).
         $parent_item_id = null;
         $special_item_position = null;
         
@@ -106,6 +114,15 @@ function sync_service_taxonomy_to_menus( $post_id ) {
 }
 
 /**
+ * Delayed sync callback for when taxonomy data isn’t yet available.
+ */
+function delayed_sync_service_taxonomy( $post_id ) {
+    // Simply re-run the main sync function.
+    sync_service_taxonomy_to_menus( $post_id );
+}
+add_action( 'sync_service_taxonomy_delayed', 'delayed_sync_service_taxonomy' );
+
+/**
  * When taxonomy terms are set/changed on a page, update its menu sync.
  *
  * This hook fires when terms are updated for a given taxonomy.
@@ -152,4 +169,11 @@ function ensure_existing_service_taxonomy_pages_in_menus() {
     }
 }
 register_activation_hook( __FILE__, 'ensure_existing_service_taxonomy_pages_in_menus' );
+
+/**
+ * Hook into WP All Import's post-save action to ensure our sync function
+ * runs after each post is processed by WP All Import.
+ * We set a later priority (20) to give WP All Import time to set taxonomy data.
+ */
+add_action( 'pmxi_saved_post', 'sync_service_taxonomy_to_menus', 20, 1 );
 ?>
