@@ -20,7 +20,7 @@ add_shortcode( 'leads_digest', function() {
       "SELECT id, created_at FROM `{$subs}` ORDER BY created_at DESC"
     );
     if ( empty( $rows ) ) {
-        return '<p><em>No leads yet.</em></p>';
+        return '<p><em>Your first lead is just around the corner — Stayed Tuned!</em></p>';
     }
 
     ob_start();
