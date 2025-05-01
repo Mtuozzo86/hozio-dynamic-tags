@@ -1,28 +1,105 @@
 <?php
 /*
-Plugin Name: Hozio Dynamic Tags
-Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
-Description: Adds custom dynamic tags for Elementor to manage Hozio's contact information.
-Version: 3.22
-Author: Hozio Web Dev
-License: GPL2
-Text Domain: hozio-dynamic-tags
+Plugin Name:     Hozio Dynamic Tags
+Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
+Description:     Adds custom dynamic tags for Elementor to manage Hozio's contact information,
+                 plus Kickbox–powered lead scoring and a leads‐digest shortcode.
+Version:         3.23
+Author:          Hozio Web Dev
+License:         GPL2
+Text Domain:     hozio-dynamic-tags
 GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
-GitHub Branch: main
+GitHub Branch:   main
 */
 
-if (!defined('ABSPATH')) {
+if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly
 }
 
-// Include necessary files
-require_once plugin_dir_path(__FILE__) . 'includes/admin-settings.php';
-require_once plugin_dir_path(__FILE__) . 'includes/dynamic-tags.php';
-require_once plugin_dir_path(__FILE__) . 'includes/service-menu-handler.php';
-require_once plugin_dir_path(__FILE__) . 'includes/custom-permalink.php';
+// ────────────────────────────────────────────────────────────────────────────
+// 1) Kickbox API Key
+// ────────────────────────────────────────────────────────────────────────────
+if ( ! defined( 'HOZIO_KICKBOX_KEY' ) ) {
+    define( 'HOZIO_KICKBOX_KEY', 'live_f3741c33eca877eeac22d04d90347d0971f12c8133cb4c2351de1275f79949a8' );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 2) Load existing includes
+// ────────────────────────────────────────────────────────────────────────────
+require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dynamic-tags.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/service-menu-handler.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/custom-permalink.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/custom-taxonomies.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/custom-parent-pages-queries.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/acf-filters.php';
+
+// ────────────────────────────────────────────────────────────────────────────
+// 3) Elementor Form Submission: Kickbox scoring & persistence
+// ────────────────────────────────────────────────────────────────────────────
+add_action( 'elementor_pro/forms/new_record', 'hozio_handle_new_lead', 10, 2 );
+function hozio_handle_new_lead( $record, $handler ) {
+    if ( ! is_a( $handler, 'ElementorPro\Modules\Forms\Classes\Ajax_Handler' ) ) {
+        return;
+    }
+
+    $fields = $record->get( 'fields' );
+    $email  = trim( $fields['email']['value'] ?? '' );
+    if ( ! $email ) {
+        return;
+    }
+
+    // Kickbox API call
+    $url      = add_query_arg( [
+        'email'  => rawurlencode( $email ),
+        'apikey' => HOZIO_KICKBOX_KEY,
+    ], 'https://api.kickbox.com/v2/verify' );
+
+    $response = wp_remote_get( $url, [ 'timeout' => 10 ] );
+    if ( is_wp_error( $response ) ) {
+        $raw_score = 0;
+    } else {
+        $body      = json_decode( wp_remote_retrieve_body( $response ), true );
+        // Kickbox returns a 0–1 “score” field
+        $raw_score = isset( $body['score'] ) ? floatval( $body['score'] ) : 0;
+    }
+
+    // Map to a 0–5 scale, one decimal place
+    $lead_score = round( $raw_score * 5, 1 );
+
+    // Make available in the email
+    $handler->add_response_data( 'lead_score', $lead_score );
+
+    // Persist for the digest
+    global $wpdb;
+    $vals_table = $wpdb->prefix . 'e_submissions_values';
+    if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $vals_table ) ) === $vals_table ) {
+        $wpdb->delete(
+            $vals_table,
+            [
+                'submission_id' => $record->get( 'id' ),
+                'key'           => 'lead_score',
+            ],
+            [ '%d', '%s' ]
+        );
+        $wpdb->insert(
+            $vals_table,
+            [
+                'submission_id' => $record->get( 'id' ),
+                'key'           => 'lead_score',
+                'value'         => $lead_score,
+            ],
+            [ '%d', '%s', '%s' ]
+        );
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 4) Load the leads-digest & site_url shortcodes
+// ────────────────────────────────────────────────────────────────────────────
+require_once plugin_dir_path( __FILE__ ) . 'includes/leads-digest.php';
+
+
 
 // Add the custom admin menu
 function hozio_dynamic_tags_menu() {
