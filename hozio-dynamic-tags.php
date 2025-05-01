@@ -2,8 +2,7 @@
 /*
 Plugin Name:     Hozio Dynamic Tags
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
-Description:     Adds custom dynamic tags for Elementor to manage Hozio's contact information,
-                 plus Kickbox–powered lead scoring and a leads‐digest shortcode.
+Description:     Adds custom dynamic tags for Elementor to manage Hozio's contact information
 Version:         3.32
 Author:          Hozio Web Dev
 License:         GPL2
@@ -16,16 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// 1) Kickbox API Key
-// ────────────────────────────────────────────────────────────────────────────
-if ( ! defined( 'HOZIO_KICKBOX_KEY' ) ) {
-    define( 'HOZIO_KICKBOX_KEY', 'live_f3741c33eca877eeac22d04d90347d0971f12c8133cb4c2351de1275f79949a8' );
-}
 
-// ────────────────────────────────────────────────────────────────────────────
-// 2) Load existing includes
-// ────────────────────────────────────────────────────────────────────────────
 require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/dynamic-tags.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/service-menu-handler.php';
