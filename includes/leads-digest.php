@@ -8,21 +8,50 @@ add_shortcode( 'leads_digest', function() {
     $subs = $wpdb->prefix . 'e_submissions';
     $vals = $wpdb->prefix . 'e_submissions_values';
 
-    // verify
+    // verify tables exist
     if (
-      $wpdb->get_var( $wpdb->prepare("SHOW TABLES LIKE %s", $subs) ) !== $subs ||
-      $wpdb->get_var( $wpdb->prepare("SHOW TABLES LIKE %s", $vals) ) !== $vals
+        $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $subs ) ) !== $subs ||
+        $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $vals ) ) !== $vals
     ) {
         return '<p><em>No submissions table found.</em></p>';
     }
 
+    // fetch only non-trashed submissions, newest first
     $rows = $wpdb->get_results(
-      "SELECT id, created_at FROM `{$subs}` ORDER BY created_at DESC"
+        $wpdb->prepare(
+            "SELECT id, created_at
+               FROM `{$subs}`
+              WHERE `status` <> %s
+           ORDER BY created_at DESC",
+            'trash'
+        )
     );
+
+    // no leads → show bundled image only
     if ( empty( $rows ) ) {
-        return '<p><em>Your first lead is just around the corner — Stayed Tuned!</em></p>';
+        ob_start();
+        // the PNG you placed in my-plugin/assets/no-leads.png
+        $img_url = plugin_dir_url( __FILE__ ) . '../assets/no-leads.png';
+        ?>
+        <div class="no-leads-empty">
+          <img src="<?php echo esc_url( $img_url ); ?>"
+               alt="Your first lead is just around the corner — stay tuned">
+        </div>
+        <style>
+          .no-leads-empty {
+          }
+          .no-leads-empty img {
+            max-width: 600px;    /* increase size */
+            height: auto;
+            display: block;
+            margin: 0 auto 0em;
+          }
+        </style>
+        <?php
+        return ob_get_clean();
     }
 
+    // has leads → render the table
     ob_start();
     ?>
     <!-- Inter + DataTables CSS -->
@@ -40,16 +69,18 @@ add_shortcode( 'leads_digest', function() {
           </tr>
         </thead>
         <tbody>
-        <?php foreach ( $rows as $row ):
+        <?php foreach ( $rows as $row ) :
             $fields = $wpdb->get_results(
-              $wpdb->prepare(
-                "SELECT `key`,`value` FROM `{$vals}` WHERE submission_id = %d",
-                $row->id
-              ), ARRAY_A
+                $wpdb->prepare(
+                  "SELECT `key`,`value`
+                     FROM `{$vals}`
+                    WHERE submission_id = %d",
+                  $row->id
+                ), ARRAY_A
             );
             $m = [];
             foreach ( $fields as $f ) {
-              $m[ $f['key'] ] = $f['value'];
+                $m[ $f['key'] ] = $f['value'];
             }
             $name  = trim( ($m['fname'] ?? '') . ' ' . ($m['lname'] ?? '') );
             $email = $m['email'] ?? '';
@@ -59,10 +90,10 @@ add_shortcode( 'leads_digest', function() {
             <td data-label="Date"><?php echo esc_html( date('Y-m-d H:i', strtotime($row->created_at)) ); ?></td>
             <td data-label="Name"><?php echo esc_html( $name ); ?></td>
             <td data-label="Email">
-              <a href="mailto:<?php echo esc_attr($email); ?>"><?php echo esc_html($email); ?></a>
+              <a href="mailto:<?php echo esc_attr( $email ); ?>"><?php echo esc_html( $email ); ?></a>
             </td>
             <td data-label="Phone">
-              <a href="tel:<?php echo esc_attr($phone); ?>"><?php echo esc_html($phone); ?></a>
+              <a href="tel:<?php echo esc_attr( $phone ); ?>"><?php echo esc_html( $phone ); ?></a>
             </td>
           </tr>
         <?php endforeach; ?>
@@ -79,6 +110,7 @@ add_shortcode( 'leads_digest', function() {
         info:      false,
         searching: false,
         ordering:  true,
+        order:     [[0, 'desc']],  // sort Date desc by default
         dom:       't'
       });
     });
@@ -86,7 +118,7 @@ add_shortcode( 'leads_digest', function() {
 
     <!-- Custom styling -->
     <style>
-    /* container with side padding so borders are always visible */
+    /* container with side padding */
     .leads-table-wrapper {
       font-family: 'Inter', sans-serif;
       margin: 2em auto;
@@ -94,14 +126,12 @@ add_shortcode( 'leads_digest', function() {
       box-sizing: border-box;
       width: 100%;
     }
-
-    /* ensure border-included width */
+    /* ensure border-box sizing */
     .leads-table,
     .leads-table th,
     .leads-table td {
       box-sizing: border-box;
     }
-
     .leads-table {
       width: 100%;
       border-collapse: separate;
@@ -112,12 +142,10 @@ add_shortcode( 'leads_digest', function() {
       box-shadow: 0 1px 3px rgba(0,0,0,0.08);
       margin: 0 auto;
     }
-
     .leads-table th,
     .leads-table td {
       padding: 14px 16px;
     }
-
     .leads-table thead th {
       background: #f9fafb;
       color: #4b5563;
@@ -134,7 +162,6 @@ add_shortcode( 'leads_digest', function() {
       color: #cbd5e1;
       margin-left: 6px;
     }
-
     .leads-table tbody td {
       border-bottom: 1px solid #e2e8f0;
       color: #374151;
@@ -149,7 +176,6 @@ add_shortcode( 'leads_digest', function() {
     .leads-table tbody tr:last-child td:last-child {
       border-bottom-right-radius: 8px;
     }
-
     .leads-table a {
       color: #2563eb;
       text-decoration: none;
@@ -157,13 +183,9 @@ add_shortcode( 'leads_digest', function() {
     .leads-table a:hover {
       text-decoration: underline;
     }
-
     /* mobile cards */
     @media (max-width: 600px) {
-      .leads-table {
-        border: none !important;
-        box-shadow: none !important;
-      }
+      .leads-table { border: none !important; box-shadow: none !important; }
       .leads-table thead { display: none; }
       .leads-table,
       .leads-table tbody,
