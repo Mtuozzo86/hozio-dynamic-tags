@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Dynamic Tags
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Adds custom dynamic tags for Elementor to manage Hozio's contact information
-Version:         3.32
+Version:         3.33
 Author:          Hozio Web Dev
 License:         GPL2
 Text Domain:     hozio-dynamic-tags
@@ -24,58 +24,51 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/custom-taxonomies.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/custom-parent-pages-queries.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/acf-filters.php';
 
-// ────────────────────────────────────────────────────────────────────────────
-// 3) Elementor Form Submission: Kickbox scoring & persistence
-// ────────────────────────────────────────────────────────────────────────────
 add_action( 'elementor_pro/forms/new_record', 'hozio_handle_new_lead', 10, 2 );
 function hozio_handle_new_lead( $record, $handler ) {
+    // Only proceed for the AJAX handler
     if ( ! is_a( $handler, 'ElementorPro\Modules\Forms\Classes\Ajax_Handler' ) ) {
         return;
     }
 
+    // Grab the submitted email
     $fields = $record->get( 'fields' );
     $email  = trim( $fields['email']['value'] ?? '' );
     if ( ! $email ) {
         return;
     }
 
-    // Kickbox API call
-    $url      = add_query_arg( [
-        'email'  => rawurlencode( $email ),
-        'apikey' => HOZIO_KICKBOX_KEY,
-    ], 'https://api.kickbox.com/v2/verify' );
+    // — Kickbox integration removed —
+    // Default lead score (always 0 now)
+    $lead_score = 0;
 
-    $response = wp_remote_get( $url, [ 'timeout' => 10 ] );
-    if ( is_wp_error( $response ) ) {
-        $raw_score = 0;
-    } else {
-        $body      = json_decode( wp_remote_retrieve_body( $response ), true );
-        // Kickbox returns a 0–1 “score” field
-        $raw_score = isset( $body['score'] ) ? floatval( $body['score'] ) : 0;
-    }
-
-    // Map to a 0–5 scale, one decimal place
-    $lead_score = round( $raw_score * 5, 1 );
-
-    // Make available in the email
+    // Make the score available in email notifications
     $handler->add_response_data( 'lead_score', $lead_score );
 
-    // Persist for the digest
+    // Persist only if we have a valid submission ID
+    $submission_id = $record->get( 'id' );
+    if ( empty( $submission_id ) ) {
+        return;
+    }
+
     global $wpdb;
     $vals_table = $wpdb->prefix . 'e_submissions_values';
     if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $vals_table ) ) === $vals_table ) {
+        // Remove any existing score for this submission
         $wpdb->delete(
             $vals_table,
             [
-                'submission_id' => $record->get( 'id' ),
+                'submission_id' => $submission_id,
                 'key'           => 'lead_score',
             ],
             [ '%d', '%s' ]
         );
+
+        // Insert the new score record
         $wpdb->insert(
             $vals_table,
             [
-                'submission_id' => $record->get( 'id' ),
+                'submission_id' => $submission_id,
                 'key'           => 'lead_score',
                 'value'         => $lead_score,
             ],
@@ -85,10 +78,12 @@ function hozio_handle_new_lead( $record, $handler ) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// 4) Load the leads-digest & site_url shortcodes
+// 3) Load the leads-digest & site_url shortcodes (optional include)
 // ────────────────────────────────────────────────────────────────────────────
-require_once plugin_dir_path( __FILE__ ) . 'includes/leads-digest.php';
-
+$leads_digest_file = plugin_dir_path( __FILE__ ) . 'includes/leads-digest.php';
+if ( file_exists( $leads_digest_file ) ) {
+    require_once $leads_digest_file;
+}
 
 
 // Add the custom admin menu
@@ -586,8 +581,6 @@ add_action('elementor/query/services_children', function ($query) {
     // Set the query to only include child pages of the "Services" page
     $query->set('post_parent', $parent_page_id);
 });
-
-
 
 
 // Shortcode to display ACF fields from a specific page (by page ID)
