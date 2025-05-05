@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Dynamic Tags
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Adds custom dynamic tags for Elementor to manage Hozio's contact information
-Version:         3.33
+Version:         3.34
 Author:          Hozio Web Dev
 License:         GPL2
 Text Domain:     hozio-dynamic-tags
@@ -24,66 +24,33 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/custom-taxonomies.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/custom-parent-pages-queries.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/acf-filters.php';
 
-add_action( 'elementor_pro/forms/new_record', 'hozio_handle_new_lead', 10, 2 );
-function hozio_handle_new_lead( $record, $handler ) {
-    // Only proceed for the AJAX handler
-    if ( ! is_a( $handler, 'ElementorPro\Modules\Forms\Classes\Ajax_Handler' ) ) {
-        return;
-    }
 
-    // Grab the submitted email
-    $fields = $record->get( 'fields' );
-    $email  = trim( $fields['email']['value'] ?? '' );
-    if ( ! $email ) {
-        return;
-    }
+// only hook in if there's legitimately a "leads-page" in WP
+if ( get_page_by_path( 'leads-page' ) ) {
 
-    // — Kickbox integration removed —
-    // Default lead score (always 0 now)
-    $lead_score = 0;
+    // Force HTML-mode for emails
+    add_action( 'phpmailer_init', function( $phpmailer ) {
+        $phpmailer->isHTML( true );
+    } );
 
-    // Make the score available in email notifications
-    $handler->add_response_data( 'lead_score', $lead_score );
+    // Swap your placeholder anchor with a live link
+    add_filter( 'wp_mail', function( $args ) {
+        if ( empty( $args['message'] ) ) {
+            return $args;
+        }
 
-    // Persist only if we have a valid submission ID
-    $submission_id = $record->get( 'id' );
-    if ( empty( $submission_id ) ) {
-        return;
-    }
+        $pattern = '/<a\s+href="\[site_url\]\/leads-page"([^>]*)>(.*?)<\/a>/is';
+        $args['message'] = preg_replace_callback( $pattern, function( $matches ) {
+            return '<a href="' . esc_url( home_url( '/leads-page' ) ) . '"' 
+                   . $matches[1] . '>View All Leads →</a>';
+        }, $args['message'] );
 
-    global $wpdb;
-    $vals_table = $wpdb->prefix . 'e_submissions_values';
-    if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $vals_table ) ) === $vals_table ) {
-        // Remove any existing score for this submission
-        $wpdb->delete(
-            $vals_table,
-            [
-                'submission_id' => $submission_id,
-                'key'           => 'lead_score',
-            ],
-            [ '%d', '%s' ]
-        );
+        return $args;
+    }, 20, 1 );
 
-        // Insert the new score record
-        $wpdb->insert(
-            $vals_table,
-            [
-                'submission_id' => $submission_id,
-                'key'           => 'lead_score',
-                'value'         => $lead_score,
-            ],
-            [ '%d', '%s', '%s' ]
-        );
-    }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// 3) Load the leads-digest & site_url shortcodes (optional include)
-// ────────────────────────────────────────────────────────────────────────────
-$leads_digest_file = plugin_dir_path( __FILE__ ) . 'includes/leads-digest.php';
-if ( file_exists( $leads_digest_file ) ) {
-    require_once $leads_digest_file;
-}
+
 
 
 // Add the custom admin menu
@@ -581,6 +548,8 @@ add_action('elementor/query/services_children', function ($query) {
     // Set the query to only include child pages of the "Services" page
     $query->set('post_parent', $parent_page_id);
 });
+
+
 
 
 // Shortcode to display ACF fields from a specific page (by page ID)
