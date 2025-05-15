@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Dynamic Tags
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Adds custom dynamic tags for Elementor to manage Hozio's contact information
-Version:         3.36
+Version:         3.37
 Author:          Hozio Web Dev
 License:         GPL2
 Text Domain:     hozio-dynamic-tags
@@ -26,30 +26,35 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/acf-filters.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/leads-digest.php';
 
 
-// only hook in if there's legitimately a "leads-page" in WP
-if ( get_page_by_path( 'leads-page' ) ) {
+add_action( 'init', function() {
+    // only run on sites that have a page whose slug is exactly "leads-page"
+    $leads_page = get_page_by_path( 'leads-page' );
+    if ( ! $leads_page ) {
+        return;
+    }
 
-    // Force HTML-mode for emails
+    // bring in the file that itself calls add_shortcode('leads_digest', …)
+    require_once plugin_dir_path( __FILE__ ) . 'includes/leads-digest.php';
+
+    // force HTML mails
     add_action( 'phpmailer_init', function( $phpmailer ) {
         $phpmailer->isHTML( true );
     } );
 
-    // Swap your placeholder anchor with a live link
+    // swap the placeholder link in outgoing emails
     add_filter( 'wp_mail', function( $args ) {
         if ( empty( $args['message'] ) ) {
             return $args;
         }
-
         $pattern = '/<a\s+href="\[site_url\]\/leads-page"([^>]*)>(.*?)<\/a>/is';
         $args['message'] = preg_replace_callback( $pattern, function( $matches ) {
-            return '<a href="' . esc_url( home_url( '/leads-page' ) ) . '"' 
-                   . $matches[1] . '>View All Leads →</a>';
+            return '<a href="' . esc_url( home_url( '/leads-page' ) ) . '"'
+                   . $matches[1]
+                   . '>View All Leads →</a>';
         }, $args['message'] );
-
         return $args;
     }, 20, 1 );
-
-}
+} );
 
 
 
