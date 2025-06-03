@@ -3,6 +3,13 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 add_shortcode( 'leads_digest', function() {
+    // If not logged in, show a notice and bail early
+      if ( ! is_user_logged_in() ) {
+          return '<div style="text-align: center;">
+                      <p><em>You must be <a href="' . esc_url( wp_login_url( get_permalink() ) ) . '">logged in</a> to view your leads.</em></p>
+                  </div>';
+      }
+
     global $wpdb;
 
     $subs = $wpdb->prefix . 'e_submissions';
