@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Dynamic Tags
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Adds custom dynamic tags for Elementor to manage Hozio's contact information
-Version:         3.39
+Version:         3.40
 Author:          Hozio Web Dev
 License:         GPL2
 Text Domain:     hozio-dynamic-tags
@@ -580,3 +580,79 @@ function show_final_cta_from_page( $atts ) {
     return '';
 }
 add_shortcode( 'final_cta', 'show_final_cta_from_page' );
+
+
+
+
+//Hides Useful Links on HOG Template if ACF Value is empty
+add_filter( 'the_content', function( $content ) {
+    if ( is_admin() ) {
+        return $content;
+    }
+
+    // Fallbacks for Icon Lists
+    $icon_fallbacks = [
+        '', 'Google Map Link', 'USPS Link',
+        'Pharmacy Link', 'Weather Link', 'County & State Wiki Link',
+    ];
+
+    // **Corrected** fallback for Wiki container
+    $wiki_fallbacks = [
+        '',                            // truly empty
+        'County & State Wiki Link',    // your ACF dynamic-tag fallback
+    ];
+
+    // Load into DOM
+    libxml_use_internal_errors( true );
+    $dom   = new DOMDocument();
+    $dom->loadHTML( '<?xml encoding="utf-8"?>' . $content,
+        LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+    );
+    $xpath = new DOMXPath( $dom );
+
+    //
+    // PART 1: Icon List cleanup
+    //
+    $widgets = $xpath->query(
+        "//div[contains(@class,'elementor-widget-icon-list') and contains(@class,'hide-if-empty-acf')]"
+    );
+    foreach ( $widgets as $wrapper ) {
+        $items     = $xpath->query( ".//li[contains(@class,'elementor-icon-list-item')]", $wrapper );
+        $realCount = 0;
+        foreach ( $items as $li ) {
+            $text = trim( $li->textContent );
+            if ( '' === $text || in_array( $text, $icon_fallbacks, true ) ) {
+                $li->parentNode->removeChild( $li );
+            } else {
+                $realCount++;
+            }
+        }
+        if ( 0 === $realCount ) {
+            $wrapper->parentNode->removeChild( $wrapper );
+        }
+    }
+
+    //
+    // PART 2: Wiki container removal
+    //
+    $containers = $xpath->query(
+        "//div[contains(concat(' ',normalize-space(@class),' '),' hide-if-no-wiki ')]"
+    );
+    foreach ( $containers as $wrapper ) {
+        // Grab the first Text Editor inside
+        $textEditor = $xpath->query(
+            ".//div[contains(concat(' ',normalize-space(@class),' '),' elementor-widget-text-editor ')]",
+            $wrapper
+        );
+        $text = '';
+        if ( $textEditor->length ) {
+            $text = trim( $textEditor->item(0)->textContent );
+        }
+        // Hide if empty or exactly the fallback
+        if ( '' === $text || in_array( $text, $wiki_fallbacks, true ) ) {
+            $wrapper->parentNode->removeChild( $wrapper );
+        }
+    }
+
+    return $dom->saveHTML();
+}, 20 );
