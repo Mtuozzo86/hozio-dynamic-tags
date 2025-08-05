@@ -1,8 +1,10 @@
 <?php
-// Force WordPress to use Imagick (so we can preserve EXIF/profile data). If Imagick isn't available,
-// WP will fall back, but EXIF on resized images will likely be lost.
+// Force WordPress to use Imagick (so we can preserve EXIF/profile data), but fall back to GD for formats
 add_filter('wp_image_editors', function () {
-    return ['WP_Image_Editor_Imagick'];
+    return [
+        'WP_Image_Editor_Imagick',
+        'WP_Image_Editor_GD',
+    ];
 });
 
 /**
