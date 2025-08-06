@@ -16,7 +16,7 @@ function hozio_preserve_exif_on_resize($attachment_id, $file_path) {
     }
 
     try {
-        $orig = new Imagick($file_path);
+        $orig     = new Imagick($file_path);
         $profiles = $orig->getImageProfiles('*', true);
     } catch (Exception $e) {
         return;
@@ -33,7 +33,6 @@ function hozio_preserve_exif_on_resize($attachment_id, $file_path) {
         if (!file_exists($resized_path)) {
             continue;
         }
-
         try {
             $img = new Imagick($resized_path);
             foreach ($profiles as $name => $value) {
@@ -51,19 +50,9 @@ function hozio_preserve_exif_on_resize($attachment_id, $file_path) {
 }
 
 /**
- * Simple per-IP rate limiting (e.g., 30 calls per 2 minutes)
+ * Disable rate limiting completely.
  */
 function hozio_rate_limit_check() {
-    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
-    if (!$ip) {
-        return false;
-    }
-    $key = "hozio_replace_limit_{$ip}";
-    $attempts = (int) get_transient($key);
-    if ($attempts >= 30) {
-        return false;
-    }
-    set_transient($key, $attempts + 1, MINUTE_IN_SECONDS * 2);
     return true;
 }
 
@@ -76,7 +65,7 @@ function hozio_validate_upload($tmp, $original_name) {
         return new WP_Error('too_large', 'File exceeds size limit', ['status' => 413]);
     }
 
-    $check = wp_check_filetype_and_ext($tmp, $original_name);
+    $check   = wp_check_filetype_and_ext($tmp, $original_name);
     $allowed = ['jpg', 'jpeg', 'png', 'webp'];
     if (empty($check['ext']) || !in_array(strtolower($check['ext']), $allowed, true)) {
         return new WP_Error('invalid_type', 'Disallowed file type', ['status' => 400]);
@@ -90,38 +79,41 @@ function hozio_validate_upload($tmp, $original_name) {
  */
 add_action('rest_api_init', function () {
     register_rest_route('hozio/v1', '/replace-media', [
-        'methods' => 'POST',
-        'callback' => 'hozio_replace_media_in_place_or_rename',
+        'methods'             => 'POST',
+        'callback'            => 'hozio_replace_media_in_place_or_rename',
         'permission_callback' => function () {
             return current_user_can('upload_files');
         },
-        'args' => [
+        'args'                => [
             'attachment_id' => [
-                'required' => true,
+                'required'          => true,
                 'validate_callback' => function ($param) {
                     return is_numeric($param);
                 },
             ],
-            'new_filename' => [
-                'required' => false,
+            'new_filename'  => [
+                'required'          => false,
                 'sanitize_callback' => 'sanitize_file_name',
             ],
         ],
     ]);
 
     register_rest_route('hozio/v1', '/add-media', [
-        'methods' => 'POST',
-        'callback' => 'hozio_add_new_media_with_exif',
+        'methods'             => 'POST',
+        'callback'            => 'hozio_add_new_media_with_exif',
         'permission_callback' => function () {
             return current_user_can('upload_files');
         },
-        'args' => [
+        'args'                => [
             'post_title' => ['required' => false, 'sanitize_callback' => 'sanitize_text_field'],
             'alt_text'   => ['required' => false, 'sanitize_callback' => 'sanitize_text_field'],
         ],
     ]);
 });
 
+/**
+ * Replace or rename an existing attachment in place.
+ */
 function hozio_replace_media_in_place_or_rename(WP_REST_Request $request) {
     if (!hozio_rate_limit_check()) {
         return new WP_Error('rate_limited', 'Too many requests', ['status' => 429]);
@@ -148,13 +140,13 @@ function hozio_replace_media_in_place_or_rename(WP_REST_Request $request) {
         return $validation;
     }
 
-    $current_dir = dirname($file_path);
-    $new_filename = $request->get_param('new_filename');
+    $current_dir     = dirname($file_path);
+    $new_filename    = $request->get_param('new_filename');
     $filename_changed = false;
 
     if ($new_filename) {
         $new_filename = sanitize_file_name($new_filename);
-        $new_path = $current_dir . DIRECTORY_SEPARATOR . $new_filename;
+        $new_path     = $current_dir . DIRECTORY_SEPARATOR . $new_filename;
 
         if (!move_uploaded_file($tmp, $new_path)) {
             return new WP_Error('write_failed', 'Failed to move new file', ['status' => 500]);
@@ -169,13 +161,14 @@ function hozio_replace_media_in_place_or_rename(WP_REST_Request $request) {
 
         $title_base = pathinfo($new_filename, PATHINFO_FILENAME);
         wp_update_post([
-            'ID' => $attachment_id,
-            'post_title' => $title_base,
+            'ID'        => $attachment_id,
+            'post_title'=> $title_base,
             'post_name' => sanitize_title_with_dashes($title_base),
         ]);
 
-        $file_path = $new_path;
+        $file_path        = $new_path;
         $filename_changed = true;
+
     } else {
         if (!move_uploaded_file($tmp, $file_path)) {
             return new WP_Error('write_failed', 'Failed to overwrite original file', ['status' => 500]);
@@ -196,7 +189,11 @@ function hozio_replace_media_in_place_or_rename(WP_REST_Request $request) {
     if (function_exists('exif_read_data')) {
         try {
             $exif = @exif_read_data($file_path);
-            if (!empty($exif['GPSLatitude']) && !empty($exif['GPSLongitude']) && !empty($exif['GPSLatitudeRef']) && !empty($exif['GPSLongitudeRef'])) {
+            if (!empty($exif['GPSLatitude']) &&
+                !empty($exif['GPSLongitude']) &&
+                !empty($exif['GPSLatitudeRef']) &&
+                !empty($exif['GPSLongitudeRef'])) {
+
                 $convert = function ($coord, $ref) {
                     $parts = array_map(function ($v) {
                         return eval('return ' . $v . ';');
@@ -211,6 +208,7 @@ function hozio_replace_media_in_place_or_rename(WP_REST_Request $request) {
                     }
                     return null;
                 };
+
                 $lat = $convert($exif['GPSLatitude'], $exif['GPSLatitudeRef']);
                 $lng = $convert($exif['GPSLongitude'], $exif['GPSLongitudeRef']);
                 if ($lat !== null && $lng !== null) {
@@ -225,13 +223,16 @@ function hozio_replace_media_in_place_or_rename(WP_REST_Request $request) {
 
     $url = wp_get_attachment_url($attachment_id);
     return rest_ensure_response([
-        'success' => true,
-        'attachment_id' => $attachment_id,
-        'url' => $url,
-        'filename_changed' => $filename_changed,
+        'success'         => true,
+        'attachment_id'   => $attachment_id,
+        'url'             => $url,
+        'filename_changed'=> $filename_changed,
     ]);
 }
 
+/**
+ * Add new media with EXIF data preserved.
+ */
 function hozio_add_new_media_with_exif(WP_REST_Request $request) {
     if (!hozio_rate_limit_check()) {
         return new WP_Error('rate_limited', 'Too many requests', ['status' => 429]);
@@ -242,7 +243,7 @@ function hozio_add_new_media_with_exif(WP_REST_Request $request) {
     }
 
     $file = $_FILES['file'];
-    $tmp = $file['tmp_name'];
+    $tmp  = $file['tmp_name'];
     if (!is_uploaded_file($tmp)) {
         return new WP_Error('upload', 'Invalid uploaded file', ['status' => 400]);
     }
@@ -253,15 +254,15 @@ function hozio_add_new_media_with_exif(WP_REST_Request $request) {
         return $validation;
     }
 
-    $filename = sanitize_file_name($file['name']);
+    $filename      = sanitize_file_name($file['name']);
     $file_contents = file_get_contents($tmp);
-    $upload = wp_upload_bits($filename, null, $file_contents);
+    $upload        = wp_upload_bits($filename, null, $file_contents);
     if (!empty($upload['error'])) {
         return new WP_Error('upload_failed', $upload['error'], ['status' => 500]);
     }
 
     $file_path = $upload['file'];
-    $filetype = wp_check_filetype($filename, null);
+    $filetype  = wp_check_filetype($filename, null);
     $attachment = [
         'post_mime_type' => $filetype['type'],
         'post_title'     => $request->get_param('post_title') ?: pathinfo($filename, PATHINFO_FILENAME),
@@ -283,8 +284,8 @@ function hozio_add_new_media_with_exif(WP_REST_Request $request) {
 
     $url = wp_get_attachment_url($attach_id);
     return rest_ensure_response([
-        'success' => true,
+        'success'       => true,
         'attachment_id' => $attach_id,
-        'url' => $url,
+        'url'           => $url,
     ]);
 }
