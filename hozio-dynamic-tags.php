@@ -13,38 +13,6 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-require_once plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
-use YahnisElsts\PluginUpdateChecker\v5p6\PucFactory;
-
-$updateChecker = PucFactory::buildUpdateChecker(
-  'https://github.com/Mtuozzo86/hozio-dynamic-tags',
-  __FILE__,
-  'hozio-dynamic-tags'
-);
-
-$updateChecker->setBranch('main');
-
-// 🔐 Set GitHub token here (NEVER expose this in a public repo)
-$updateChecker->setAuthentication('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'); // <-- Replace this with your actual token
-
-// Force update check on admin page loads
-add_action('admin_init', function() use ($updateChecker) {
-  delete_site_transient('update_plugins');
-  $updateChecker->checkForUpdates();
-}, 1);
-
-// 🚫 Hide the "Check for updates" link on Plugins page
-add_filter('plugin_action_links_hozio-dynamic-tags/hozio-dynamic-tags.php', function($links) {
-  foreach ($links as $key => $link) {
-    if (stripos($link, 'update-check') !== false) {
-      unset($links[$key]);
-    }
-  }
-  return $links;
-});
-
-
-
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/dynamic-tags.php';
