@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Dynamic Tags
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Adds custom dynamic tags for Elementor to manage Hozio's contact information
-Version:         3.44
+Version:         3.45
 Author:          Hozio Web Dev
 License:         GPL2
 Text Domain:     hozio-dynamic-tags
@@ -11,9 +11,29 @@ GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 GitHub Branch:   main
 */
 
-if ( ! defined( 'ABSPATH' ) ) {
-    exit; // Exit if accessed directly
-}
+if ( ! defined( 'ABSPATH' ) ) exit;
+
+require_once plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5p6\PucFactory;
+
+$updateChecker = PucFactory::buildUpdateChecker(
+  'https://github.com/Mtuozzo86/hozio-dynamic-tags',
+  __FILE__,
+  'hozio-dynamic-tags'
+);
+
+//*************MAKE SURE THIS BRANCH IS CORRECT*******************
+$updateChecker->setBranch( 'main' );
+
+// no setAuthentication() call!
+// no setUpdateInterval(0) — let it use the default 12 hr cache
+
+// you can optionally still force a check on admin pages:
+add_action( 'admin_init', function() use ( $updateChecker ) {
+  delete_site_transient( 'update_plugins' );
+  $updateChecker->checkForUpdates();
+}, 1 );
+
 
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
