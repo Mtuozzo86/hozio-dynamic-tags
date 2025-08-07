@@ -16,13 +16,12 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-// 2) Attempt to load the GitHub update checker library
+// 2) Load the PUC library if it exists
 $puc_file = plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
-
 if ( file_exists( $puc_file ) ) {
     require_once $puc_file;
 
-    // 3) Only build the updater if the class is now available
+    // 3) Build the update checker
     if ( class_exists( 'Puc_v4_Factory' ) ) {
         $updateChecker = Puc_v4_Factory::buildUpdateChecker(
             'https://github.com/Mtuozzo86/hozio-dynamic-tags/',
@@ -30,17 +29,50 @@ if ( file_exists( $puc_file ) ) {
             'hozio-dynamic-tags'
         );
         $updateChecker->setBranch( 'main' );
-
-        // 4) Disable PUC’s internal cache so it never waits
-        $updateChecker->setUpdateInterval(0);
-
-        // 5) On every admin page load, clear WP’s plugin-update cache and re-poll GitHub
-        add_action( 'admin_init', function() use ( $updateChecker ) {
-            delete_site_transient( 'update_plugins' );
-            $updateChecker->checkForUpdates();
-        } );
+        // disable the internal interval so we can force-pull every admin load
+        $updateChecker->setUpdateInterval( 0 );
     }
 }
+
+// 4) Add “Check for updates” link on the Plugins page
+add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), function( $links ) {
+    $url = wp_nonce_url(
+        admin_url( 'plugins.php?action=check_hozio_update' ),
+        'check_hozio_update'
+    );
+    $links[] = '<a href="' . esc_url( $url ) . '">Check for updates</a>';
+    return $links;
+} );
+
+// 5) Handle our manual check action
+add_action( 'admin_init', function() use ( $updateChecker ) {
+    if ( empty( $_GET['action'] ) || $_GET['action'] !== 'check_hozio_update' ) {
+        return;
+    }
+    if ( ! check_admin_referer( 'check_hozio_update' ) ) {
+        return;
+    }
+
+    // Clear WP’s plugins update cache
+    delete_site_transient( 'update_plugins' );
+    // Clear PUC’s cached GitHub response
+    if ( isset( $updateChecker ) ) {
+        $updateChecker->getVcsApi()->clearCachedResponse();
+        $updateChecker->checkForUpdates();
+    }
+
+    // Show a one‐time admin notice
+    add_action( 'admin_notices', function() {
+        echo '<div class="notice notice-success is-dismissible">
+                <p>Hozio Dynamic Tags: Updates checked!</p>
+              </div>';
+    } );
+
+    // Redirect back to Plugins screen
+    wp_safe_redirect( admin_url( 'plugins.php' ) );
+    exit;
+} );
+
 
 // …the rest of your plugin code follows below…
 
