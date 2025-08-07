@@ -24,21 +24,17 @@ $updateChecker = PucFactory::buildUpdateChecker(
 
 $updateChecker->setBranch('main');
 
-// OPTIONAL: if using a GitHub token
+// Optional: Uncomment if using private repos or want to use token
 // if (defined('HOZIO_GITHUB_TOKEN')) {
-//     $updateChecker->setAuthentication(HOZIO_GITHUB_TOKEN);
+//   $updateChecker->setAuthentication(HOZIO_GITHUB_TOKEN);
 // }
 
-// ✅ Only check updates outside of plugins.php screen
-add_action('wp_loaded', function() use ($updateChecker) {
-  if (!is_admin()) return;
+// Force WordPress to poll GitHub each time admin loads
+add_action('admin_init', function() use ($updateChecker) {
+  delete_site_transient('update_plugins');
+  $updateChecker->checkForUpdates();
+}, 1);
 
-  $screen = get_current_screen();
-  if (!$screen || $screen->id !== 'plugins') {
-    delete_site_transient('update_plugins');
-    $updateChecker->checkForUpdates();
-  }
-});
 
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
