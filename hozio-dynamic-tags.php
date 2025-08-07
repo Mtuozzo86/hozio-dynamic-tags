@@ -30,8 +30,19 @@ if ( file_exists( $puc_file ) ) {
             'hozio-dynamic-tags'
         );
         $updateChecker->setBranch( 'main' );
+
+        // 4) Disable PUC’s internal cache so it never waits
+        $updateChecker->setUpdateInterval(0);
+
+        // 5) On every admin page load, clear WP’s plugin-update cache and re-poll GitHub
+        add_action( 'admin_init', function() use ( $updateChecker ) {
+            delete_site_transient( 'update_plugins' );
+            $updateChecker->checkForUpdates();
+        } );
     }
 }
+
+// …the rest of your plugin code follows below…
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/dynamic-tags.php';
