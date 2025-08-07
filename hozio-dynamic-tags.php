@@ -22,7 +22,7 @@ $updateChecker = PucFactory::buildUpdateChecker(
   'hozio-dynamic-tags'
 );
 
-// track the “main” branch
+//**************MAKE SURE THIS BRANCH IS CORRECT*******************
 $updateChecker->setBranch( 'main' );
 
 // no setAuthentication() call!
