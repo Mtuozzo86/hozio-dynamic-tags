@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Dynamic Tags
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Adds custom dynamic tags for Elementor to manage Hozio's contact information
-Version:         3.49
+Version:         3.45
 Author:          Hozio Web Dev
 License:         GPL2
 Text Domain:     hozio-dynamic-tags
@@ -11,70 +11,30 @@ GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 GitHub Branch:   main
 */
 
-// 1) Bail early if loaded outside WP
-if ( ! defined( 'ABSPATH' ) ) {
-    exit;
-}
+if ( ! defined( 'ABSPATH' ) ) exit;
 
-// 2) Load the PUC library if it exists
-$puc_file = plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
-if ( file_exists( $puc_file ) ) {
-    require_once $puc_file;
+require_once plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5p6\PucFactory;
 
-    // 3) Build the update checker
-    if ( class_exists( 'Puc_v4_Factory' ) ) {
-        $updateChecker = Puc_v4_Factory::buildUpdateChecker(
-            'https://github.com/Mtuozzo86/hozio-dynamic-tags/',
-            __FILE__,
-            'hozio-dynamic-tags'
-        );
-        $updateChecker->setBranch( 'main' );
-        // disable the internal interval so we can force-pull every admin load
-        $updateChecker->setUpdateInterval( 0 );
-    }
-}
+$updateChecker = PucFactory::buildUpdateChecker(
+  'https://github.com/Mtuozzo86/hozio-dynamic-tags',
+  __FILE__,
+  'hozio-dynamic-tags'
+);
 
-// 4) Add “Check for updates” link on the Plugins page
-add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), function( $links ) {
-    $url = wp_nonce_url(
-        admin_url( 'plugins.php?action=check_hozio_update' ),
-        'check_hozio_update'
-    );
-    $links[] = '<a href="' . esc_url( $url ) . '">Check for updates</a>';
-    return $links;
-} );
+// track the “main” branch
+$updateChecker->setBranch( 'main' );
 
-// 5) Handle our manual check action
+// no setAuthentication() call!
+// no setUpdateInterval(0) — let it use the default 12 hr cache
+
+// you can optionally still force a check on admin pages:
 add_action( 'admin_init', function() use ( $updateChecker ) {
-    if ( empty( $_GET['action'] ) || $_GET['action'] !== 'check_hozio_update' ) {
-        return;
-    }
-    if ( ! check_admin_referer( 'check_hozio_update' ) ) {
-        return;
-    }
-
-    // Clear WP’s plugins update cache
-    delete_site_transient( 'update_plugins' );
-    // Clear PUC’s cached GitHub response
-    if ( isset( $updateChecker ) ) {
-        $updateChecker->getVcsApi()->clearCachedResponse();
-        $updateChecker->checkForUpdates();
-    }
-
-    // Show a one‐time admin notice
-    add_action( 'admin_notices', function() {
-        echo '<div class="notice notice-success is-dismissible">
-                <p>Hozio Dynamic Tags: Updates checked!</p>
-              </div>';
-    } );
-
-    // Redirect back to Plugins screen
-    wp_safe_redirect( admin_url( 'plugins.php' ) );
-    exit;
-} );
+  delete_site_transient( 'update_plugins' );
+  $updateChecker->checkForUpdates();
+}, 1 );
 
 
-// …the rest of your plugin code follows below…
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/dynamic-tags.php';
