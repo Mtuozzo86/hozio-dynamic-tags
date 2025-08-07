@@ -11,21 +11,27 @@ GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
 GitHub Branch:   main
 */
 
-// ► GITHUB AUTO-UPDATE SETUP ◄
-if ( ! class_exists( 'Puc_v4_Factory' ) ) {
-    require_once __DIR__ . '/plugin-update-checker/plugin-update-checker.php';
-}
-$updateChecker = Puc_v4_Factory::buildUpdateChecker(
-    'https://github.com/Mtuozzo86/hozio-dynamic-tags/',
-    __FILE__,
-    'hozio-dynamic-tags'
-);
-$updateChecker->setBranch('main');
-
+// 1) Bail early if loaded outside WP
 if ( ! defined( 'ABSPATH' ) ) {
-    exit; // Exit if accessed directly
+    exit;
 }
 
+// 2) Attempt to load the GitHub update checker library
+$puc_file = plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
+
+if ( file_exists( $puc_file ) ) {
+    require_once $puc_file;
+
+    // 3) Only build the updater if the class is now available
+    if ( class_exists( 'Puc_v4_Factory' ) ) {
+        $updateChecker = Puc_v4_Factory::buildUpdateChecker(
+            'https://github.com/Mtuozzo86/hozio-dynamic-tags/',
+            __FILE__,
+            'hozio-dynamic-tags'
+        );
+        $updateChecker->setBranch( 'main' );
+    }
+}
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/dynamic-tags.php';
