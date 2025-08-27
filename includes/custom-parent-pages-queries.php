@@ -92,3 +92,57 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
         }
     }
 });
+
+
+
+add_action('elementor/query/dynamic_town_pages_query', function( $query ) {
+    // Current page ID
+    $current_id = get_queried_object_id();
+    if ( ! $current_id ) {
+        error_log('TownQuery: No queried object ID.');
+        return;
+    }
+
+    // Get last URL segment (page slug)
+    $permalink = get_permalink( $current_id );
+    if ( ! $permalink ) {
+        error_log('TownQuery: No permalink for current page.');
+        return;
+    }
+
+    $last_segment = basename( untrailingslashit( $permalink ) ); // e.g. mike-t
+    if ( empty( $last_segment ) ) {
+        error_log('TownQuery: Empty last segment.');
+        return;
+    }
+
+    // Find a matching term in town_taxonomies by slug
+    $taxonomy = 'town_taxonomies';
+    $term = get_term_by( 'slug', $last_segment, $taxonomy );
+
+    if ( ! $term || is_wp_error( $term ) ) {
+        // No matching town term, do nothing so Elementor falls back gracefully
+        error_log('TownQuery: No matching term for slug ' . $last_segment);
+        return;
+    }
+
+    // Build the query: pages that have this town term, excluding the current page
+    $query->set( 'post_type', 'page' );
+    $query->set( 'post__not_in', array( $current_id ) );
+    $query->set( 'tax_query', array(
+        array(
+            'taxonomy' => $taxonomy,
+            'field'    => 'slug',
+            'terms'    => array( $last_segment ),
+            'operator' => 'IN',
+        ),
+    ) );
+
+    // Optional: order newest first (tweak to taste)
+    if ( empty( $query->get( 'orderby' ) ) ) {
+        $query->set( 'orderby', 'date' );
+        $query->set( 'order', 'DESC' );
+    }
+
+    error_log('TownQuery: Querying pages with town term slug ' . $last_segment . ' (term_id ' . $term->term_id . ')');
+});
