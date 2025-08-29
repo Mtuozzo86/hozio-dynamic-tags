@@ -58,9 +58,20 @@ document.addEventListener('DOMContentLoaded', function() {
                             'exclude' => get_the_ID()
                         ));
                         
-                        // Filter out thank you page
+                        // Filter out thank you page and Yoast SEO excluded pages
                         $pages = array_filter($pages, function($page) {
-                            return $page->post_name !== 'thank-you';
+                            // Skip thank you page
+                            if ($page->post_name === 'thank-you') {
+                                return false;
+                            }
+                            
+                            // Check Yoast SEO settings - exclude if noindex is set
+                            $yoast_noindex = get_post_meta($page->ID, '_yoast_wpseo_meta-robots-noindex', true);
+                            if ($yoast_noindex === '1') {
+                                return false;
+                            }
+                            
+                            return true;
                         });
                         
                         foreach ($pages as $page) {
@@ -82,7 +93,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <path d="M12 20h9"/>
                             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                         </svg>
-                        Posts
+                        Recent Posts
                     </h2>
                     <ul class="sitemap-list">
                         <?php
@@ -95,6 +106,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         
                         foreach ($recent_posts as $post) {
                             setup_postdata($post);
+                            
+                            // Check Yoast SEO settings - skip if noindex is set
+                            $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
+                            if ($yoast_noindex === '1') {
+                                continue;
+                            }
+                            
                             echo '<li class="sitemap-item">';
                             echo '<a href="' . get_permalink($post->ID) . '" class="sitemap-link">';
                             echo esc_html($post->post_title);
