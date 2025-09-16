@@ -329,7 +329,6 @@ document.addEventListener('DOMContentLoaded', function() {
     box-shadow: none;
     border: none;
     border-bottom: 1px solid #e0e0e0;
-    height: 4rem;
     box-sizing: border-box;
 }
 
