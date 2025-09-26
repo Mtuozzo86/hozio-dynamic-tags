@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.5.10
+Version:         3.5
 Author:          Hozio Web Dev
 License:         GPL2
 Text Domain:     hozio-dynamic-tags
