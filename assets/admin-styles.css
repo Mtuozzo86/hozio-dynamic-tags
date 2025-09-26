@@ -1,0 +1,431 @@
+/* Hozio Dynamic Tags - Admin Styles */
+
+:root {
+    --hozio-blue: #00A0E3;
+    --hozio-blue-dark: #0081B8;
+    --hozio-green: #8DC63F;
+    --hozio-green-dark: #6FA92E;
+    --hozio-orange: #F7941D;
+    --hozio-orange-dark: #E67E00;
+    --hozio-gray: #6D6E71;
+    --hozio-bg: #f9fafb;
+    --hozio-card-bg: #ffffff;
+    --hozio-border: #e5e7eb;
+    --hozio-text: #1f2937;
+    --hozio-text-light: #6b7280;
+    --hozio-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    --hozio-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Main Wrapper */
+.hozio-settings-wrapper {
+    background: var(--hozio-bg);
+    margin: 20px 20px 20px 0;
+    border-radius: 8px;
+    min-height: calc(100vh - 120px);
+}
+
+/* Header */
+.hozio-header {
+    background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 50%, var(--hozio-orange) 100%);
+    color: white;
+    padding: 40px 40px 60px;
+    border-radius: 8px 8px 0 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.hozio-header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 300px;
+    height: 300px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+}
+
+.hozio-logo-wrapper {
+    margin-bottom: 20px;
+}
+
+.hozio-logo-wrapper img {
+    height: 50px;
+    width: auto;
+}
+
+.hozio-header-content h1 {
+    color: white;
+    font-size: 32px;
+    margin: 0 0 10px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.hozio-header-content h1 .dashicons {
+    font-size: 36px;
+    width: 36px;
+    height: 36px;
+}
+
+.hozio-subtitle {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 16px;
+    margin: 0;
+    font-weight: 400;
+}
+
+/* Content Area */
+.hozio-content {
+    padding: 0 40px 40px;
+    margin-top: -30px;
+}
+
+.hozio-form {
+    position: relative;
+}
+
+/* Section Styling */
+.hozio-section {
+    background: var(--hozio-card-bg);
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 24px;
+    box-shadow: var(--hozio-shadow);
+    border: 1px solid var(--hozio-border);
+    border-left: 4px solid var(--hozio-blue);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hozio-section:nth-child(2) {
+    border-left-color: var(--hozio-green);
+}
+
+.hozio-section:nth-child(3) {
+    border-left-color: var(--hozio-orange);
+}
+
+.hozio-section:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--hozio-shadow-lg);
+}
+
+.hozio-section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--hozio-border);
+}
+
+.hozio-section-header .dashicons {
+    color: var(--hozio-blue);
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+}
+
+.hozio-section:nth-child(2) .hozio-section-header .dashicons {
+    color: var(--hozio-green);
+}
+
+.hozio-section:nth-child(3) .hozio-section-header .dashicons {
+    color: var(--hozio-orange);
+}
+
+.hozio-section-header h2 {
+    margin: 0;
+    color: var(--hozio-gray);
+    font-size: 20px;
+    font-weight: 600;
+}
+
+/* Grid Layout */
+.hozio-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.hozio-grid-3 {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+/* Field Styling */
+.hozio-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.hozio-field label {
+    font-weight: 500;
+    color: var(--hozio-text);
+    margin-bottom: 8px;
+    font-size: 14px;
+    display: block;
+}
+
+.hozio-field-wrapper {
+    width: 100%;
+}
+
+/* Input Styling */
+.hozio-input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.hozio-input-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--hozio-blue);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+}
+
+.hozio-input-icon .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+.hozio-input,
+.hozio-textarea,
+.hozio-input-number {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid var(--hozio-border);
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.hozio-input-group .hozio-input {
+    padding-left: 40px;
+}
+
+.hozio-input-number {
+    padding-left: 12px;
+}
+
+.hozio-textarea {
+    padding-left: 12px;
+    resize: vertical;
+    min-height: 100px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.hozio-input:focus,
+.hozio-textarea:focus,
+.hozio-input-number:focus {
+    outline: none;
+    border-color: var(--hozio-blue);
+    box-shadow: 0 0 0 3px rgba(0, 160, 227, 0.1);
+}
+
+.hozio-section:nth-child(2) .hozio-input:focus,
+.hozio-section:nth-child(2) .hozio-textarea:focus,
+.hozio-section:nth-child(2) .hozio-input-number:focus {
+    border-color: var(--hozio-green);
+    box-shadow: 0 0 0 3px rgba(141, 198, 63, 0.1);
+}
+
+.hozio-section:nth-child(3) .hozio-input:focus {
+    border-color: var(--hozio-orange);
+    box-shadow: 0 0 0 3px rgba(247, 148, 29, 0.1);
+}
+
+.hozio-input::placeholder {
+    color: #9ca3af;
+}
+
+/* Color Picker */
+.hozio-color-picker-wrapper {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.hozio-color-picker {
+    flex: 1;
+    padding: 10px 12px;
+    border: 2px solid var(--hozio-border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: monospace;
+}
+
+.hozio-color-input {
+    width: 60px;
+    height: 44px;
+    border: 2px solid var(--hozio-border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hozio-color-input:hover {
+    border-color: var(--hozio-blue);
+}
+
+/* Calculated Value Display */
+.hozio-calculated-value {
+    margin-top: 12px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba(0, 160, 227, 0.1) 0%, rgba(141, 198, 63, 0.1) 100%);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--hozio-text);
+    border: 1px solid rgba(0, 160, 227, 0.2);
+}
+
+.hozio-calculated-value .dashicons {
+    color: var(--hozio-blue);
+}
+
+.hozio-calculated-value .highlight {
+    color: var(--hozio-orange);
+    font-weight: 600;
+    font-size: 16px;
+}
+
+/* Field Description */
+.hozio-field-description {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--hozio-text-light);
+    font-style: italic;
+}
+
+/* Submit Section */
+.hozio-submit-wrapper {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 24px 30px;
+    background: var(--hozio-card-bg);
+    border-radius: 12px;
+    box-shadow: var(--hozio-shadow);
+    border: 1px solid var(--hozio-border);
+    position: sticky;
+    bottom: 20px;
+    z-index: 10;
+}
+
+.hozio-submit-btn {
+    background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 100%) !important;
+    border: none !important;
+    color: white !important;
+    padding: 12px 32px !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    text-shadow: none !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 160, 227, 0.3) !important;
+    height: auto !important;
+}
+
+.hozio-submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 160, 227, 0.4) !important;
+}
+
+.hozio-reset-btn {
+    padding: 12px 24px !important;
+    font-size: 14px !important;
+    border-radius: 8px !important;
+    border: 2px solid var(--hozio-orange) !important;
+    background: white !important;
+    color: var(--hozio-orange) !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: auto !important;
+}
+
+.hozio-reset-btn:hover {
+    background: var(--hozio-orange) !important;
+    color: white !important;
+}
+
+/* Success Message */
+#setting-error-settings_updated {
+    margin: 20px 0;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, rgba(141, 198, 63, 0.1) 0%, rgba(141, 198, 63, 0.05) 100%);
+    border-left: 4px solid var(--hozio-green);
+    border-radius: 8px;
+    color: var(--hozio-green-dark);
+}
+
+/* Responsive Design */
+@media (max-width: 782px) {
+    .hozio-header {
+        padding: 30px 20px 50px;
+    }
+
+    .hozio-header-content h1 {
+        font-size: 24px;
+    }
+
+    .hozio-content {
+        padding: 0 20px 20px;
+    }
+
+    .hozio-section {
+        padding: 20px;
+    }
+
+    .hozio-grid,
+    .hozio-grid-3 {
+        grid-template-columns: 1fr;
+    }
+
+    .hozio-submit-wrapper {
+        flex-direction: column;
+        position: relative;
+        bottom: 0;
+    }
+
+    .hozio-submit-btn,
+    .hozio-reset-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Animation */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.hozio-section {
+    animation: fadeInUp 0.4s ease forwards;
+}
+
+.hozio-section:nth-child(1) { animation-delay: 0.1s; }
+.hozio-section:nth-child(2) { animation-delay: 0.2s; }
+.hozio-section:nth-child(3) { animation-delay: 0.3s; }
+.hozio-section:nth-child(4) { animation-delay: 0.4s; }
