@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.49.1
+Version:         3.5.10
 Author:          Hozio Web Dev
 License:         GPL2
 Text Domain:     hozio-dynamic-tags
@@ -326,6 +326,7 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
     $url_tags = [
         ['company-phone-1', 'Company Phone Number 1', 'hozio_company_phone_1', 'tel'],
         ['company-phone-2', 'Company Phone Number 2', 'hozio_company_phone_2', 'tel'],
+        ['google-ads-phone', 'Google Ads Phone Number', 'URL'],
         ['sms-phone', 'SMS Phone Number', 'hozio_sms_phone', 'sms'],
         ['company-email', 'Company Email', 'hozio_company_email', 'mailto'],
         ['gmb-link', 'GMB Link', 'hozio_gmb_link', 'url'],
