@@ -8,6 +8,8 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         ['phone-number-icon-box', 'Phone Number (Icon Box desc.)', 'TEXT'],
         ['company-phone-2', 'Company Phone Number 2', 'URL'],
         ['company-phone-2-name', 'Company Phone #2 Name', 'TEXT'],
+        ['google-ads-phone', 'Google Ads Phone Number', 'URL'],
+        ['google-ads-phone', 'Google Ads Phone Number', 'TEXT'],
         ['sms-phone', 'SMS Phone Number', 'URL'],
         ['sms-phone-name', 'SMS Phone # Name', 'TEXT'],
         ['sms-icon-box', 'SMS (Icon Box desc.)', 'TEXT'],
@@ -126,6 +128,10 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
 
                         case 'company-phone-2':
                             echo esc_url('tel:' . esc_attr(\$option_value));
+                            break;
+
+                        case 'google-ads-phone':
+                            echo esc_url('tel:' . esc_attr($option_value));
                             break;
 
                         case 'sms-phone':
