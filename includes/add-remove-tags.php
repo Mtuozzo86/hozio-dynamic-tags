@@ -12,22 +12,27 @@
         --hozio-gray: #6D6E71;
     }
     
-    .wrap .hozio-manage-wrapper {
-        background: #f9fafb;
-        margin: 20px 20px 20px 0;
-        border-radius: 8px;
-        max-width: 100%;
-        overflow: hidden;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    
+	.wrap {
+		margin-right: 20px;
+	}
+
+	.wrap .hozio-manage-wrapper {
+		background: #f9fafb;
+		margin: 20px !important;
+		border-radius: 8px;
+		max-width: 100%;
+		overflow: hidden;
+		box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+	}
+
     .hozio-manage-header {
         background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 50%, var(--hozio-orange) 100%);
         color: white;
         padding: 40px;
-        border-radius: 8px 8px 0 0;
+        border-radius: 8px;
         position: relative;
         overflow: hidden;
+		margin-right: 20px !important;
     }
     
     .hozio-manage-header::before {
@@ -346,7 +351,7 @@
     
     @media (max-width: 782px) {
         .wrap .hozio-manage-wrapper {
-            margin: 20px 0;
+            margin: 20px !important;
         }
         
         .hozio-manage-header {
