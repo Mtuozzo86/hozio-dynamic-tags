@@ -142,9 +142,14 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                             echo esc_url('mailto:' . esc_attr(\$option_value));
                             break;
 
-                        default:
-                            echo esc_html(\$option_value);
-                            break;
+						default:
+							// If contains script tag, output as-is (already validated as admin-entered)
+							if (strpos(\$option_value, '<script') !== false) {
+								echo \$option_value; // No escaping for scripts
+							} else {
+								echo esc_html(\$option_value);
+							}
+							break;
                     }
                 }
             }");
