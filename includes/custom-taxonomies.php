@@ -174,13 +174,6 @@ function pages_populate_taxonomy_columns($column,$post_id){
 }
 add_action('manage_pages_custom_column','pages_populate_taxonomy_columns',10,2);
 
-
-
-
-
-
-
-
 // ========================
 // 6) CONNECT TOWN TAXONOMIES - TAXONOMY SELECTION APPROACH
 // ========================
@@ -215,7 +208,435 @@ function register_connect_town_taxonomies_page() {
 }
 add_action('admin_menu', 'register_connect_town_taxonomies_page');
 
-// Render the taxonomy selection page
+// Add inline styles for the Connect Town Taxonomies page
+function hozio_town_taxonomies_admin_styles() {
+    $screen = get_current_screen();
+    if (!$screen || strpos($screen->id, 'connect-town-taxonomies') === false) {
+        return;
+    }
+    ?>
+    <style>
+        :root {
+            --hozio-blue: #00A0E3;
+            --hozio-blue-dark: #0081B8;
+            --hozio-green: #8DC63F;
+            --hozio-green-dark: #6FA92E;
+            --hozio-orange: #F7941D;
+            --hozio-orange-dark: #E67E00;
+            --hozio-gray: #6D6E71;
+        }
+        
+        .hozio-taxonomies-wrapper {
+            background: #f9fafb;
+            margin: 20px 20px 20px 0;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .hozio-taxonomies-header {
+            background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 50%, var(--hozio-orange) 100%);
+            color: white;
+            padding: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hozio-taxonomies-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 400px;
+            height: 400px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        
+        .hozio-taxonomies-header h1 {
+            color: white !important;
+            font-size: 32px;
+            margin: 0 0 10px !important;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 600;
+            text-shadow: none;
+        }
+        
+        .hozio-taxonomies-header h1 .dashicons {
+            font-size: 36px;
+            width: 36px;
+            height: 36px;
+        }
+        
+        .hozio-taxonomies-subtitle {
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 16px;
+            margin: 0;
+        }
+        
+        .hozio-taxonomies-content {
+            padding: 0 40px 40px;
+        }
+        
+        .hozio-taxonomies-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 30px 0 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #e5e7eb;
+            border-left: 4px solid var(--hozio-blue);
+        }
+        
+        .hozio-taxonomies-card.info-card {
+            border-left-color: var(--hozio-orange);
+        }
+        
+        .hozio-taxonomies-card.selection-card {
+            border-left-color: var(--hozio-green);
+        }
+        
+        .hozio-taxonomies-card.results-card {
+            border-left-color: var(--hozio-blue);
+        }
+        
+        .hozio-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .hozio-card-header h2 {
+            margin: 0 !important;
+            font-size: 20px !important;
+            color: var(--hozio-gray);
+            font-weight: 600;
+        }
+        
+        .hozio-card-header .dashicons {
+            color: var(--hozio-blue);
+            font-size: 24px;
+            width: 24px;
+            height: 24px;
+        }
+        
+        .info-card .hozio-card-header .dashicons {
+            color: var(--hozio-orange);
+        }
+        
+        .selection-card .hozio-card-header .dashicons {
+            color: var(--hozio-green);
+        }
+        
+        .results-card .hozio-card-header .dashicons {
+            color: var(--hozio-blue);
+        }
+        
+        .hozio-info-notice {
+            background: linear-gradient(135deg, rgba(0, 160, 227, 0.1) 0%, rgba(0, 160, 227, 0.05) 100%);
+            border: 1px solid rgba(0, 160, 227, 0.2);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .hozio-info-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            color: var(--hozio-blue-dark);
+            margin-bottom: 8px;
+        }
+        
+        .hozio-info-text {
+            color: var(--hozio-blue-dark);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .hozio-taxonomies-selection {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+
+        
+        .hozio-taxonomy-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            margin: 8px 0;
+            background: #f9fafb;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .hozio-taxonomy-item:hover {
+            background: #f3f4f6;
+            border-color: var(--hozio-green);
+            transform: translateX(4px);
+        }
+        
+        .hozio-taxonomy-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: var(--hozio-green);
+        }
+        
+        .hozio-taxonomy-info {
+            flex: 1;
+        }
+        
+        .hozio-taxonomy-name {
+            font-weight: 600;
+            color: var(--hozio-gray);
+            margin-bottom: 4px;
+        }
+        
+        .hozio-taxonomy-count {
+            font-size: 13px;
+            color: #6b7280;
+        }
+        
+        .hozio-taxonomy-item:has(input:checked) {
+            background: linear-gradient(135deg, rgba(141, 198, 63, 0.1) 0%, rgba(141, 198, 63, 0.05) 100%);
+            border-color: var(--hozio-green);
+        }
+        
+        .hozio-taxonomy-item:has(input:checked) .hozio-taxonomy-name {
+            color: var(--hozio-green-dark);
+        }
+        
+        .hozio-button-group {
+            display: flex;
+            gap: 16px;
+            margin-top: 24px;
+            flex-wrap: wrap;
+        }
+        
+        .hozio-btn-primary {
+            background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 100%) !important;
+            border: none !important;
+            color: white !important;
+            padding: 12px 32px !important;
+            font-size: 15px !important;
+            font-weight: 600 !important;
+            border-radius: 8px !important;
+            cursor: pointer !important;
+            transition: all 0.2s !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            text-shadow: none !important;
+            box-shadow: 0 4px 6px rgba(0, 160, 227, 0.3) !important;
+            height: auto !important;
+            line-height: normal !important;
+            text-decoration: none !important;
+        }
+        
+        .hozio-btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 160, 227, 0.4) !important;
+        }
+        
+        .hozio-btn-secondary {
+            background: white !important;
+            border: 2px solid #e5e7eb !important;
+            color: var(--hozio-gray) !important;
+            padding: 10px 24px !important;
+            font-size: 15px !important;
+            font-weight: 600 !important;
+            border-radius: 8px !important;
+            cursor: pointer !important;
+            transition: all 0.2s !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            text-decoration: none !important;
+            height: auto !important;
+            line-height: normal !important;
+        }
+        
+        .hozio-btn-secondary:hover {
+            border-color: var(--hozio-blue);
+            color: var(--hozio-blue) !important;
+            transform: translateY(-1px);
+        }
+        
+        .hozio-results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .hozio-results-table th {
+            background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 100%);
+            color: white;
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .hozio-results-table td {
+            padding: 16px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .hozio-results-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .hozio-results-table tr:nth-child(even) {
+            background: #f9fafb;
+        }
+        
+        .hozio-created-terms {
+            background: linear-gradient(135deg, rgba(141, 198, 63, 0.1) 0%, rgba(141, 198, 63, 0.05) 100%);
+            border: 1px solid rgba(141, 198, 63, 0.2);
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .hozio-created-terms h3 {
+            color: var(--hozio-green-dark);
+            margin: 0 0 15px 0 !important;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .hozio-terms-list {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 14px;
+            color: var(--hozio-green-dark);
+            line-height: 1.6;
+        }
+        
+        .hozio-success-notice {
+            background: linear-gradient(135deg, rgba(141, 198, 63, 0.1) 0%, rgba(141, 198, 63, 0.05) 100%);
+            border: 1px solid rgba(141, 198, 63, 0.2);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .hozio-success-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            color: var(--hozio-green-dark);
+            margin-bottom: 8px;
+        }
+        
+        .hozio-error-notice {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .hozio-error-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            color: #dc2626;
+            margin-bottom: 8px;
+        }
+        
+        .hozio-error-text {
+            color: #dc2626;
+            font-size: 14px;
+        }
+        
+        @media (max-width: 782px) {
+            .hozio-taxonomies-wrapper {
+                margin: 20px 0;
+            }
+            
+            .hozio-taxonomies-header {
+                padding: 30px 20px;
+            }
+            
+            .hozio-taxonomies-header h1 {
+                font-size: 24px;
+            }
+            
+            .hozio-taxonomies-content {
+                padding: 0 20px 20px;
+            }
+            
+            .hozio-taxonomies-card {
+                padding: 20px;
+                margin: 20px 0;
+            }
+            
+            .hozio-button-group {
+                flex-direction: column;
+            }
+            
+            .hozio-btn-primary,
+            .hozio-btn-secondary {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+    
+    <script>
+    jQuery(document).ready(function($) {
+        // Form submission with loading state
+        $('form').on('submit', function() {
+            const $btn = $('.hozio-btn-primary');
+            const originalText = $btn.html();
+            $btn.html('<span class="dashicons dashicons-update-alt" style="animation: spin 1s linear infinite;"></span> Processing...');
+            $btn.prop('disabled', true);
+            
+            // Re-enable after a delay (in case of redirect)
+            setTimeout(function() {
+                $btn.html(originalText);
+                $btn.prop('disabled', false);
+            }, 5000);
+        });
+    });
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    </script>
+    <?php
+}
+add_action('admin_head', 'hozio_town_taxonomies_admin_styles');
+
+// Render the taxonomy selection page with Hozio styling
 function render_connect_town_taxonomies_page() {
     // Handle form submission
     if (isset($_POST['submit_connect_taxonomies']) && check_admin_referer('connect_town_taxonomies_action')) {
@@ -230,74 +651,119 @@ function render_connect_town_taxonomies_page() {
     ));
 
     ?>
-    <div class="wrap">
-        <h1>Connect Town Taxonomies</h1>
-        
-        <div class="notice notice-info">
-            <p><strong>How this works:</strong> Select the Page Taxonomies below. The system will find all pages with those taxonomies and automatically create Town Taxonomies based on each page's slug. Parent pages will be skipped automatically.</p>
+    <div class="hozio-taxonomies-wrapper">
+        <div class="hozio-taxonomies-header">
+            <div class="hozio-header-content">
+                <h1>
+                    <span class="dashicons dashicons-networking"></span>
+                    Connect Town Taxonomies
+                </h1>
+                <p class="hozio-taxonomies-subtitle">Automatically create and assign town taxonomies to your pages</p>
+            </div>
         </div>
 
-        <form method="post" action="">
-            <?php wp_nonce_field('connect_town_taxonomies_action'); ?>
-            
-            <table class="form-table">
-                <tr>
-                    <th scope="row">Select Page Taxonomies</th>
-                    <td>
-                        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; background: #fff;">
-                            <label style="display: block; margin-bottom: 15px; font-weight: bold;">
-                                <input type="checkbox" id="select-all-taxonomies" style="margin-right: 8px;">
-                                Select All
-                            </label>
-                            <hr style="margin: 10px 0;">
-                            
-                            <?php if (empty($all_taxonomies)): ?>
-                                <p>No Page Taxonomies found.</p>
-                            <?php else: ?>
-                                <?php foreach ($all_taxonomies as $term): ?>
-                                    <label style="display: block; padding: 10px; margin: 5px 0; background: #f6f7f7; border-radius: 4px;">
-                                        <input type="checkbox" name="selected_page_taxonomies[]" value="<?php echo esc_attr($term->term_id); ?>" class="taxonomy-checkbox" style="margin-right: 8px;">
-                                        <strong><?php echo esc_html($term->name); ?></strong> <span style="color: #666;">(<?php echo $term->count; ?> pages)</span>
-                                    </label>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </div>
-                        <p class="description">Pages with these taxonomies will have Town Taxonomies created based on their slugs.</p>
-                    </td>
-                </tr>
-            </table>
+        <div class="hozio-taxonomies-content">
+            <!-- Info Card -->
+            <div class="hozio-taxonomies-card info-card">
+                <div class="hozio-card-header">
+                    <span class="dashicons dashicons-info"></span>
+                    <h2>How This Works</h2>
+                </div>
+                
+                <div class="hozio-info-notice">
+                    <div class="hozio-info-header">
+                        <span class="dashicons dashicons-lightbulb"></span>
+                        Process Overview
+                    </div>
+                    <div class="hozio-info-text">
+                        Select the Page Taxonomies below and the system will find all pages with those taxonomies, then automatically create Town Taxonomies based on each page's slug. Parent pages will be automatically skipped to ensure optimal organization.
+                    </div>
+                </div>
+            </div>
 
-            <p class="submit">
-                <input type="submit" name="submit_connect_taxonomies" class="button button-primary" value="Connect Town Taxonomies">
-                <a href="<?php echo admin_url('edit.php?post_type=page'); ?>" class="button">Cancel</a>
-            </p>
-        </form>
+            <!-- Selection Form -->
+            <form method="post" action="">
+                <?php wp_nonce_field('connect_town_taxonomies_action'); ?>
+                
+                <div class="hozio-taxonomies-card selection-card">
+                    <div class="hozio-card-header">
+                        <span class="dashicons dashicons-category"></span>
+                        <h2>Select Page Taxonomies</h2>
+                    </div>
+                    
+                    <div class="hozio-taxonomies-selection">
+                        <?php if (empty($all_taxonomies)): ?>
+                            <div style="text-align: center; padding: 40px; color: #6b7280;">
+                                <span class="dashicons dashicons-warning" style="font-size: 48px; margin-bottom: 16px; display: block;"></span>
+                                <p style="margin: 0; font-size: 16px;">No Page Taxonomies found.</p>
+                                <p style="margin: 8px 0 0; font-size: 14px;">Create some page taxonomies first to use this feature.</p>
+                            </div>
+                        <?php else: ?>
+                            <?php foreach ($all_taxonomies as $term): ?>
+                                <label class="hozio-taxonomy-item">
+                                    <input type="checkbox" name="selected_page_taxonomies[]" value="<?php echo esc_attr($term->term_id); ?>" class="taxonomy-checkbox">
+                                    <div class="hozio-taxonomy-info">
+                                        <div class="hozio-taxonomy-name"><?php echo esc_html($term->name); ?></div>
+                                        <div class="hozio-taxonomy-count"><?php echo $term->count; ?> pages</div>
+                                    </div>
+                                    <span class="dashicons dashicons-arrow-right-alt" style="color: var(--hozio-green); opacity: 0.6;"></span>
+                                </label>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                    
+                    <div class="hozio-button-group">
+                        <button type="submit" name="submit_connect_taxonomies" class="hozio-btn-primary">
+                            <span class="dashicons dashicons-networking"></span>
+                            Connect Town Taxonomies
+                        </button>
+                        <a href="<?php echo admin_url('edit.php?post_type=page'); ?>" class="hozio-btn-secondary">
+                            <span class="dashicons dashicons-arrow-left-alt"></span>
+                            Back to Pages
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
     </div>
-
-    <script type="text/javascript">
-    jQuery(document).ready(function($) {
-        $('#select-all-taxonomies').on('change', function() {
-            $('.taxonomy-checkbox').prop('checked', this.checked);
-        });
-    });
-    </script>
-
-    <style>
-        .taxonomy-checkbox:checked + strong { color: #2271b1; }
-    </style>
     <?php
 }
 
-// Process the connection based on selected taxonomies
+// Process the connection based on selected taxonomies with Hozio styling
 function process_taxonomy_based_connection() {
     if (empty($_POST['selected_page_taxonomies']) || !is_array($_POST['selected_page_taxonomies'])) {
         ?>
-        <div class="wrap">
-            <h1>Connect Town Taxonomies</h1>
-            <div class="notice notice-error">
-                <p><strong>Error:</strong> Please select at least one Page Taxonomy.</p>
+        <div class="hozio-taxonomies-wrapper">
+            <div class="hozio-taxonomies-header">
+                <div class="hozio-header-content">
+                    <h1>
+                        <span class="dashicons dashicons-warning"></span>
+                        Connection Error
+                    </h1>
+                    <p class="hozio-taxonomies-subtitle">Please review the issue below and try again</p>
+                </div>
             </div>
-            <p><a href="<?php echo admin_url('admin.php?page=connect-town-taxonomies'); ?>" class="button">Go Back</a></p>
+
+            <div class="hozio-taxonomies-content">
+                <div class="hozio-taxonomies-card">
+                    <div class="hozio-error-notice">
+                        <div class="hozio-error-header">
+                            <span class="dashicons dashicons-dismiss"></span>
+                            Selection Required
+                        </div>
+                        <div class="hozio-error-text">
+                            Please select at least one Page Taxonomy to proceed with the connection process.
+                        </div>
+                    </div>
+                    
+                    <div class="hozio-button-group">
+                        <a href="<?php echo admin_url('admin.php?page=connect-town-taxonomies'); ?>" class="hozio-btn-primary">
+                            <span class="dashicons dashicons-arrow-left-alt"></span>
+                            Go Back & Select
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
         <?php
         return;
@@ -307,6 +773,23 @@ function process_taxonomy_based_connection() {
     $processed = 0;
     $skipped = 0;
     $created_terms = array();
+    $taxonomy_breakdown = array(); // Track which taxonomies processed which pages
+    
+    // Get selected taxonomy names for display
+    $selected_taxonomies = get_terms(array(
+        'taxonomy' => 'parent_pages',
+        'include' => $selected_taxonomy_ids,
+        'hide_empty' => false,
+    ));
+    
+    // Initialize breakdown array
+    foreach ($selected_taxonomies as $taxonomy) {
+        $taxonomy_breakdown[$taxonomy->term_id] = array(
+            'name' => $taxonomy->name,
+            'count' => 0,
+            'created_terms' => array()
+        );
+    }
 
     // Get all pages that have any of the selected taxonomies
     $args = array(
@@ -339,7 +822,11 @@ function process_taxonomy_based_connection() {
             continue;
         }
 
+        // Get page taxonomies for this specific page
+        $page_taxonomies = wp_get_post_terms($post->ID, 'parent_pages', array('fields' => 'ids'));
+        
         $slug = $post->post_name;
+        $term_created = false;
 
         // Check if town taxonomy term already exists with this slug
         $term = term_exists($slug, 'town_taxonomies');
@@ -354,6 +841,7 @@ function process_taxonomy_based_connection() {
             
             if (!is_wp_error($term)) {
                 $created_terms[] = $slug;
+                $term_created = true;
             }
         }
 
@@ -362,54 +850,136 @@ function process_taxonomy_based_connection() {
             $term_id = is_array($term) ? $term['term_id'] : $term;
             wp_set_post_terms($post->ID, array($term_id), 'town_taxonomies', false);
             $processed++;
+            
+            // Track which page taxonomies this applies to
+            foreach ($page_taxonomies as $page_tax_id) {
+                if (in_array($page_tax_id, $selected_taxonomy_ids)) {
+                    $taxonomy_breakdown[$page_tax_id]['count']++;
+                    if ($term_created && !in_array($slug, $taxonomy_breakdown[$page_tax_id]['created_terms'])) {
+                        $taxonomy_breakdown[$page_tax_id]['created_terms'][] = $slug;
+                    }
+                }
+            }
         }
     }
 
-    // Display results
+    // Display results with Hozio styling
     ?>
-    <div class="wrap">
-        <h1>Connection Complete</h1>
-        
-        <div class="notice notice-success">
-            <p><strong>Success!</strong> Town taxonomies have been connected.</p>
+    <div class="hozio-taxonomies-wrapper">
+        <div class="hozio-taxonomies-header">
+            <div class="hozio-header-content">
+                <h1>
+                    <span class="dashicons dashicons-yes"></span>
+                    Connection Complete
+                </h1>
+                <p class="hozio-taxonomies-subtitle">Town taxonomies have been successfully connected to your pages</p>
+            </div>
         </div>
 
-        <table class="widefat" style="margin-top: 20px; max-width: 800px;">
-            <thead>
-                <tr>
-                    <th>Result</th>
-                    <th>Count</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><strong>Pages Processed</strong></td>
-                    <td><?php echo $processed; ?></td>
-                </tr>
-                <tr>
-                    <td><strong>Pages Skipped</strong> (parent pages)</td>
-                    <td><?php echo $skipped; ?></td>
-                </tr>
-                <tr>
-                    <td><strong>New Town Taxonomies Created</strong></td>
-                    <td><?php echo count($created_terms); ?></td>
-                </tr>
-            </tbody>
-        </table>
-
-        <?php if (!empty($created_terms)): ?>
-            <div style="margin-top: 20px; max-width: 800px;">
-                <h3>New Town Taxonomies Created:</h3>
-                <div style="background: #f6f7f7; padding: 15px; border-radius: 4px;">
-                    <?php echo implode(', ', array_map('esc_html', $created_terms)); ?>
+        <div class="hozio-taxonomies-content">
+            <div class="hozio-taxonomies-card results-card">
+                <div class="hozio-card-header">
+                    <span class="dashicons dashicons-chart-bar"></span>
+                    <h2>Processing Results</h2>
                 </div>
-            </div>
-        <?php endif; ?>
+                
+                <div class="hozio-success-notice">
+                    <div class="hozio-success-header">
+                        <span class="dashicons dashicons-yes-alt"></span>
+                        Operation Successful
+                    </div>
+                    <div style="color: var(--hozio-green-dark); font-size: 14px;">
+                        The town taxonomy connection process has been completed successfully.
+                    </div>
+                </div>
 
-        <p style="margin-top: 20px;">
-            <a href="<?php echo admin_url('edit.php?post_type=page'); ?>" class="button button-primary">Back to Pages</a>
-            <a href="<?php echo admin_url('admin.php?page=connect-town-taxonomies'); ?>" class="button">Run Again</a>
-        </p>
+                <table class="hozio-results-table">
+                    <thead>
+                        <tr>
+                            <th><span class="dashicons dashicons-info" style="margin-right: 8px;"></span>Result Type</th>
+                            <th><span class="dashicons dashicons-chart-pie" style="margin-right: 8px;"></span>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Pages Processed</strong></td>
+                            <td><span style="color: var(--hozio-blue); font-weight: 600;"><?php echo $processed; ?></span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Pages Skipped</strong> (parent pages)</td>
+                            <td><span style="color: var(--hozio-orange); font-weight: 600;"><?php echo $skipped; ?></span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>New Town Taxonomies Created</strong></td>
+                            <td><span style="color: var(--hozio-green); font-weight: 600;"><?php echo count($created_terms); ?></span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Breakdown by Page Taxonomy -->
+            <div class="hozio-taxonomies-card info-card">
+                <div class="hozio-card-header">
+                    <span class="dashicons dashicons-category"></span>
+                    <h2>Breakdown by Page Taxonomy</h2>
+                </div>
+                
+                <table class="hozio-results-table">
+                    <thead>
+                        <tr>
+                            <th><span class="dashicons dashicons-tag" style="margin-right: 8px;"></span>Page Taxonomy</th>
+                            <th><span class="dashicons dashicons-networking" style="margin-right: 8px;"></span>Town Taxonomies Connected</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($taxonomy_breakdown as $breakdown): ?>
+                            <tr>
+                                <td><strong><?php echo esc_html($breakdown['name']); ?></strong></td>
+                                <td><span style="color: var(--hozio-green); font-weight: 600;"><?php echo $breakdown['count']; ?></span></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <?php if (!empty($created_terms)): ?>
+                <!-- Created Terms List -->
+                <div class="hozio-taxonomies-card selection-card">
+                    <div class="hozio-card-header">
+                        <span class="dashicons dashicons-tag"></span>
+                        <h2>New Town Taxonomies Created</h2>
+                    </div>
+                    
+                    <div class="hozio-created-terms">
+                        <div style="background: linear-gradient(135deg, rgba(141, 198, 63, 0.1) 0%, rgba(141, 198, 63, 0.05) 100%); border: 1px solid rgba(141, 198, 63, 0.2); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                            <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--hozio-green-dark); margin-bottom: 8px;">
+                                <span class="dashicons dashicons-info"></span>
+                                Summary
+                            </div>
+                            <div style="color: var(--hozio-green-dark); font-size: 14px;">
+                                Created <strong><?php echo count($created_terms); ?></strong> new town taxonomies based on page slugs. These town taxonomies are now connected to their respective pages and can be used for organization and filtering.
+                            </div>
+                        </div>
+                        
+                        <div class="hozio-terms-list">
+                            <?php echo implode(', ', array_map('esc_html', $created_terms)); ?>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <div class="hozio-button-group" style="margin-top: 30px;">
+                <a href="<?php echo admin_url('edit.php?post_type=page'); ?>" class="hozio-btn-primary">
+                    <span class="dashicons dashicons-arrow-left-alt"></span>
+                    Back to Pages
+                </a>
+                <a href="<?php echo admin_url('admin.php?page=connect-town-taxonomies'); ?>" class="hozio-btn-secondary">
+                    <span class="dashicons dashicons-controls-repeat"></span>
+                    Run Again
+                </a>
+            </div>
+        </div>
     </div>
     <?php
 }
+?>
