@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.5.1
+Version:         3.5.2
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -24,6 +24,7 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/custom-parent-pages-queries
 require_once plugin_dir_path( __FILE__ ) . 'includes/acf-filters.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/leads-digest.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-media-replace-endpoint.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/query-post-types.php';
 
 
 add_action( 'init', function() {
@@ -89,7 +90,7 @@ function hozio_dynamic_tags_menu() {
         'Blog Permalink Settings',
         'manage_options',
         'hozio-permalink-settings',
-        'hozio_permalink_settings_html'
+        'hozio_custom_permalink_settings_page'
     );
         // Add the new submenu for post type configuration
     add_submenu_page(
@@ -104,68 +105,6 @@ function hozio_dynamic_tags_menu() {
 
 add_action('admin_menu', 'hozio_dynamic_tags_menu');
 
-function hozio_query_post_types_page() {
-    if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['selected_post_types'] ) ) {
-        // Save selected post types to options
-        update_option( 'hozio_selected_post_types', array_map( 'sanitize_text_field', $_POST['selected_post_types'] ) );
-        echo '<div class="notice notice-success"><p>Post types saved successfully.</p></div>';
-    }
-
-    // Get all public post types
-    $post_types = get_post_types( [ 'public' => true ], 'objects' );
-
-    // Define post types to exclude
-    $excluded_post_types = [
-        'post',        // Posts
-        'page',        // Pages
-        'attachment',  // Media
-        'landing_pages', // Landing Pages (custom post type)
-        'floating_elements', // Floating Elements (custom post type)
-        'my_templates', // My Templates (custom post type)
-        'template',    // Template (custom post type)
-        'widget',      // Widgets (custom post type)
-    ];
-
-    // Filter out excluded post types
-    $post_types = array_filter( $post_types, function( $post_type ) use ( $excluded_post_types ) {
-        return ! in_array( $post_type->name, $excluded_post_types );
-    });
-
-    // Get saved post types
-    $selected_post_types = get_option( 'hozio_selected_post_types', [] );
-    ?>
-    <div class="wrap">
-        <h1><?php esc_html_e( 'Query Post Types', 'text-domain' ); ?></h1>
-        <form method="POST">
-            <table class="form-table">
-                <tbody>
-                    <?php foreach ( $post_types as $post_type ): ?>
-                        <tr>
-                            <th scope="row">
-                                <label for="post-type-<?php echo esc_attr( $post_type->name ); ?>">
-                                    <?php echo esc_html( $post_type->label ); ?>
-                                </label>
-                            </th>
-                            <td>
-                                <input
-                                    type="checkbox"
-                                    name="selected_post_types[]"
-                                    id="post-type-<?php echo esc_attr( $post_type->name ); ?>"
-                                    value="<?php echo esc_attr( $post_type->name ); ?>"
-                                    <?php checked( in_array( $post_type->name, $selected_post_types ) ); ?>
-                                />
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-            <p class="submit">
-                <button type="submit" class="button button-primary"><?php esc_html_e( 'Save Settings', 'text-domain' ); ?></button>
-            </p>
-        </form>
-    </div>
-    <?php
-}
 
 
 
@@ -274,36 +213,7 @@ function hozio_custom_permalink_register_setting() {
     register_setting('hozio_permalink_settings', 'hozio_custom_permalink_enabled');
 }
 
-// Render the settings page HTML for custom permalinks
-function hozio_permalink_settings_html() {
-    if (!current_user_can('manage_options')) {
-        return;
-    }
-    ?>
-    <div class="wrap">
-        <h1>Custom Permalink Settings</h1>
-        <form method="post" action="options.php">
-            <?php
-            settings_fields('hozio_permalink_settings');
-            do_settings_sections('hozio_permalink_settings');
-            ?>
-            <table class="form-table">
-                <tr valign="top">
-                    <th scope="row">Enable/Disable Custom Blog Permalink</th>
-                    <td>
-                        <input type="checkbox" name="hozio_custom_permalink_enabled" value="1" <?php checked(1, get_option('hozio_custom_permalink_enabled'), true); ?> />
-                    </td>
-                </tr>
-            </table>
-            <p>Enabling this plugin will add the slug "blog" to all posts.</p>
-            <p><strong>Example if enabled:</strong> domain.com/blog/category/post-name</p>
-            <p><strong>Example if disabled:</strong> domain.com/category/post-name</p>
-            <p><em>To remove the category, go to <strong>Settings > Permalinks</strong> and remove "%category%" from the custom structure.</em></p>
-            <?php submit_button(); ?>
-        </form>
-    </div>
-    <?php
-}
+
 
 // Hook to modify the permalink structure
 add_filter('post_link', 'hozio_custom_post_link', 10, 2);
