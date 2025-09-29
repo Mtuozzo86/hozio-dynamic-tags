@@ -466,7 +466,7 @@ function hozio_custom_permalink_settings_page() {
                         <div class="hozio-toggle-label">
                             <div class="hozio-toggle-title">Enable Custom Permalinks</div>
                             <div class="hozio-toggle-description">
-                                Change blog post URLs to include category: /blog/category/post-name/
+                                Add "/blog/" prefix to all blog post URLs: /blog/category/post-name/
                             </div>
                         </div>
                     </div>
@@ -477,7 +477,7 @@ function hozio_custom_permalink_settings_page() {
                             Important Notice
                         </div>
                         <div class="hozio-warning-text">
-                            Changing permalink structure may affect SEO and existing links. 
+                            Enabling this adds "/blog/" to the beginning of all post URLs. This may affect SEO and existing links.
                             Consider setting up redirects for existing URLs.
                         </div>
                     </div>
@@ -502,7 +502,7 @@ function hozio_custom_permalink_settings_page() {
                                 Current (Default) Structure:
                             </div>
                             <div class="hozio-example-url">
-                                <?php echo home_url('/sample-blog-post/'); ?>
+                                <?php echo home_url('/category-name/sample-blog-post/'); ?>
                             </div>
                         </div>
                         
@@ -529,25 +529,31 @@ function hozio_custom_permalink_settings_page() {
                         <li>
                             <span class="dashicons dashicons-arrow-right-alt hozio-info-icon"></span>
                             <div>
-                                <strong>Automatic Category Detection:</strong> Uses the first category assigned to each blog post
+                                <strong>Adds Blog Prefix:</strong> Prepends "/blog/" to all post URLs for better organization
                             </div>
                         </li>
                         <li>
                             <span class="dashicons dashicons-arrow-right-alt hozio-info-icon"></span>
                             <div>
-                                <strong>SEO Friendly:</strong> Creates descriptive URLs that include relevant keywords
+                                <strong>Includes Categories:</strong> Maintains category structure within the blog section (can be changed in Settings > Permalinks)
                             </div>
                         </li>
                         <li>
                             <span class="dashicons dashicons-arrow-right-alt hozio-info-icon"></span>
                             <div>
-                                <strong>Only Affects Posts:</strong> Custom pages and other content types remain unchanged
+                                <strong>SEO Friendly:</strong> Creates organized URLs like /blog/category/post-name/
                             </div>
                         </li>
                         <li>
                             <span class="dashicons dashicons-arrow-right-alt hozio-info-icon"></span>
                             <div>
                                 <strong>Instant Updates:</strong> Changes apply immediately to new and existing posts
+                            </div>
+                        </li>
+                        <li>
+                            <span class="dashicons dashicons-arrow-right-alt hozio-info-icon"></span>
+                            <div>
+                                <strong>Only Affects Posts:</strong> Pages and other content types remain unchanged
                             </div>
                         </li>
                     </ul>
@@ -558,3 +564,4 @@ function hozio_custom_permalink_settings_page() {
     <?php
 }
 ?>
+
