@@ -564,4 +564,3 @@ function hozio_custom_permalink_settings_page() {
     <?php
 }
 ?>
-
