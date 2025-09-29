@@ -330,6 +330,20 @@ function hozio_dynamic_tags_render_input($args) {
     $option = get_option($args['label_for'], '');
     $field_id = $args['label_for'];
     
+    // Check if this is a custom tag
+    $is_custom_tag = false;
+    if (strpos($field_id, 'hozio_') === 0) {
+        $custom_tags = get_option('hozio_custom_tags', []);
+        if (is_array($custom_tags)) {
+            foreach ($custom_tags as $tag) {
+                if ('hozio_' . $tag['value'] === $field_id) {
+                    $is_custom_tag = true;
+                    break;
+                }
+            }
+        }
+    }
+    
     echo '<div class="hozio-field-wrapper">';
     
     if ($field_id === 'hozio_start_year') {
@@ -357,12 +371,12 @@ function hozio_dynamic_tags_render_input($args) {
             esc_attr($field_id),
             esc_attr($option)
         );
-    } elseif ($field_id === 'hozio_company_address' || $field_id === 'hozio_business_hours') {
+    } elseif ($field_id === 'hozio_company_address' || $field_id === 'hozio_business_hours' || $is_custom_tag) {
+        // Render textarea for fields that may contain HTML (including ALL custom tags)
         printf(
-            '<textarea id="%1$s" name="%1$s" class="hozio-textarea" rows="4" placeholder="Enter %2$s...">%3$s</textarea>
+            '<textarea id="%1$s" name="%1$s" class="hozio-textarea" rows="4" placeholder="Enter content...">%2$s</textarea>
             <p class="hozio-field-description">HTML tags are allowed in this field</p>',
             esc_attr($field_id),
-            esc_attr(str_replace(['hozio_', '_'], ['', ' '], $field_id)),
             esc_textarea($option)
         );
     } else {
@@ -614,14 +628,23 @@ function hozio_dynamic_tags_save_settings() {
         }
     }
 
-    $custom_tags = get_option('hozio_custom_tags', []);
-    if (is_array($custom_tags)) {
-        foreach ($custom_tags as $tag) {
-            if (isset($_POST['hozio_' . $tag['value']])) {
-                update_option('hozio_' . $tag['value'], sanitize_text_field($_POST['hozio_' . $tag['value']]));
-            }
-        }
-    }
+    // FIXED: Use wp_kses_post() for custom tags to allow HTML
+	$custom_tags = get_option('hozio_custom_tags', []);
+	if (is_array($custom_tags)) {
+		foreach ($custom_tags as $tag) {
+			if (isset($_POST['hozio_' . $tag['value']])) {
+				$value = wp_unslash($_POST['hozio_' . $tag['value']]);
+				
+				// If it contains <script> tag, store as-is (only for admin users)
+				if (strpos($value, '<script') !== false && current_user_can('manage_options')) {
+					update_option('hozio_' . $tag['value'], $value);
+				} else {
+					// For other HTML, use normal sanitization
+					update_option('hozio_' . $tag['value'], wp_kses_post($value));
+				}
+			}
+		}
+	}
 
     wp_redirect(add_query_arg('settings-updated', 'true', admin_url('admin.php?page=hozio_dynamic_tags')));
     exit;
