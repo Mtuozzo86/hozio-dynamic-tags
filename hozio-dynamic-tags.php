@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.5.3
+Version:         3.5.4
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -586,3 +586,56 @@ add_filter('template_include', function($template) {
     }
     return $template;
 });
+
+class Your_Plugin_ACF_Maps {
+    
+    public function __construct() {
+        // Register shortcode
+        add_shortcode('gmb_map', array($this, 'output_gmb_map'));
+        
+        // Allow iframes for administrators
+        add_filter('content_save_pre', array($this, 'allow_iframes'));
+    }
+    
+    /**
+     * Output GMB map shortcode
+     */
+    public function output_gmb_map($atts) {
+        $atts = shortcode_atts(array(
+            'field' => 'gmb_map',
+            'post_id' => get_the_ID()
+        ), $atts);
+        
+        $map_code = get_field($atts['field'], $atts['post_id'], false);
+        
+        if (!empty($map_code)) {
+            return $map_code;
+        }
+        
+        return '';
+    }
+    
+    /**
+     * Allow iframes in content
+     */
+    public function allow_iframes($content) {
+        global $allowedposttags;
+        
+        $allowedposttags['iframe'] = array(
+            'src' => true,
+            'width' => true,
+            'height' => true,
+            'frameborder' => true,
+            'allowfullscreen' => true,
+            'style' => true,
+            'loading' => true,
+            'referrerpolicy' => true,
+            'allow' => true,
+        );
+        
+        return $content;
+    }
+}
+
+// Initialize the ACF Maps functionality
+new Your_Plugin_ACF_Maps();
