@@ -405,7 +405,7 @@ document.addEventListener('DOMContentLoaded', function() {
     border: 1px solid #e0e0e0;
     transition: none;
     margin-bottom: 2rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: none;
 }
 
 .sitemap-section:hover {
@@ -433,13 +433,19 @@ document.addEventListener('DOMContentLoaded', function() {
 /* Section Accordion Styles for Posts */
 .sitemap-section-accordion {
     overflow: hidden;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.sitemap-section-accordion:hover {
+    background: rgba(0, 0, 0, 0.03);
 }
 
 .section-accordion-header {
     cursor: pointer;
     user-select: none;
     justify-content: space-between;
-    margin-bottom: 0 !important;
+    margin-bottom: -0.75rem !important;
     padding-bottom: 0.75rem !important;
     transition: all 0.2s ease;
     position: relative;
@@ -448,6 +454,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .section-accordion-header.active {
     border-bottom: 1px solid #000000 !important;
+    margin-bottom: 0 !important;
 }
 
 .section-title-content {
@@ -487,7 +494,7 @@ document.addEventListener('DOMContentLoaded', function() {
     height: 24px;
 }
 
-.section-accordion-header:hover .section-accordion-icon {
+.sitemap-section-accordion:hover .section-accordion-icon {
     transform: translateY(2px);
 }
 
@@ -495,7 +502,7 @@ document.addEventListener('DOMContentLoaded', function() {
     transform: rotate(180deg);
 }
 
-.section-accordion-header.active:hover .section-accordion-icon {
+.sitemap-section-accordion:hover .section-accordion-header.active .section-accordion-icon {
     transform: rotate(180deg) translateY(2px);
 }
 
@@ -856,26 +863,35 @@ document.addEventListener('DOMContentLoaded', function() {
     const sectionAccordionHeaders = document.querySelectorAll('.section-accordion-header');
     
     sectionAccordionHeaders.forEach(header => {
-        header.addEventListener('click', function() {
-            const content = this.nextElementSibling;
-            const isActive = this.classList.contains('active');
+        // Get the parent section
+        const section = header.closest('.sitemap-section-accordion');
+        
+        const clickHandler = function() {
+            const content = header.nextElementSibling;
+            const isActive = header.classList.contains('active');
             
-            this.classList.toggle('active');
+            header.classList.toggle('active');
             content.classList.toggle('active');
             
-            this.setAttribute('aria-expanded', !isActive);
+            header.setAttribute('aria-expanded', !isActive);
             
             if (!isActive) {
                 content.style.maxHeight = content.scrollHeight + 'px';
             } else {
                 content.style.maxHeight = '0';
             }
-        });
+        };
         
+        // Add click handler to entire section
+        if (section) {
+            section.addEventListener('click', clickHandler);
+        }
+        
+        // Keyboard accessibility
         header.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                this.click();
+                clickHandler();
             }
         });
     });
