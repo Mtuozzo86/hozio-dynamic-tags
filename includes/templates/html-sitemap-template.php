@@ -74,18 +74,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Separate pages into accordion parents and regular pages
                     $accordion_parents = array();
                     $regular_pages = array();
-                    $child_page_ids = array(); // Track child pages to exclude from regular list
+                    $child_page_ids = array();
 
                     foreach ($all_pages as $page) {
-                        // Check if page has "Service Pages Loop Item" taxonomy
                         $page_taxonomies = wp_get_post_terms($page->ID, 'parent_pages', array('fields' => 'names'));
                         $is_service_loop = in_array('Service Pages Loop Item', $page_taxonomies);
-                        
-                        // Check if this is the "Services" page
                         $is_services_page = (strtolower($page->post_title) === 'services');
                         
                         if ($is_service_loop) {
-                            // Check if page has children
                             $children = get_children(array(
                                 'post_parent' => $page->ID,
                                 'post_type' => 'page',
@@ -94,7 +90,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 'order' => 'ASC'
                             ));
                             
-                            // Filter children for noindex
                             $children = array_filter($children, function($child) {
                                 $yoast_noindex = get_post_meta($child->ID, '_yoast_wpseo_meta-robots-noindex', true);
                                 return $yoast_noindex !== '1';
@@ -105,16 +100,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                     'page' => $page,
                                     'children' => $children
                                 );
-                                // Track child IDs
                                 foreach ($children as $child) {
                                     $child_page_ids[] = $child->ID;
                                 }
                             } else {
-                                // No children, treat as regular page
                                 $regular_pages[] = $page;
                             }
                         } elseif ($is_services_page) {
-                            // Special handling for "Services" page
                             $children = get_children(array(
                                 'post_parent' => $page->ID,
                                 'post_type' => 'page',
@@ -123,34 +115,27 @@ document.addEventListener('DOMContentLoaded', function() {
                                 'order' => 'ASC'
                             ));
                             
-                            // Filter out children with "Service Pages Loop Item" taxonomy and noindex
                             $children = array_filter($children, function($child) {
-                                // Check for noindex
                                 $yoast_noindex = get_post_meta($child->ID, '_yoast_wpseo_meta-robots-noindex', true);
                                 if ($yoast_noindex === '1') {
                                     return false;
                                 }
                                 
-                                // Check if child has "Service Pages Loop Item" taxonomy
                                 $child_taxonomies = wp_get_post_terms($child->ID, 'parent_pages', array('fields' => 'names'));
                                 $has_service_loop = in_array('Service Pages Loop Item', $child_taxonomies);
                                 
-                                // Only include if it doesn't have the taxonomy
                                 return !$has_service_loop;
                             });
                             
                             if (!empty($children)) {
-                                // Has valid children, create accordion
                                 $accordion_parents[$page->ID] = array(
                                     'page' => $page,
                                     'children' => $children
                                 );
-                                // Track child IDs
                                 foreach ($children as $child) {
                                     $child_page_ids[] = $child->ID;
                                 }
                             } else {
-                                // No valid children, treat as regular page
                                 $regular_pages[] = $page;
                             }
                         } else {
@@ -158,12 +143,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     }
 
-                    // Remove child pages from regular pages list
                     $regular_pages = array_filter($regular_pages, function($page) use ($child_page_ids) {
                         return !in_array($page->ID, $child_page_ids);
                     });
                     
-                    // Sort regular pages alphabetically by title
                     usort($regular_pages, function($a, $b) {
                         return strcmp($a->post_title, $b->post_title);
                     });
@@ -197,13 +180,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </div>
                                     <div class="sitemap-accordion-content">
                                         <ul class="sitemap-list accordion-child-list">
-                                            <!-- Parent page first -->
                                             <li class="sitemap-item">
                                                 <a href="<?php echo get_permalink($accordion['page']->ID); ?>" class="sitemap-link">
                                                     <?php echo esc_html($accordion['page']->post_title ? $accordion['page']->post_title : 'Untitled'); ?>
                                                 </a>
                                             </li>
-                                            <!-- Child pages alphabetically -->
                                             <?php foreach ($accordion['children'] as $child): ?>
                                                 <li class="sitemap-item">
                                                     <a href="<?php echo get_permalink($child->ID); ?>" class="sitemap-link">
@@ -219,43 +200,58 @@ document.addEventListener('DOMContentLoaded', function() {
                     <?php endif; ?>
                 </section>
 
-                <!-- Posts Section -->
-                <section class="sitemap-section sitemap-posts">
-                    <h2 class="section-title">
-                        <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 20h9"/>
-                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                        </svg>
-                        Recent Posts
+                <!-- Posts Section - ENTIRE SECTION AS ACCORDION -->
+                <?php
+                $recent_posts = get_posts(array(
+                    'numberposts' => 20,
+                    'post_status' => 'publish',
+                    'orderby' => 'date',
+                    'order' => 'DESC'
+                ));
+                
+                $recent_posts = array_filter($recent_posts, function($post) {
+                    $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
+                    return $yoast_noindex !== '1';
+                });
+                
+                if (!empty($recent_posts)):
+                ?>
+                <section class="sitemap-section sitemap-posts sitemap-section-accordion">
+                    <h2 class="section-title section-accordion-header" role="button" tabindex="0" aria-expanded="false">
+                        <div class="section-title-content">
+                            <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 20h9"/>
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                            </svg>
+                            <span>Recent Posts <span class="post-count-small">(<?php echo count($recent_posts); ?>)</span></span>
+                        </div>
+                        <div class="section-accordion-trigger">
+                            <span class="accordion-helper-text">View All</span>
+                            <svg class="section-accordion-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
                     </h2>
-                    <ul class="sitemap-list">
-                        <?php
-                        $recent_posts = get_posts(array(
-                            'numberposts' => 20,
-                            'post_status' => 'publish',
-                            'orderby' => 'date',
-                            'order' => 'DESC'
-                        ));
-                        
-                        foreach ($recent_posts as $post) {
-                            setup_postdata($post);
-                            
-                            $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
-                            if ($yoast_noindex === '1') {
-                                continue;
+                    
+                    <div class="section-accordion-content">
+                        <ul class="sitemap-list">
+                            <?php
+                            foreach ($recent_posts as $post) {
+                                setup_postdata($post);
+                                
+                                echo '<li class="sitemap-item">';
+                                echo '<a href="' . get_permalink($post->ID) . '" class="sitemap-link">';
+                                echo esc_html($post->post_title);
+                                echo '</a>';
+                                echo '<span class="post-date">' . get_the_date('M j, Y', $post->ID) . '</span>';
+                                echo '</li>';
                             }
-                            
-                            echo '<li class="sitemap-item">';
-                            echo '<a href="' . get_permalink($post->ID) . '" class="sitemap-link">';
-                            echo esc_html($post->post_title);
-                            echo '</a>';
-                            echo '<span class="post-date">' . get_the_date('M j, Y', $post->ID) . '</span>';
-                            echo '</li>';
-                        }
-                        wp_reset_postdata();
-                        ?>
-                    </ul>
+                            wp_reset_postdata();
+                            ?>
+                        </ul>
+                    </div>
                 </section>
+                <?php endif; ?>
 
                 <!-- Categories Section -->
                 <section class="sitemap-section sitemap-categories">
@@ -341,12 +337,10 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <style>
-/* Reset and Base Styles */
 .sitemap-wrapper * {
     box-sizing: border-box;
 }
 
-/* Main Container */
 .sitemap-wrapper {
     width: 100%;
     margin: 0;
@@ -362,7 +356,6 @@ document.addEventListener('DOMContentLoaded', function() {
     overflow: hidden;
 }
 
-/* Header Styles */
 .sitemap-header {
     background: #ffffff;
     color: #000000;
@@ -398,7 +391,6 @@ document.addEventListener('DOMContentLoaded', function() {
     margin: 0;
 }
 
-/* Single Column Layout */
 .sitemap-grid {
     display: block;
     padding: 2rem 1rem;
@@ -406,7 +398,6 @@ document.addEventListener('DOMContentLoaded', function() {
     margin: 0 auto;
 }
 
-/* Section Styles */
 .sitemap-section {
     background: #ffffff;
     border-radius: 15px;
@@ -439,7 +430,88 @@ document.addEventListener('DOMContentLoaded', function() {
     flex-shrink: 0;
 }
 
-/* Accordion Styles - Ultra High Specificity */
+/* Section Accordion Styles for Posts */
+.sitemap-section-accordion {
+    overflow: hidden;
+}
+
+.section-accordion-header {
+    cursor: pointer;
+    user-select: none;
+    justify-content: space-between;
+    margin-bottom: 0 !important;
+    padding-bottom: 0.75rem !important;
+    transition: all 0.2s ease;
+    position: relative;
+    border-bottom: none !important;
+}
+
+.section-accordion-header.active {
+    border-bottom: 1px solid #000000 !important;
+}
+
+.section-title-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.post-count-small {
+    font-size: 0.875rem;
+    font-weight: 400;
+    opacity: 0.7;
+    margin-left: 0.25rem;
+}
+
+.section-accordion-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.accordion-helper-text {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #000000;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.section-accordion-icon {
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+    color: #000000;
+    stroke: #000000;
+    fill: none;
+    width: 24px;
+    height: 24px;
+}
+
+.section-accordion-header:hover .section-accordion-icon {
+    transform: translateY(2px);
+}
+
+.section-accordion-header.active .section-accordion-icon {
+    transform: rotate(180deg);
+}
+
+.section-accordion-header.active:hover .section-accordion-icon {
+    transform: rotate(180deg) translateY(2px);
+}
+
+.section-accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    padding-top: 0;
+}
+
+.section-accordion-content.active {
+    max-height: 3000px;
+    padding-top: 1.5rem;
+}
+
+/* Pages Accordion Styles */
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordions {
     margin-top: 40px;
     margin-bottom: 1.5rem;
@@ -538,7 +610,6 @@ document.addEventListener('DOMContentLoaded', function() {
     background-color: #ffffff !important;
 }
 
-/* Font size for links inside accordion dropdown */
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link {
     font-size: 16px !important;
     text-decoration: none !important;
@@ -597,7 +668,6 @@ document.addEventListener('DOMContentLoaded', function() {
     margin-left: 1rem;
 }
 
-/* Tag Cloud */
 .tag-cloud {
     display: flex;
     flex-wrap: wrap;
@@ -625,7 +695,6 @@ document.addEventListener('DOMContentLoaded', function() {
     text-decoration: underline;
 }
 
-/* Archives List Special Styling */
 .archives-list {
     columns: 1;
 }
@@ -647,7 +716,6 @@ document.addEventListener('DOMContentLoaded', function() {
     text-decoration: underline;
 }
 
-/* Responsive Design */
 @media (max-width: 768px) {
     .sitemap-wrapper {
         margin: 1rem auto;
@@ -715,7 +783,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 }
 
-/* Consistent styling for all themes */
 .sitemap-wrapper,
 .sitemap-main,
 .sitemap-section {
@@ -723,7 +790,6 @@ document.addEventListener('DOMContentLoaded', function() {
     color: #000000 !important;
 }
 
-/* Print Styles */
 @media print {
     .sitemap-wrapper {
         box-shadow: none;
@@ -749,7 +815,8 @@ document.addEventListener('DOMContentLoaded', function() {
         border: 1px solid #000000;
     }
     
-    .sitemap-accordion-content {
+    .sitemap-accordion-content,
+    .section-accordion-content {
         max-height: none !important;
     }
 }
@@ -757,22 +824,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Handle page accordions
     const accordionHeaders = document.querySelectorAll('.sitemap-accordion-header');
     
     accordionHeaders.forEach(header => {
-        // Click handler
         header.addEventListener('click', function() {
             const content = this.nextElementSibling;
             const isActive = this.classList.contains('active');
             
-            // Toggle active class
             this.classList.toggle('active');
             content.classList.toggle('active');
             
-            // Update aria-expanded
             this.setAttribute('aria-expanded', !isActive);
             
-            // Adjust max-height for smooth animation
             if (!isActive) {
                 content.style.maxHeight = content.scrollHeight + 'px';
             } else {
@@ -780,7 +844,34 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Keyboard accessibility (Enter and Space keys)
+        header.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.click();
+            }
+        });
+    });
+    
+    // Handle section accordion (Posts section)
+    const sectionAccordionHeaders = document.querySelectorAll('.section-accordion-header');
+    
+    sectionAccordionHeaders.forEach(header => {
+        header.addEventListener('click', function() {
+            const content = this.nextElementSibling;
+            const isActive = this.classList.contains('active');
+            
+            this.classList.toggle('active');
+            content.classList.toggle('active');
+            
+            this.setAttribute('aria-expanded', !isActive);
+            
+            if (!isActive) {
+                content.style.maxHeight = content.scrollHeight + 'px';
+            } else {
+                content.style.maxHeight = '0';
+            }
+        });
+        
         header.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
