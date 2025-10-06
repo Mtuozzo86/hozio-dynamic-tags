@@ -1,985 +1,794 @@
 <?php
-// ========================
-// 1) PAGE TAXONOMY
-// ========================
-function create_parent_pages_taxonomy() {
-    $args = array(
-        'hierarchical'      => true,
-        'labels'            => array(
-            'name'              => 'Page Taxonomies',
-            'singular_name'     => 'Page Taxonomy',
-            'search_items'      => 'Search Taxonomies',
-            'all_items'         => 'All Page Taxonomies',
-            'parent_item'       => 'Parent Taxonomy',
-            'parent_item_colon' => 'Parent Taxonomy:',
-            'edit_item'         => 'Edit Page Taxonomy',
-            'update_item'       => 'Update Page Taxonomy',
-            'add_new_item'      => 'Add New Page Taxonomy',
-            'new_item_name'     => 'New Page Taxonomy Name',
-            'menu_name'         => 'Page Taxonomies',
-        ),
-        'show_ui'           => true,
-        'show_admin_column' => false, // <-- disable WP's auto column (we add our own below)
-        'query_var'         => true,
-        'rewrite'           => array('slug' => 'parent-pages'),
-    );
+/*
+Template Name: HTML Sitemap
+*/
 
-    register_taxonomy('parent_pages', 'page', $args);
-}
-add_action('init', 'create_parent_pages_taxonomy');
+get_header(); ?>
 
-// ========================
-// 2) TOWN TAXONOMY
-// ========================
-function create_town_taxonomies_taxonomy() {
-    $args = array(
-        'hierarchical'      => true,
-        'labels'            => array(
-            'name'              => 'Town Taxonomies',
-            'singular_name'     => 'Town Taxonomy',
-            'search_items'      => 'Search Towns',
-            'all_items'         => 'All Town Taxonomies',
-            'parent_item'       => 'Parent Town',
-            'parent_item_colon' => 'Parent Town:',
-            'edit_item'         => 'Edit Town Taxonomy',
-            'update_item'       => 'Update Town Taxonomy',
-            'add_new_item'      => 'Add New Town',
-            'new_item_name'     => 'New Town Name',
-            'menu_name'         => 'Town Taxonomies',
-        ),
-        'show_ui'           => true,
-        'show_admin_column' => false, // <-- disable WP's auto column
-        'query_var'         => true,
-        'rewrite'           => array('slug' => 'town'),
-    );
-
-    register_taxonomy('town_taxonomies', array('page'), $args);
-}
-add_action('init', 'create_town_taxonomies_taxonomy');
-
-// ========================
-// 3) SEARCH BARS ON PAGES LIST
-// ========================
-function add_custom_taxonomy_search_bar() {
-    $screen = get_current_screen();
-    if ($screen && $screen->id === 'edit-page') {
-        ?>
-        <form method="get" id="custom-taxonomy-search-form" action="">
-            <input type="hidden" name="post_type" value="page">
-            <input type="text" name="search_parent_pages" placeholder="Search Parent Pages (Taxonomy)">
-            <input type="submit" value="Search">
-        </form>
-        <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const form = document.getElementById('custom-taxonomy-search-form');
-            const target = document.querySelector('.tablenav.top .actions.bulkactions');
-            if (target && form) target.appendChild(form);
-        });
-        </script>
-        <style>
-            #custom-taxonomy-search-form{display:inline-block;margin-left:10px}
-            #custom-taxonomy-search-form input[type="text"]{margin-right:5px}
-        </style>
-        <?php
+<!-- SEO Meta Description -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (!document.querySelector('meta[name="description"]')) {
+        const metaDescription = document.createElement('meta');
+        metaDescription.name = 'description';
+        metaDescription.content = 'Complete HTML sitemap of our website showing all pages, posts, categories, and archives for easy navigation and search engine indexing.';
+        document.head.appendChild(metaDescription);
     }
-}
-add_action('admin_footer', 'add_custom_taxonomy_search_bar');
+});
+</script>
 
-function add_custom_town_taxonomy_search_bar() {
-    $screen = get_current_screen();
-    if ($screen && $screen->id === 'edit-page') {
-        ?>
-        <form method="get" id="custom-town-taxonomy-search-form" action="">
-            <input type="hidden" name="post_type" value="page">
-            <input type="text" name="search_town_taxonomies" placeholder="Search Town Taxonomies">
-            <input type="submit" value="Search">
-        </form>
-        <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const form = document.getElementById('custom-town-taxonomy-search-form');
-            const target = document.querySelector('.tablenav.top .actions.bulkactions');
-            if (target && form) target.appendChild(form);
-        });
-        </script>
-        <style>
-            #custom-town-taxonomy-search-form{display:inline-block;margin-left:10px}
-            #custom-town-taxonomy-search-form input[type="text"]{margin-right:5px;width:220px}
-        </style>
-        <?php
+<div class="sitemap-wrapper">
+    <main class="sitemap-main">
+        <article class="sitemap-article">
+            
+            <!-- Page Header -->
+            <header class="sitemap-header">
+                <?php
+                // Display page content - Required for Elementor
+                if (have_posts()) :
+                    while (have_posts()) : the_post();
+                ?>
+                <div class="sitemap-description">
+                    <?php the_content(); ?>
+                </div>
+                <?php
+                    endwhile;
+                endif;
+                ?>
+            </header>
+
+            <!-- Sitemap Content Grid -->
+            <div class="sitemap-grid">
+                
+                <!-- Pages Section -->
+                <section class="sitemap-section sitemap-pages">
+                    <h2 class="section-title">
+                        <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14,2 14,8 20,8"/>
+                        </svg>
+                        Pages
+                    </h2>
+
+                    <?php
+                    // Get all pages
+                    $all_pages = get_pages(array(
+                        'sort_column' => 'menu_order',
+                        'sort_order' => 'ASC',
+                        'post_status' => 'publish',
+                        'exclude' => get_the_ID()
+                    ));
+                    
+                    // Filter out thank you page and Yoast SEO excluded pages
+                    $all_pages = array_filter($all_pages, function($page) {
+                        if ($page->post_name === 'thank-you') {
+                            return false;
+                        }
+                        $yoast_noindex = get_post_meta($page->ID, '_yoast_wpseo_meta-robots-noindex', true);
+                        if ($yoast_noindex === '1') {
+                            return false;
+                        }
+                        return true;
+                    });
+
+                    // Separate pages into accordion parents and regular pages
+                    $accordion_parents = array();
+                    $regular_pages = array();
+                    $child_page_ids = array(); // Track child pages to exclude from regular list
+
+                    foreach ($all_pages as $page) {
+                        // Check if page has "Service Pages Loop Item" taxonomy
+                        $page_taxonomies = wp_get_post_terms($page->ID, 'parent_pages', array('fields' => 'names'));
+                        $is_service_loop = in_array('Service Pages Loop Item', $page_taxonomies);
+                        
+                        // Check if this is the "Services" page
+                        $is_services_page = (strtolower($page->post_title) === 'services');
+                        
+                        if ($is_service_loop) {
+                            // Check if page has children
+                            $children = get_children(array(
+                                'post_parent' => $page->ID,
+                                'post_type' => 'page',
+                                'post_status' => 'publish',
+                                'orderby' => 'title',
+                                'order' => 'ASC'
+                            ));
+                            
+                            // Filter children for noindex
+                            $children = array_filter($children, function($child) {
+                                $yoast_noindex = get_post_meta($child->ID, '_yoast_wpseo_meta-robots-noindex', true);
+                                return $yoast_noindex !== '1';
+                            });
+                            
+                            if (!empty($children)) {
+                                $accordion_parents[$page->ID] = array(
+                                    'page' => $page,
+                                    'children' => $children
+                                );
+                                // Track child IDs
+                                foreach ($children as $child) {
+                                    $child_page_ids[] = $child->ID;
+                                }
+                            } else {
+                                // No children, treat as regular page
+                                $regular_pages[] = $page;
+                            }
+                        } elseif ($is_services_page) {
+                            // Special handling for "Services" page
+                            $children = get_children(array(
+                                'post_parent' => $page->ID,
+                                'post_type' => 'page',
+                                'post_status' => 'publish',
+                                'orderby' => 'title',
+                                'order' => 'ASC'
+                            ));
+                            
+                            // Filter out children with "Service Pages Loop Item" taxonomy and noindex
+                            $children = array_filter($children, function($child) {
+                                // Check for noindex
+                                $yoast_noindex = get_post_meta($child->ID, '_yoast_wpseo_meta-robots-noindex', true);
+                                if ($yoast_noindex === '1') {
+                                    return false;
+                                }
+                                
+                                // Check if child has "Service Pages Loop Item" taxonomy
+                                $child_taxonomies = wp_get_post_terms($child->ID, 'parent_pages', array('fields' => 'names'));
+                                $has_service_loop = in_array('Service Pages Loop Item', $child_taxonomies);
+                                
+                                // Only include if it doesn't have the taxonomy
+                                return !$has_service_loop;
+                            });
+                            
+                            if (!empty($children)) {
+                                // Has valid children, create accordion
+                                $accordion_parents[$page->ID] = array(
+                                    'page' => $page,
+                                    'children' => $children
+                                );
+                                // Track child IDs
+                                foreach ($children as $child) {
+                                    $child_page_ids[] = $child->ID;
+                                }
+                            } else {
+                                // No valid children, treat as regular page
+                                $regular_pages[] = $page;
+                            }
+                        } else {
+                            $regular_pages[] = $page;
+                        }
+                    }
+
+                    // Remove child pages from regular pages list
+                    $regular_pages = array_filter($regular_pages, function($page) use ($child_page_ids) {
+                        return !in_array($page->ID, $child_page_ids);
+                    });
+                    
+                    // Sort regular pages alphabetically by title
+                    usort($regular_pages, function($a, $b) {
+                        return strcmp($a->post_title, $b->post_title);
+                    });
+                    ?>
+
+                    <!-- Regular Pages -->
+                    <?php if (!empty($regular_pages)): ?>
+                        <ul class="sitemap-list">
+                            <?php foreach ($regular_pages as $page): ?>
+                                <li class="sitemap-item">
+                                    <a href="<?php echo get_permalink($page->ID); ?>" class="sitemap-link">
+                                        <?php echo esc_html($page->post_title ? $page->post_title : 'Untitled'); ?>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+
+                    <!-- Accordion Pages -->
+                    <?php if (!empty($accordion_parents)): ?>
+                        <div class="sitemap-accordions">
+                            <?php foreach ($accordion_parents as $accordion): ?>
+                                <div class="sitemap-accordion">
+                                    <div class="sitemap-accordion-header" role="button" tabindex="0" aria-expanded="false">
+                                        <span class="accordion-title">
+                                            <?php echo esc_html($accordion['page']->post_title ? $accordion['page']->post_title : 'Untitled'); ?>
+                                        </span>
+                                        <svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="6 9 12 15 18 9"></polyline>
+                                        </svg>
+                                    </div>
+                                    <div class="sitemap-accordion-content">
+                                        <ul class="sitemap-list accordion-child-list">
+                                            <!-- Parent page first -->
+                                            <li class="sitemap-item">
+                                                <a href="<?php echo get_permalink($accordion['page']->ID); ?>" class="sitemap-link">
+                                                    <?php echo esc_html($accordion['page']->post_title ? $accordion['page']->post_title : 'Untitled'); ?>
+                                                </a>
+                                            </li>
+                                            <!-- Child pages alphabetically -->
+                                            <?php foreach ($accordion['children'] as $child): ?>
+                                                <li class="sitemap-item">
+                                                    <a href="<?php echo get_permalink($child->ID); ?>" class="sitemap-link">
+                                                        <?php echo esc_html($child->post_title ? $child->post_title : 'Untitled'); ?>
+                                                    </a>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </section>
+
+                <!-- Posts Section -->
+                <section class="sitemap-section sitemap-posts">
+                    <h2 class="section-title">
+                        <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 20h9"/>
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                        </svg>
+                        Recent Posts
+                    </h2>
+                    <ul class="sitemap-list">
+                        <?php
+                        $recent_posts = get_posts(array(
+                            'numberposts' => 20,
+                            'post_status' => 'publish',
+                            'orderby' => 'date',
+                            'order' => 'DESC'
+                        ));
+                        
+                        foreach ($recent_posts as $post) {
+                            setup_postdata($post);
+                            
+                            $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
+                            if ($yoast_noindex === '1') {
+                                continue;
+                            }
+                            
+                            echo '<li class="sitemap-item">';
+                            echo '<a href="' . get_permalink($post->ID) . '" class="sitemap-link">';
+                            echo esc_html($post->post_title);
+                            echo '</a>';
+                            echo '<span class="post-date">' . get_the_date('M j, Y', $post->ID) . '</span>';
+                            echo '</li>';
+                        }
+                        wp_reset_postdata();
+                        ?>
+                    </ul>
+                </section>
+
+                <!-- Categories Section -->
+                <section class="sitemap-section sitemap-categories">
+                    <h3 class="section-title">
+                        <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        Categories
+                    </h3>
+                    <ul class="sitemap-list">
+                        <?php
+                        $categories = get_categories(array(
+                            'orderby' => 'name',
+                            'order' => 'ASC',
+                            'hide_empty' => true
+                        ));
+                        
+                        foreach ($categories as $category) {
+                            echo '<li class="sitemap-item">';
+                            echo '<a href="' . get_category_link($category->term_id) . '" class="sitemap-link">';
+                            echo esc_html($category->name);
+                            echo '</a>';
+                            echo '<span class="post-count">(' . $category->count . ')</span>';
+                            echo '</li>';
+                        }
+                        ?>
+                    </ul>
+                </section>
+
+                <!-- Tags Section -->
+                <section class="sitemap-section sitemap-tags">
+                    <h3 class="section-title">
+                        <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                            <line x1="7" y1="7" x2="7.01" y2="7"/>
+                        </svg>
+                        Tags
+                    </h3>
+                    <div class="tag-cloud">
+                        <?php
+                        $tags = get_tags(array(
+                            'orderby' => 'count',
+                            'order' => 'DESC',
+                            'hide_empty' => true,
+                            'number' => 30
+                        ));
+                        
+                        foreach ($tags as $tag) {
+                            echo '<a href="' . get_tag_link($tag->term_id) . '" class="tag-link">';
+                            echo esc_html($tag->name);
+                            echo '</a>';
+                        }
+                        ?>
+                    </div>
+                </section>
+
+                <!-- Archives Section -->
+                <section class="sitemap-section sitemap-archives">
+                    <h3 class="section-title">
+                        <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                        Archives
+                    </h3>
+                    <ul class="sitemap-list archives-list">
+                        <?php
+                        wp_get_archives(array(
+                            'type' => 'monthly',
+                            'limit' => 12,
+                            'format' => 'html',
+                            'show_post_count' => true
+                        ));
+                        ?>
+                    </ul>
+                </section>
+
+            </div>
+        </article>
+    </main>
+</div>
+
+<style>
+/* Reset and Base Styles */
+.sitemap-wrapper * {
+    box-sizing: border-box;
+}
+
+/* Main Container */
+.sitemap-wrapper {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    line-height: 1.6;
+}
+
+.sitemap-main {
+    background: #ffffff;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+}
+
+/* Header Styles */
+.sitemap-header {
+    background: #ffffff;
+    color: #000000;
+    padding: 0;
+    text-align: center;
+    width: 100%;
+    margin: 0;
+}
+
+.sitemap-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin: 0 0 1rem 0;
+    text-shadow: none;
+    color: #000000;
+}
+
+.sitemap-description {
+    font-size: 1.1rem;
+    opacity: 1;
+    max-width: none;
+    margin: 0;
+    color: #000000;
+    width: 100vw;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+}
+
+.sitemap-description p {
+    margin: 0;
+}
+
+/* Single Column Layout */
+.sitemap-grid {
+    display: block;
+    padding: 2rem 1rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Section Styles */
+.sitemap-section {
+    background: #ffffff;
+    border-radius: 15px;
+    padding: 1.5rem;
+    border: 1px solid #e0e0e0;
+    transition: none;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.sitemap-section:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #000000;
+    margin: 0 0 1.5rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #000000;
+}
+
+.section-icon {
+    color: #000000;
+    flex-shrink: 0;
+}
+
+/* Accordion Styles - Ultra High Specificity */
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordions {
+    margin-top: 40px;
+    margin-bottom: 1.5rem;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion {
+    margin-bottom: 1rem;
+    border: none;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 1rem 1.25rem !important;
+    background: #f9f9f9 !important;
+    background-color: #f9f9f9 !important;
+    border: none !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    font-weight: 600 !important;
+    color: #000000 !important;
+    text-align: left !important;
+    transition: background-color 0.2s ease !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    text-decoration: none !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+    line-height: normal !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:hover {
+    background: #f0f0f0 !important;
+    background-color: #f0f0f0 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    border: none !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header.active {
+    background: #e8e8e8 !important;
+    background-color: #e8e8e8 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:focus {
+    outline: none !important;
+    box-shadow: none !important;
+    background: #f0f0f0 !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-title.accordion-title {
+    flex-grow: 1 !important;
+    color: #000000 !important;
+    text-shadow: none !important;
+    font-weight: 600 !important;
+    font-size: 18px !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-icon.accordion-icon {
+    flex-shrink: 0 !important;
+    transition: transform 0.3s ease !important;
+    color: #000000 !important;
+    stroke: #000000 !important;
+    fill: none !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.active .accordion-icon {
+    transform: rotate(180deg) !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-content.sitemap-accordion-content {
+    max-height: 0 !important;
+    overflow: hidden !important;
+    transition: max-height 0.3s ease !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-content.active {
+    max-height: 2000px !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list.accordion-child-list {
+    padding: 40px 1.25rem !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+}
+
+/* Font size for links inside accordion dropdown */
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link {
+    font-size: 16px !important;
+    text-decoration: none !important;
+    font-weight: 500 !important;
+}
+
+/* List Styles */
+.sitemap-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem 1rem;
+    align-items: stretch;
+}
+
+.sitemap-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0;
+    margin-bottom: 0;
+    background: none;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+    border-bottom: 1px solid #e0e0e0;
+    box-sizing: border-box;
+}
+
+.sitemap-item:last-child {
+    margin-bottom: 0;
+}
+
+.sitemap-link {
+    color: #000000;
+    text-decoration: none;
+    font-weight: 500;
+    transition: none;
+    flex-grow: 1;
+    font-size: 16px !important;
+}
+
+.sitemap-link:hover {
+    color: #000000;
+    text-decoration: underline;
+}
+
+.post-date,
+.post-count {
+    font-size: 0.875rem;
+    color: #000000;
+    font-weight: 400;
+    flex-shrink: 0;
+    margin-left: 1rem;
+}
+
+/* Tag Cloud */
+.tag-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.tag-link {
+    display: inline-block;
+    padding: 0.375rem 0.75rem;
+    background: #ffffff;
+    color: #000000;
+    text-decoration: none;
+    border-radius: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: none;
+    border: 1px solid #000000;
+    margin: 0.25rem;
+}
+
+.tag-link:hover {
+    background: #ffffff;
+    transform: none;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+/* Archives List Special Styling */
+.archives-list {
+    columns: 1;
+}
+
+.archives-list li {
+    break-inside: avoid;
+    margin-bottom: 0.5rem;
+}
+
+.archives-list a {
+    color: #000000;
+    text-decoration: none;
+    font-weight: 500;
+    transition: none;
+}
+
+.archives-list a:hover {
+    color: #000000;
+    text-decoration: underline;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .sitemap-wrapper {
+        margin: 1rem auto;
+        padding: 0 0.5rem;
     }
-}
-add_action('admin_footer', 'add_custom_town_taxonomy_search_bar');
-
-// ========================
-// 4) APPLY PARTIAL TERM FILTERS
-// ========================
-function filter_pages_by_partial_taxonomy($query) {
-    if (!is_admin() || !$query->is_main_query()) return;
-
-    global $wpdb;
-
-    $apply = function($param_key, $taxonomy) use ($wpdb, $query) {
-        if (empty($_GET[$param_key])) return;
-
-        $searched = sanitize_text_field(wp_unslash($_GET[$param_key]));
-        $matching = $wpdb->get_col($wpdb->prepare(
-            "SELECT t.term_id
-             FROM {$wpdb->terms} t
-             INNER JOIN {$wpdb->term_taxonomy} tt ON t.term_id = tt.term_id
-             WHERE tt.taxonomy = %s AND t.name LIKE %s",
-            $taxonomy,
-            '%' . $wpdb->esc_like($searched) . '%'
-        ));
-
-        if (!empty($matching)) {
-            $tax_query = (array) $query->get('tax_query');
-            $tax_query[] = array(
-                'taxonomy' => $taxonomy,
-                'field'    => 'term_id',
-                'terms'    => $matching,
-                'operator' => 'IN',
-            );
-            $query->set('tax_query', $tax_query);
-        } else {
-            $query->set('post__in', array(0));
-        }
-    };
-
-    if (isset($_GET['search_parent_pages']))   $apply('search_parent_pages', 'parent_pages');
-    if (isset($_GET['search_town_taxonomies'])) $apply('search_town_taxonomies', 'town_taxonomies');
-}
-add_action('pre_get_posts', 'filter_pages_by_partial_taxonomy');
-
-// ========================
-// 5) MANUAL COLUMNS ON PAGES LIST (single set, no dupes)
-// ========================
-function pages_add_taxonomy_columns($columns){
-    $out = array();
-    foreach($columns as $key => $label){
-        $out[$key] = $label;
-        if ($key === 'title'){
-            $out['parent_pages']    = 'Page Taxonomies';
-            $out['town_taxonomies'] = 'Town Taxonomies';
-        }
-    }
-    return $out;
-}
-add_filter('manage_pages_columns','pages_add_taxonomy_columns');
-
-function pages_populate_taxonomy_columns($column,$post_id){
-    if ($column === 'parent_pages' || $column === 'town_taxonomies'){
-        $terms = wp_get_post_terms($post_id, $column, array('fields'=>'names'));
-        echo (!is_wp_error($terms) && !empty($terms)) ? esc_html(implode(', ', $terms)) : '—';
-    }
-}
-add_action('manage_pages_custom_column','pages_populate_taxonomy_columns',10,2);
-
-// ========================
-// 6) CONNECT TOWN TAXONOMIES - TAXONOMY SELECTION APPROACH
-// ========================
-
-// Add custom button to the pages admin screen
-function add_connect_town_taxonomies_button() {
-    $screen = get_current_screen();
-    if ($screen && $screen->id === 'edit-page') {
-        ?>
-        <script type="text/javascript">
-        jQuery(document).ready(function($) {
-            $('.tablenav.top .alignleft.actions.bulkactions').first().after(
-                '<a href="<?php echo admin_url('admin.php?page=connect-town-taxonomies'); ?>" class="button" style="margin-left: 10px;">Connect Town Taxonomies</a>'
-            );
-        });
-        </script>
-        <?php
-    }
-}
-add_action('admin_footer', 'add_connect_town_taxonomies_button');
-
-// Register the admin page
-function register_connect_town_taxonomies_page() {
-    add_submenu_page(
-        null, // No menu item - accessed via button only
-        'Connect Town Taxonomies',
-        'Connect Town Taxonomies',
-        'edit_pages',
-        'connect-town-taxonomies',
-        'render_connect_town_taxonomies_page'
-    );
-}
-add_action('admin_menu', 'register_connect_town_taxonomies_page');
-
-// Add inline styles for the Connect Town Taxonomies page
-function hozio_town_taxonomies_admin_styles() {
-    $screen = get_current_screen();
-    if (!$screen || strpos($screen->id, 'connect-town-taxonomies') === false) {
-        return;
-    }
-    ?>
-    <style>
-        :root {
-            --hozio-blue: #00A0E3;
-            --hozio-blue-dark: #0081B8;
-            --hozio-green: #8DC63F;
-            --hozio-green-dark: #6FA92E;
-            --hozio-orange: #F7941D;
-            --hozio-orange-dark: #E67E00;
-            --hozio-gray: #6D6E71;
-        }
-        
-        .hozio-taxonomies-wrapper {
-            background: #f9fafb;
-            margin: 20px 20px 20px 0;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        
-        .hozio-taxonomies-header {
-            background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 50%, var(--hozio-orange) 100%);
-            color: white;
-            padding: 40px;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .hozio-taxonomies-header::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -10%;
-            width: 400px;
-            height: 400px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-            pointer-events: none;
-        }
-        
-        .hozio-taxonomies-header h1 {
-            color: white !important;
-            font-size: 32px;
-            margin: 0 0 10px !important;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-weight: 600;
-            text-shadow: none;
-        }
-        
-        .hozio-taxonomies-header h1 .dashicons {
-            font-size: 36px;
-            width: 36px;
-            height: 36px;
-        }
-        
-        .hozio-taxonomies-subtitle {
-            color: rgba(255, 255, 255, 0.95);
-            font-size: 16px;
-            margin: 0;
-        }
-        
-        .hozio-taxonomies-content {
-            padding: 0 40px 40px;
-        }
-        
-        .hozio-taxonomies-card {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            margin: 30px 0 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            border: 1px solid #e5e7eb;
-            border-left: 4px solid var(--hozio-blue);
-        }
-        
-        .hozio-taxonomies-card.info-card {
-            border-left-color: var(--hozio-orange);
-        }
-        
-        .hozio-taxonomies-card.selection-card {
-            border-left-color: var(--hozio-green);
-        }
-        
-        .hozio-taxonomies-card.results-card {
-            border-left-color: var(--hozio-blue);
-        }
-        
-        .hozio-card-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 24px;
-            padding-bottom: 16px;
-            border-bottom: 2px solid #e5e7eb;
-        }
-        
-        .hozio-card-header h2 {
-            margin: 0 !important;
-            font-size: 20px !important;
-            color: var(--hozio-gray);
-            font-weight: 600;
-        }
-        
-        .hozio-card-header .dashicons {
-            color: var(--hozio-blue);
-            font-size: 24px;
-            width: 24px;
-            height: 24px;
-        }
-        
-        .info-card .hozio-card-header .dashicons {
-            color: var(--hozio-orange);
-        }
-        
-        .selection-card .hozio-card-header .dashicons {
-            color: var(--hozio-green);
-        }
-        
-        .results-card .hozio-card-header .dashicons {
-            color: var(--hozio-blue);
-        }
-        
-        .hozio-info-notice {
-            background: linear-gradient(135deg, rgba(0, 160, 227, 0.1) 0%, rgba(0, 160, 227, 0.05) 100%);
-            border: 1px solid rgba(0, 160, 227, 0.2);
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 24px;
-        }
-        
-        .hozio-info-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 600;
-            color: var(--hozio-blue-dark);
-            margin-bottom: 8px;
-        }
-        
-        .hozio-info-text {
-            color: var(--hozio-blue-dark);
-            font-size: 14px;
-            line-height: 1.5;
-        }
-        
-        .hozio-taxonomies-selection {
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid #e5e7eb;
-            padding: 20px;
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
-        }
-        
-
-        
-        .hozio-taxonomy-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 16px;
-            margin: 8px 0;
-            background: #f9fafb;
-            border-radius: 8px;
-            border: 1px solid #e5e7eb;
-            cursor: pointer;
-            transition: all 0.2s;
-            position: relative;
-        }
-        
-        .hozio-taxonomy-item:hover {
-            background: #f3f4f6;
-            border-color: var(--hozio-green);
-            transform: translateX(4px);
-        }
-        
-        .hozio-taxonomy-item input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            accent-color: var(--hozio-green);
-        }
-        
-        .hozio-taxonomy-info {
-            flex: 1;
-        }
-        
-        .hozio-taxonomy-name {
-            font-weight: 600;
-            color: var(--hozio-gray);
-            margin-bottom: 4px;
-        }
-        
-        .hozio-taxonomy-count {
-            font-size: 13px;
-            color: #6b7280;
-        }
-        
-        .hozio-taxonomy-item:has(input:checked) {
-            background: linear-gradient(135deg, rgba(141, 198, 63, 0.1) 0%, rgba(141, 198, 63, 0.05) 100%);
-            border-color: var(--hozio-green);
-        }
-        
-        .hozio-taxonomy-item:has(input:checked) .hozio-taxonomy-name {
-            color: var(--hozio-green-dark);
-        }
-        
-        .hozio-button-group {
-            display: flex;
-            gap: 16px;
-            margin-top: 24px;
-            flex-wrap: wrap;
-        }
-        
-        .hozio-btn-primary {
-            background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 100%) !important;
-            border: none !important;
-            color: white !important;
-            padding: 12px 32px !important;
-            font-size: 15px !important;
-            font-weight: 600 !important;
-            border-radius: 8px !important;
-            cursor: pointer !important;
-            transition: all 0.2s !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-            text-shadow: none !important;
-            box-shadow: 0 4px 6px rgba(0, 160, 227, 0.3) !important;
-            height: auto !important;
-            line-height: normal !important;
-            text-decoration: none !important;
-        }
-        
-        .hozio-btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0, 160, 227, 0.4) !important;
-        }
-        
-        .hozio-btn-secondary {
-            background: white !important;
-            border: 2px solid #e5e7eb !important;
-            color: var(--hozio-gray) !important;
-            padding: 10px 24px !important;
-            font-size: 15px !important;
-            font-weight: 600 !important;
-            border-radius: 8px !important;
-            cursor: pointer !important;
-            transition: all 0.2s !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-            text-decoration: none !important;
-            height: auto !important;
-            line-height: normal !important;
-        }
-        
-        .hozio-btn-secondary:hover {
-            border-color: var(--hozio-blue);
-            color: var(--hozio-blue) !important;
-            transform: translateY(-1px);
-        }
-        
-        .hozio-results-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        
-        .hozio-results-table th {
-            background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 100%);
-            color: white;
-            padding: 16px;
-            text-align: left;
-            font-weight: 600;
-        }
-        
-        .hozio-results-table td {
-            padding: 16px;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        
-        .hozio-results-table tr:last-child td {
-            border-bottom: none;
-        }
-        
-        .hozio-results-table tr:nth-child(even) {
-            background: #f9fafb;
-        }
-        
-        .hozio-created-terms {
-            background: linear-gradient(135deg, rgba(141, 198, 63, 0.1) 0%, rgba(141, 198, 63, 0.05) 100%);
-            border: 1px solid rgba(141, 198, 63, 0.2);
-            border-radius: 8px;
-            padding: 20px;
-            margin-top: 20px;
-        }
-        
-        .hozio-created-terms h3 {
-            color: var(--hozio-green-dark);
-            margin: 0 0 15px 0 !important;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .hozio-terms-list {
-            background: white;
-            padding: 15px;
-            border-radius: 6px;
-            font-family: monospace;
-            font-size: 14px;
-            color: var(--hozio-green-dark);
-            line-height: 1.6;
-        }
-        
-        .hozio-success-notice {
-            background: linear-gradient(135deg, rgba(141, 198, 63, 0.1) 0%, rgba(141, 198, 63, 0.05) 100%);
-            border: 1px solid rgba(141, 198, 63, 0.2);
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 24px;
-        }
-        
-        .hozio-success-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 600;
-            color: var(--hozio-green-dark);
-            margin-bottom: 8px;
-        }
-        
-        .hozio-error-notice {
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 24px;
-        }
-        
-        .hozio-error-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 600;
-            color: #dc2626;
-            margin-bottom: 8px;
-        }
-        
-        .hozio-error-text {
-            color: #dc2626;
-            font-size: 14px;
-        }
-        
-        @media (max-width: 782px) {
-            .hozio-taxonomies-wrapper {
-                margin: 20px 0;
-            }
-            
-            .hozio-taxonomies-header {
-                padding: 30px 20px;
-            }
-            
-            .hozio-taxonomies-header h1 {
-                font-size: 24px;
-            }
-            
-            .hozio-taxonomies-content {
-                padding: 0 20px 20px;
-            }
-            
-            .hozio-taxonomies-card {
-                padding: 20px;
-                margin: 20px 0;
-            }
-            
-            .hozio-button-group {
-                flex-direction: column;
-            }
-            
-            .hozio-btn-primary,
-            .hozio-btn-secondary {
-                width: 100%;
-                justify-content: center;
-            }
-        }
-    </style>
     
-    <script>
-    jQuery(document).ready(function($) {
-        // Form submission with loading state
-        $('form').on('submit', function() {
-            const $btn = $('.hozio-btn-primary');
-            const originalText = $btn.html();
-            $btn.html('<span class="dashicons dashicons-update-alt" style="animation: spin 1s linear infinite;"></span> Processing...');
-            $btn.prop('disabled', true);
+    .sitemap-grid {
+        display: block;
+        padding: 1.5rem;
+    }
+    
+    .sitemap-header {
+        padding: 2rem 1rem 1.5rem;
+    }
+    
+    .sitemap-title {
+        font-size: 2rem;
+    }
+    
+    .sitemap-section {
+        padding: 1rem;
+    }
+    
+    .sitemap-list {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .sitemap-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+    
+    .post-date,
+    .post-count {
+        margin-left: 0;
+        font-size: 0.8rem;
+    }
+    
+    .tag-cloud {
+        gap: 0.375rem;
+    }
+    
+    .tag-link {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .sitemap-list {
+        grid-template-columns: 1fr;
+    }
+    
+    .sitemap-title {
+        font-size: 1.75rem;
+    }
+    
+    .section-title {
+        font-size: 1.125rem;
+    }
+    
+    .sitemap-link {
+        font-size: 0.9rem;
+    }
+}
+
+/* Consistent styling for all themes */
+.sitemap-wrapper,
+.sitemap-main,
+.sitemap-section {
+    background: #ffffff !important;
+    color: #000000 !important;
+}
+
+/* Print Styles */
+@media print {
+    .sitemap-wrapper {
+        box-shadow: none;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .sitemap-header {
+        background: #ffffff;
+        color: #000000;
+        text-shadow: none;
+    }
+    
+    .sitemap-section {
+        background: #ffffff;
+        border: 1px solid #000000;
+        break-inside: avoid;
+    }
+    
+    .tag-link {
+        background: #ffffff;
+        color: #000000;
+        border: 1px solid #000000;
+    }
+    
+    .sitemap-accordion-content {
+        max-height: none !important;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const accordionHeaders = document.querySelectorAll('.sitemap-accordion-header');
+    
+    accordionHeaders.forEach(header => {
+        // Click handler
+        header.addEventListener('click', function() {
+            const content = this.nextElementSibling;
+            const isActive = this.classList.contains('active');
             
-            // Re-enable after a delay (in case of redirect)
-            setTimeout(function() {
-                $btn.html(originalText);
-                $btn.prop('disabled', false);
-            }, 5000);
+            // Toggle active class
+            this.classList.toggle('active');
+            content.classList.toggle('active');
+            
+            // Update aria-expanded
+            this.setAttribute('aria-expanded', !isActive);
+            
+            // Adjust max-height for smooth animation
+            if (!isActive) {
+                content.style.maxHeight = content.scrollHeight + 'px';
+            } else {
+                content.style.maxHeight = '0';
+            }
+        });
+        
+        // Keyboard accessibility (Enter and Space keys)
+        header.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.click();
+            }
         });
     });
-    
-    @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-    </script>
-    <?php
-}
-add_action('admin_head', 'hozio_town_taxonomies_admin_styles');
+});
+</script>
 
-// Render the taxonomy selection page with Hozio styling
-function render_connect_town_taxonomies_page() {
-    // Handle form submission
-    if (isset($_POST['submit_connect_taxonomies']) && check_admin_referer('connect_town_taxonomies_action')) {
-        process_taxonomy_based_connection();
-        return;
-    }
-
-    // Get all page taxonomies
-    $all_taxonomies = get_terms(array(
-        'taxonomy' => 'parent_pages',
-        'hide_empty' => false,
-    ));
-
-    ?>
-    <div class="hozio-taxonomies-wrapper">
-        <div class="hozio-taxonomies-header">
-            <div class="hozio-header-content">
-                <h1>
-                    <span class="dashicons dashicons-networking"></span>
-                    Connect Town Taxonomies
-                </h1>
-                <p class="hozio-taxonomies-subtitle">Automatically create and assign town taxonomies to your pages</p>
-            </div>
-        </div>
-
-        <div class="hozio-taxonomies-content">
-            <!-- Info Card -->
-            <div class="hozio-taxonomies-card info-card">
-                <div class="hozio-card-header">
-                    <span class="dashicons dashicons-info"></span>
-                    <h2>How This Works</h2>
-                </div>
-                
-                <div class="hozio-info-notice">
-                    <div class="hozio-info-header">
-                        <span class="dashicons dashicons-lightbulb"></span>
-                        Process Overview
-                    </div>
-                    <div class="hozio-info-text">
-                        Select the Page Taxonomies below and the system will find all pages with those taxonomies, then automatically create Town Taxonomies based on each page's slug. Parent pages will be automatically skipped to ensure optimal organization.
-                    </div>
-                </div>
-            </div>
-
-            <!-- Selection Form -->
-            <form method="post" action="">
-                <?php wp_nonce_field('connect_town_taxonomies_action'); ?>
-                
-                <div class="hozio-taxonomies-card selection-card">
-                    <div class="hozio-card-header">
-                        <span class="dashicons dashicons-category"></span>
-                        <h2>Select Page Taxonomies</h2>
-                    </div>
-                    
-                    <div class="hozio-taxonomies-selection">
-                        <?php if (empty($all_taxonomies)): ?>
-                            <div style="text-align: center; padding: 40px; color: #6b7280;">
-                                <span class="dashicons dashicons-warning" style="font-size: 48px; margin-bottom: 16px; display: block;"></span>
-                                <p style="margin: 0; font-size: 16px;">No Page Taxonomies found.</p>
-                                <p style="margin: 8px 0 0; font-size: 14px;">Create some page taxonomies first to use this feature.</p>
-                            </div>
-                        <?php else: ?>
-                            <?php foreach ($all_taxonomies as $term): ?>
-                                <label class="hozio-taxonomy-item">
-                                    <input type="checkbox" name="selected_page_taxonomies[]" value="<?php echo esc_attr($term->term_id); ?>" class="taxonomy-checkbox">
-                                    <div class="hozio-taxonomy-info">
-                                        <div class="hozio-taxonomy-name"><?php echo esc_html($term->name); ?></div>
-                                        <div class="hozio-taxonomy-count"><?php echo $term->count; ?> pages</div>
-                                    </div>
-                                    <span class="dashicons dashicons-arrow-right-alt" style="color: var(--hozio-green); opacity: 0.6;"></span>
-                                </label>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
-                    
-                    <div class="hozio-button-group">
-                        <button type="submit" name="submit_connect_taxonomies" class="hozio-btn-primary">
-                            <span class="dashicons dashicons-networking"></span>
-                            Connect Town Taxonomies
-                        </button>
-                        <a href="<?php echo admin_url('edit.php?post_type=page'); ?>" class="hozio-btn-secondary">
-                            <span class="dashicons dashicons-arrow-left-alt"></span>
-                            Back to Pages
-                        </a>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-    <?php
-}
-
-// Process the connection based on selected taxonomies with Hozio styling
-function process_taxonomy_based_connection() {
-    if (empty($_POST['selected_page_taxonomies']) || !is_array($_POST['selected_page_taxonomies'])) {
-        ?>
-        <div class="hozio-taxonomies-wrapper">
-            <div class="hozio-taxonomies-header">
-                <div class="hozio-header-content">
-                    <h1>
-                        <span class="dashicons dashicons-warning"></span>
-                        Connection Error
-                    </h1>
-                    <p class="hozio-taxonomies-subtitle">Please review the issue below and try again</p>
-                </div>
-            </div>
-
-            <div class="hozio-taxonomies-content">
-                <div class="hozio-taxonomies-card">
-                    <div class="hozio-error-notice">
-                        <div class="hozio-error-header">
-                            <span class="dashicons dashicons-dismiss"></span>
-                            Selection Required
-                        </div>
-                        <div class="hozio-error-text">
-                            Please select at least one Page Taxonomy to proceed with the connection process.
-                        </div>
-                    </div>
-                    
-                    <div class="hozio-button-group">
-                        <a href="<?php echo admin_url('admin.php?page=connect-town-taxonomies'); ?>" class="hozio-btn-primary">
-                            <span class="dashicons dashicons-arrow-left-alt"></span>
-                            Go Back & Select
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php
-        return;
-    }
-
-    $selected_taxonomy_ids = array_map('intval', $_POST['selected_page_taxonomies']);
-    $processed = 0;
-    $skipped = 0;
-    $created_terms = array();
-    $taxonomy_breakdown = array(); // Track which taxonomies processed which pages
-    
-    // Get selected taxonomy names for display
-    $selected_taxonomies = get_terms(array(
-        'taxonomy' => 'parent_pages',
-        'include' => $selected_taxonomy_ids,
-        'hide_empty' => false,
-    ));
-    
-    // Initialize breakdown array
-    foreach ($selected_taxonomies as $taxonomy) {
-        $taxonomy_breakdown[$taxonomy->term_id] = array(
-            'name' => $taxonomy->name,
-            'count' => 0,
-            'created_terms' => array()
-        );
-    }
-
-    // Get all pages that have any of the selected taxonomies
-    $args = array(
-        'post_type' => 'page',
-        'posts_per_page' => -1,
-        'tax_query' => array(
-            array(
-                'taxonomy' => 'parent_pages',
-                'field' => 'term_id',
-                'terms' => $selected_taxonomy_ids,
-                'operator' => 'IN'
-            )
-        )
-    );
-
-    $pages = get_posts($args);
-
-    foreach ($pages as $post) {
-        // Skip if this is a parent page (has no parent itself, or has child pages)
-        $is_parent_page = ($post->post_parent == 0);
-        $children = get_children(array(
-            'post_parent' => $post->ID,
-            'post_type'   => 'page',
-            'numberposts' => 1
-        ));
-        $has_children = !empty($children);
-        
-        if ($is_parent_page || $has_children) {
-            $skipped++;
-            continue;
-        }
-
-        // Get page taxonomies for this specific page
-        $page_taxonomies = wp_get_post_terms($post->ID, 'parent_pages', array('fields' => 'ids'));
-        
-        $slug = $post->post_name;
-        $term_created = false;
-
-        // Check if town taxonomy term already exists with this slug
-        $term = term_exists($slug, 'town_taxonomies');
-        
-        if (!$term) {
-            // Create new town taxonomy term with the page slug
-            $term = wp_insert_term(
-                $slug,
-                'town_taxonomies',
-                array('slug' => $slug)
-            );
-            
-            if (!is_wp_error($term)) {
-                $created_terms[] = $slug;
-                $term_created = true;
-            }
-        }
-
-        // If term creation/retrieval was successful, assign it to the page
-        if (!is_wp_error($term)) {
-            $term_id = is_array($term) ? $term['term_id'] : $term;
-            wp_set_post_terms($post->ID, array($term_id), 'town_taxonomies', false);
-            $processed++;
-            
-            // Track which page taxonomies this applies to
-            foreach ($page_taxonomies as $page_tax_id) {
-                if (in_array($page_tax_id, $selected_taxonomy_ids)) {
-                    $taxonomy_breakdown[$page_tax_id]['count']++;
-                    if ($term_created && !in_array($slug, $taxonomy_breakdown[$page_tax_id]['created_terms'])) {
-                        $taxonomy_breakdown[$page_tax_id]['created_terms'][] = $slug;
-                    }
-                }
-            }
-        }
-    }
-
-    // Display results with Hozio styling
-    ?>
-    <div class="hozio-taxonomies-wrapper">
-        <div class="hozio-taxonomies-header">
-            <div class="hozio-header-content">
-                <h1>
-                    <span class="dashicons dashicons-yes"></span>
-                    Connection Complete
-                </h1>
-                <p class="hozio-taxonomies-subtitle">Town taxonomies have been successfully connected to your pages</p>
-            </div>
-        </div>
-
-        <div class="hozio-taxonomies-content">
-            <div class="hozio-taxonomies-card results-card">
-                <div class="hozio-card-header">
-                    <span class="dashicons dashicons-chart-bar"></span>
-                    <h2>Processing Results</h2>
-                </div>
-                
-                <div class="hozio-success-notice">
-                    <div class="hozio-success-header">
-                        <span class="dashicons dashicons-yes-alt"></span>
-                        Operation Successful
-                    </div>
-                    <div style="color: var(--hozio-green-dark); font-size: 14px;">
-                        The town taxonomy connection process has been completed successfully.
-                    </div>
-                </div>
-
-                <table class="hozio-results-table">
-                    <thead>
-                        <tr>
-                            <th><span class="dashicons dashicons-info" style="margin-right: 8px;"></span>Result Type</th>
-                            <th><span class="dashicons dashicons-chart-pie" style="margin-right: 8px;"></span>Count</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><strong>Pages Processed</strong></td>
-                            <td><span style="color: var(--hozio-blue); font-weight: 600;"><?php echo $processed; ?></span></td>
-                        </tr>
-                        <tr>
-                            <td><strong>Pages Skipped</strong> (parent pages)</td>
-                            <td><span style="color: var(--hozio-orange); font-weight: 600;"><?php echo $skipped; ?></span></td>
-                        </tr>
-                        <tr>
-                            <td><strong>New Town Taxonomies Created</strong></td>
-                            <td><span style="color: var(--hozio-green); font-weight: 600;"><?php echo count($created_terms); ?></span></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Breakdown by Page Taxonomy -->
-            <div class="hozio-taxonomies-card info-card">
-                <div class="hozio-card-header">
-                    <span class="dashicons dashicons-category"></span>
-                    <h2>Breakdown by Page Taxonomy</h2>
-                </div>
-                
-                <table class="hozio-results-table">
-                    <thead>
-                        <tr>
-                            <th><span class="dashicons dashicons-tag" style="margin-right: 8px;"></span>Page Taxonomy</th>
-                            <th><span class="dashicons dashicons-networking" style="margin-right: 8px;"></span>Town Taxonomies Connected</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($taxonomy_breakdown as $breakdown): ?>
-                            <tr>
-                                <td><strong><?php echo esc_html($breakdown['name']); ?></strong></td>
-                                <td><span style="color: var(--hozio-green); font-weight: 600;"><?php echo $breakdown['count']; ?></span></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-
-            <?php if (!empty($created_terms)): ?>
-                <!-- Created Terms List -->
-                <div class="hozio-taxonomies-card selection-card">
-                    <div class="hozio-card-header">
-                        <span class="dashicons dashicons-tag"></span>
-                        <h2>New Town Taxonomies Created</h2>
-                    </div>
-                    
-                    <div class="hozio-created-terms">
-                        <div style="background: linear-gradient(135deg, rgba(141, 198, 63, 0.1) 0%, rgba(141, 198, 63, 0.05) 100%); border: 1px solid rgba(141, 198, 63, 0.2); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-                            <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--hozio-green-dark); margin-bottom: 8px;">
-                                <span class="dashicons dashicons-info"></span>
-                                Summary
-                            </div>
-                            <div style="color: var(--hozio-green-dark); font-size: 14px;">
-                                Created <strong><?php echo count($created_terms); ?></strong> new town taxonomies based on page slugs. These town taxonomies are now connected to their respective pages and can be used for organization and filtering.
-                            </div>
-                        </div>
-                        
-                        <div class="hozio-terms-list">
-                            <?php echo implode(', ', array_map('esc_html', $created_terms)); ?>
-                        </div>
-                    </div>
-                </div>
-            <?php endif; ?>
-
-            <div class="hozio-button-group" style="margin-top: 30px;">
-                <a href="<?php echo admin_url('edit.php?post_type=page'); ?>" class="hozio-btn-primary">
-                    <span class="dashicons dashicons-arrow-left-alt"></span>
-                    Back to Pages
-                </a>
-                <a href="<?php echo admin_url('admin.php?page=connect-town-taxonomies'); ?>" class="hozio-btn-secondary">
-                    <span class="dashicons dashicons-controls-repeat"></span>
-                    Run Again
-                </a>
-            </div>
-        </div>
-    </div>
-    <?php
-}
-?>
+<?php get_footer(); ?>
