@@ -253,6 +253,75 @@ document.addEventListener('DOMContentLoaded', function() {
                 </section>
                 <?php endif; ?>
 
+                <!-- Custom Post Types Section -->
+                <?php
+                // Get the selected post types from ACF field on THIS page
+                $included_post_types = get_field('post_types_to_show_in_sitemap');
+
+                // If post types are selected, display them
+                if (!empty($included_post_types)) {
+                    
+                    foreach ($included_post_types as $post_type_slug) {
+                        
+                        // Get the post type object for labels
+                        $post_type_obj = get_post_type_object($post_type_slug);
+                        
+                        if (!$post_type_obj) continue; // Skip if post type doesn't exist
+                        
+                        // Query posts for this custom post type
+                        $cpt_posts = get_posts(array(
+                            'post_type' => $post_type_slug,
+                            'numberposts' => -1,
+                            'post_status' => 'publish',
+                            'orderby' => 'title',
+                            'order' => 'ASC'
+                        ));
+                        
+                        // Filter out Yoast noindex posts
+                        $cpt_posts = array_filter($cpt_posts, function($post) {
+                            $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
+                            return $yoast_noindex !== '1';
+                        });
+                        
+                        // Only show section if posts exist
+                        if (!empty($cpt_posts)):
+                ?>
+                <section class="sitemap-section sitemap-<?php echo esc_attr($post_type_slug); ?> sitemap-section-accordion">
+                    <h2 class="section-title section-accordion-header" role="button" tabindex="0" aria-expanded="false">
+                        <div class="section-title-content">
+                            <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14,2 14,8 20,8"/>
+                            </svg>
+                            <span><?php echo esc_html($post_type_obj->labels->name); ?> <span class="post-count-small">(<?php echo count($cpt_posts); ?>)</span></span>
+                        </div>
+                        <div class="section-accordion-trigger">
+                            <span class="accordion-helper-text">View All</span>
+                            <svg class="section-accordion-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                    </h2>
+                    
+                    <div class="section-accordion-content">
+                        <ul class="sitemap-list">
+                            <?php foreach ($cpt_posts as $cpt_post): ?>
+                                <li class="sitemap-item">
+                                    <a href="<?php echo get_permalink($cpt_post->ID); ?>" class="sitemap-link">
+                                        <?php echo esc_html($cpt_post->post_title ? $cpt_post->post_title : 'Untitled'); ?>
+                                    </a>
+                                    <span class="post-date"><?php echo get_the_date('M j, Y', $cpt_post->ID); ?></span>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                </section>
+                <?php 
+                        endif; // end if posts exist
+                    } // end foreach
+                } // end if included_post_types
+                ?>
+
                 <!-- Categories Section -->
                 <section class="sitemap-section sitemap-categories">
                     <h3 class="section-title">
