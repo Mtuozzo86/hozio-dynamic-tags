@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             <!-- Page Header -->
             <header class="sitemap-header">
+            <meta name="robots" content="noindex">
                 <?php
                 // Display page content - Required for Elementor
                 if (have_posts()) :
@@ -375,29 +376,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                         ?>
                     </div>
-                </section>
-
-                <!-- Archives Section -->
-                <section class="sitemap-section sitemap-archives">
-                    <h3 class="section-title">
-                        <svg class="section-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                            <line x1="16" y1="2" x2="16" y2="6"/>
-                            <line x1="8" y1="2" x2="8" y2="6"/>
-                            <line x1="3" y1="10" x2="21" y2="10"/>
-                        </svg>
-                        Archives
-                    </h3>
-                    <ul class="sitemap-list archives-list">
-                        <?php
-                        wp_get_archives(array(
-                            'type' => 'monthly',
-                            'limit' => 12,
-                            'format' => 'html',
-                            'show_post_count' => true
-                        ));
-                        ?>
-                    </ul>
                 </section>
 
             </div>
@@ -768,27 +746,6 @@ document.addEventListener('DOMContentLoaded', function() {
     background: #ffffff;
     transform: none;
     box-shadow: none;
-    text-decoration: underline;
-}
-
-.archives-list {
-    columns: 1;
-}
-
-.archives-list li {
-    break-inside: avoid;
-    margin-bottom: 0.5rem;
-}
-
-.archives-list a {
-    color: #000000;
-    text-decoration: none;
-    font-weight: 500;
-    transition: none;
-}
-
-.archives-list a:hover {
-    color: #000000;
     text-decoration: underline;
 }
 
