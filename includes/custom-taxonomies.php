@@ -19,7 +19,7 @@ function create_parent_pages_taxonomy() {
             'menu_name'         => 'Page Taxonomies',
         ),
         'show_ui'           => true,
-        'show_admin_column' => false, // <-- disable WP's auto column (we add our own below)
+        'show_admin_column' => false,
         'query_var'         => true,
         'rewrite'           => array('slug' => 'parent-pages'),
     );
@@ -48,7 +48,7 @@ function create_town_taxonomies_taxonomy() {
             'menu_name'         => 'Town Taxonomies',
         ),
         'show_ui'           => true,
-        'show_admin_column' => false, // <-- disable WP's auto column
+        'show_admin_column' => false,
         'query_var'         => true,
         'rewrite'           => array('slug' => 'town'),
     );
@@ -61,6 +61,11 @@ add_action('init', 'create_town_taxonomies_taxonomy');
 // 3) SEARCH BARS ON PAGES LIST
 // ========================
 function add_custom_taxonomy_search_bar() {
+    // Don't run on AJAX requests
+    if (wp_doing_ajax()) {
+        return;
+    }
+    
     $screen = get_current_screen();
     if ($screen && $screen->id === 'edit-page') {
         ?>
@@ -86,6 +91,11 @@ function add_custom_taxonomy_search_bar() {
 add_action('admin_footer', 'add_custom_taxonomy_search_bar');
 
 function add_custom_town_taxonomy_search_bar() {
+    // Don't run on AJAX requests
+    if (wp_doing_ajax()) {
+        return;
+    }
+    
     $screen = get_current_screen();
     if ($screen && $screen->id === 'edit-page') {
         ?>
@@ -180,14 +190,26 @@ add_action('manage_pages_custom_column','pages_populate_taxonomy_columns',10,2);
 
 // Add custom button to the pages admin screen
 function add_connect_town_taxonomies_button() {
+    // Don't run on AJAX requests
+    if (wp_doing_ajax()) {
+        return;
+    }
+    
     $screen = get_current_screen();
     if ($screen && $screen->id === 'edit-page') {
         ?>
         <script type="text/javascript">
         jQuery(document).ready(function($) {
-            $('.tablenav.top .alignleft.actions.bulkactions').first().after(
-                '<a href="<?php echo admin_url('admin.php?page=connect-town-taxonomies'); ?>" class="button" style="margin-left: 10px;">Connect Town Taxonomies</a>'
-            );
+            try {
+                var target = $('.tablenav.top .alignleft.actions.bulkactions').first();
+                if (target.length) {
+                    target.after(
+                        '<a href="<?php echo admin_url('admin.php?page=connect-town-taxonomies'); ?>" class="button" style="margin-left: 10px;">Connect Town Taxonomies</a>'
+                    );
+                }
+            } catch(e) {
+                console.log('Button add error:', e);
+            }
         });
         </script>
         <?php
@@ -198,7 +220,7 @@ add_action('admin_footer', 'add_connect_town_taxonomies_button');
 // Register the admin page
 function register_connect_town_taxonomies_page() {
     add_submenu_page(
-        null, // No menu item - accessed via button only
+        null,
         'Connect Town Taxonomies',
         'Connect Town Taxonomies',
         'edit_pages',
@@ -210,6 +232,11 @@ add_action('admin_menu', 'register_connect_town_taxonomies_page');
 
 // Add inline styles for the Connect Town Taxonomies page
 function hozio_town_taxonomies_admin_styles() {
+    // Don't run on AJAX requests
+    if (wp_doing_ajax()) {
+        return;
+    }
+    
     $screen = get_current_screen();
     if (!$screen || strpos($screen->id, 'connect-town-taxonomies') === false) {
         return;
@@ -370,8 +397,6 @@ function hozio_town_taxonomies_admin_styles() {
             border-radius: 8px;
             box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
         }
-        
-
         
         .hozio-taxonomy-item {
             display: flex;
@@ -608,29 +633,28 @@ function hozio_town_taxonomies_admin_styles() {
                 justify-content: center;
             }
         }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
     
     <script>
     jQuery(document).ready(function($) {
-        // Form submission with loading state
-        $('form').on('submit', function() {
+        // Only target forms inside the hozio wrapper
+        $('.hozio-taxonomies-wrapper form').on('submit', function() {
             const $btn = $('.hozio-btn-primary');
             const originalText = $btn.html();
             $btn.html('<span class="dashicons dashicons-update-alt" style="animation: spin 1s linear infinite;"></span> Processing...');
             $btn.prop('disabled', true);
             
-            // Re-enable after a delay (in case of redirect)
             setTimeout(function() {
                 $btn.html(originalText);
                 $btn.prop('disabled', false);
             }, 5000);
         });
     });
-    
-    @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
     </script>
     <?php
 }
@@ -638,13 +662,11 @@ add_action('admin_head', 'hozio_town_taxonomies_admin_styles');
 
 // Render the taxonomy selection page with Hozio styling
 function render_connect_town_taxonomies_page() {
-    // Handle form submission
     if (isset($_POST['submit_connect_taxonomies']) && check_admin_referer('connect_town_taxonomies_action')) {
         process_taxonomy_based_connection();
         return;
     }
 
-    // Get all page taxonomies
     $all_taxonomies = get_terms(array(
         'taxonomy' => 'parent_pages',
         'hide_empty' => false,
@@ -663,7 +685,6 @@ function render_connect_town_taxonomies_page() {
         </div>
 
         <div class="hozio-taxonomies-content">
-            <!-- Info Card -->
             <div class="hozio-taxonomies-card info-card">
                 <div class="hozio-card-header">
                     <span class="dashicons dashicons-info"></span>
@@ -681,7 +702,6 @@ function render_connect_town_taxonomies_page() {
                 </div>
             </div>
 
-            <!-- Selection Form -->
             <form method="post" action="">
                 <?php wp_nonce_field('connect_town_taxonomies_action'); ?>
                 
@@ -773,16 +793,14 @@ function process_taxonomy_based_connection() {
     $processed = 0;
     $skipped = 0;
     $created_terms = array();
-    $taxonomy_breakdown = array(); // Track which taxonomies processed which pages
+    $taxonomy_breakdown = array();
     
-    // Get selected taxonomy names for display
     $selected_taxonomies = get_terms(array(
         'taxonomy' => 'parent_pages',
         'include' => $selected_taxonomy_ids,
         'hide_empty' => false,
     ));
     
-    // Initialize breakdown array
     foreach ($selected_taxonomies as $taxonomy) {
         $taxonomy_breakdown[$taxonomy->term_id] = array(
             'name' => $taxonomy->name,
@@ -791,7 +809,6 @@ function process_taxonomy_based_connection() {
         );
     }
 
-    // Get all pages that have any of the selected taxonomies
     $args = array(
         'post_type' => 'page',
         'posts_per_page' => -1,
@@ -808,7 +825,6 @@ function process_taxonomy_based_connection() {
     $pages = get_posts($args);
 
     foreach ($pages as $post) {
-        // Skip if this is a parent page (has no parent itself, or has child pages)
         $is_parent_page = ($post->post_parent == 0);
         $children = get_children(array(
             'post_parent' => $post->ID,
@@ -822,17 +838,14 @@ function process_taxonomy_based_connection() {
             continue;
         }
 
-        // Get page taxonomies for this specific page
         $page_taxonomies = wp_get_post_terms($post->ID, 'parent_pages', array('fields' => 'ids'));
         
         $slug = $post->post_name;
         $term_created = false;
 
-        // Check if town taxonomy term already exists with this slug
         $term = term_exists($slug, 'town_taxonomies');
         
         if (!$term) {
-            // Create new town taxonomy term with the page slug
             $term = wp_insert_term(
                 $slug,
                 'town_taxonomies',
@@ -845,13 +858,11 @@ function process_taxonomy_based_connection() {
             }
         }
 
-        // If term creation/retrieval was successful, assign it to the page
         if (!is_wp_error($term)) {
             $term_id = is_array($term) ? $term['term_id'] : $term;
             wp_set_post_terms($post->ID, array($term_id), 'town_taxonomies', false);
             $processed++;
             
-            // Track which page taxonomies this applies to
             foreach ($page_taxonomies as $page_tax_id) {
                 if (in_array($page_tax_id, $selected_taxonomy_ids)) {
                     $taxonomy_breakdown[$page_tax_id]['count']++;
@@ -863,7 +874,6 @@ function process_taxonomy_based_connection() {
         }
     }
 
-    // Display results with Hozio styling
     ?>
     <div class="hozio-taxonomies-wrapper">
         <div class="hozio-taxonomies-header">
@@ -917,7 +927,6 @@ function process_taxonomy_based_connection() {
                 </table>
             </div>
 
-            <!-- Breakdown by Page Taxonomy -->
             <div class="hozio-taxonomies-card info-card">
                 <div class="hozio-card-header">
                     <span class="dashicons dashicons-category"></span>
@@ -943,7 +952,6 @@ function process_taxonomy_based_connection() {
             </div>
 
             <?php if (!empty($created_terms)): ?>
-                <!-- Created Terms List -->
                 <div class="hozio-taxonomies-card selection-card">
                     <div class="hozio-card-header">
                         <span class="dashicons dashicons-tag"></span>
@@ -983,21 +991,18 @@ function process_taxonomy_based_connection() {
     <?php
 }
 
+// ========================
+// 7) ELEMENTOR ACF LOOP FILTER
+// ========================
 
 class Elementor_ACF_Loop_Filter {
     
-    /**
-     * Initialize the class
-     */
     public function __construct() {
         add_action('elementor/element/loop-grid/section_query/before_section_end', [$this, 'add_filter_toggle'], 999, 2);
         add_action('elementor/element/loop-carousel/section_query/before_section_end', [$this, 'add_filter_toggle'], 999, 2);
         add_filter('elementor/query/query_args', [$this, 'apply_term_filter'], 10, 2);
     }
     
-    /**
-     * Add toggle control to Elementor widgets
-     */
     public function add_filter_toggle($element, $args) {
         $element->add_control(
             'enable_acf_term_filter',
@@ -1014,18 +1019,13 @@ class Elementor_ACF_Loop_Filter {
         );
     }
     
-    /**
-     * Apply ACF term filter to query
-     */
     public function apply_term_filter($query_args, $widget) {
         $settings = $widget->get_settings();
         
-        // Only run if toggle is enabled
         if (empty($settings['enable_acf_term_filter']) || $settings['enable_acf_term_filter'] !== 'yes') {
             return $query_args;
         }
         
-        // Don't run in editor
         if (\Elementor\Plugin::$instance->editor->is_edit_mode()) {
             return $query_args;
         }
@@ -1057,9 +1057,6 @@ class Elementor_ACF_Loop_Filter {
         return $query_args;
     }
     
-    /**
-     * Extract term IDs from ACF field value
-     */
     private function extract_term_ids($acf_terms) {
         $term_ids = [];
         
@@ -1082,15 +1079,11 @@ class Elementor_ACF_Loop_Filter {
         return $term_ids;
     }
     
-    /**
-     * Get taxonomy from term ID
-     */
     private function get_taxonomy($term_id) {
         $term = get_term($term_id);
         return ($term && !is_wp_error($term)) ? $term->taxonomy : null;
     }
 }
 
-// Initialize the Elementor ACF Loop Filter
 new Elementor_ACF_Loop_Filter();
 ?>
