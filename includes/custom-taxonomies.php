@@ -982,4 +982,115 @@ function process_taxonomy_based_connection() {
     </div>
     <?php
 }
+
+
+class Elementor_ACF_Loop_Filter {
+    
+    /**
+     * Initialize the class
+     */
+    public function __construct() {
+        add_action('elementor/element/loop-grid/section_query/before_section_end', [$this, 'add_filter_toggle'], 999, 2);
+        add_action('elementor/element/loop-carousel/section_query/before_section_end', [$this, 'add_filter_toggle'], 999, 2);
+        add_filter('elementor/query/query_args', [$this, 'apply_term_filter'], 10, 2);
+    }
+    
+    /**
+     * Add toggle control to Elementor widgets
+     */
+    public function add_filter_toggle($element, $args) {
+        $element->add_control(
+            'enable_acf_term_filter',
+            [
+                'label' => __('🔗 Enable ACF Term Filter', 'hozio'),
+                'type' => \Elementor\Controls_Manager::SWITCHER,
+                'label_on' => __('Yes', 'hozio'),
+                'label_off' => __('No', 'hozio'),
+                'return_value' => 'yes',
+                'default' => '',
+                'separator' => 'before',
+                'description' => __('Filter this loop by the ACF "loop_item_filter" field set on this page.', 'hozio'),
+            ]
+        );
+    }
+    
+    /**
+     * Apply ACF term filter to query
+     */
+    public function apply_term_filter($query_args, $widget) {
+        $settings = $widget->get_settings();
+        
+        // Only run if toggle is enabled
+        if (empty($settings['enable_acf_term_filter']) || $settings['enable_acf_term_filter'] !== 'yes') {
+            return $query_args;
+        }
+        
+        // Don't run in editor
+        if (\Elementor\Plugin::$instance->editor->is_edit_mode()) {
+            return $query_args;
+        }
+        
+        $page_id = get_the_ID();
+        $acf_terms = get_field('loop_item_filter', $page_id);
+        
+        if (!empty($acf_terms)) {
+            $term_ids = $this->extract_term_ids($acf_terms);
+            
+            if (!empty($term_ids)) {
+                $taxonomy = $this->get_taxonomy($term_ids[0]);
+                
+                if ($taxonomy) {
+                    if (!isset($query_args['tax_query'])) {
+                        $query_args['tax_query'] = [];
+                    }
+                    
+                    $query_args['tax_query'][] = [
+                        'taxonomy' => $taxonomy,
+                        'field' => 'term_id',
+                        'terms' => $term_ids,
+                        'operator' => 'IN',
+                    ];
+                }
+            }
+        }
+        
+        return $query_args;
+    }
+    
+    /**
+     * Extract term IDs from ACF field value
+     */
+    private function extract_term_ids($acf_terms) {
+        $term_ids = [];
+        
+        if (is_numeric($acf_terms)) {
+            $term_ids = [(int) $acf_terms];
+        } 
+        elseif (is_array($acf_terms)) {
+            foreach ($acf_terms as $term) {
+                if (is_numeric($term)) {
+                    $term_ids[] = (int) $term;
+                } elseif (is_object($term) && isset($term->term_id)) {
+                    $term_ids[] = (int) $term->term_id;
+                }
+            }
+        } 
+        elseif (is_object($acf_terms) && isset($acf_terms->term_id)) {
+            $term_ids = [(int) $acf_terms->term_id];
+        }
+        
+        return $term_ids;
+    }
+    
+    /**
+     * Get taxonomy from term ID
+     */
+    private function get_taxonomy($term_id) {
+        $term = get_term($term_id);
+        return ($term && !is_wp_error($term)) ? $term->taxonomy : null;
+    }
+}
+
+// Initialize the Elementor ACF Loop Filter
+new Elementor_ACF_Loop_Filter();
 ?>
