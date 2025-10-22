@@ -29,6 +29,10 @@ if ($dark_mode_enabled) {
     $link_color = '#000000';
 }
 
+// Get custom link colors (these override Elementor global styles if set)
+$custom_link_color = get_option('hozio_sitemap_link_color', '');
+$custom_link_hover_color = get_option('hozio_sitemap_link_hover_color', '');
+
 get_header(); 
 ?>
 
@@ -891,6 +895,35 @@ h3.section-title {
         max-height: none !important;
     }
 }
+
+<?php
+// Add custom link color overrides if set (overrides Elementor global styles)
+if (!empty($custom_link_color)) {
+    echo '
+/* Custom Link Color Override */
+.sitemap-wrapper .sitemap-link,
+.sitemap-wrapper .sitemap-link:visited,
+.sitemap-wrapper .tag-link,
+.sitemap-wrapper .tag-link:visited,
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link {
+    color: ' . esc_attr($custom_link_color) . ' !important;
+}
+    ';
+}
+
+if (!empty($custom_link_hover_color)) {
+    echo '
+/* Custom Link Hover Color Override */
+.sitemap-wrapper .sitemap-link:hover,
+.sitemap-wrapper .sitemap-link:focus,
+.sitemap-wrapper .tag-link:hover,
+.sitemap-wrapper .tag-link:focus,
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link:hover {
+    color: ' . esc_attr($custom_link_hover_color) . ' !important;
+}
+    ';
+}
+?>
 <?php
 echo '</style>';
 ?>
