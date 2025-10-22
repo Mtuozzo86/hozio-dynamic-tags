@@ -270,6 +270,63 @@ function hozio_dynamic_tags_inline_styles() {
             color: white !important;
         }
         
+        /* Toggle Switch Styles */
+        .hozio-toggle-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .hozio-toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 32px;
+        }
+        
+        .hozio-toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .hozio-toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 32px;
+        }
+        
+        .hozio-toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 24px;
+            width: 24px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .hozio-toggle-slider {
+            background-color: var(--hozio-blue);
+        }
+        
+        input:checked + .hozio-toggle-slider:before {
+            transform: translateX(28px);
+        }
+        
+        .hozio-toggle-label {
+            font-weight: 500;
+            color: #1f2937;
+        }
+        
         @media (max-width: 782px) {
             .hozio-grid,
             .hozio-grid-3 {
@@ -553,6 +610,24 @@ function hozio_dynamic_tags_settings_page() {
                     </div>
                 </div>
 
+
+                <!-- HTML Sitemap Settings Section -->
+                <div class="hozio-section">
+                    <div class="hozio-section-header">
+                        <span class="dashicons dashicons-admin-appearance"></span>
+                        <h2>HTML Sitemap Settings</h2>
+                    </div>
+                    <div class="hozio-field">
+                        <div class="hozio-toggle-wrapper">
+                            <label class="hozio-toggle-switch">
+                                <input type="checkbox" name="hozio_sitemap_dark_mode" value="1" <?php checked(get_option('hozio_sitemap_dark_mode'), '1'); ?> />
+                                <span class="hozio-toggle-slider"></span>
+                            </label>
+                            <span class="hozio-toggle-label">Enable Dark Mode for HTML Sitemap</span>
+                        </div>
+                        <p class="hozio-field-description">When enabled, the HTML sitemap will display with black backgrounds and white text. Links will remain visible for accessibility.</p>
+                    </div>
+                </div>
                 <!-- Custom Tags Section -->
                 <?php
                 $custom_tags = get_option('hozio_custom_tags', []);
@@ -627,6 +702,9 @@ function hozio_dynamic_tags_save_settings() {
             }
         }
     }
+
+    // Save dark mode setting
+    update_option('hozio_sitemap_dark_mode', isset($_POST['hozio_sitemap_dark_mode']) ? '1' : '0');
 
     // FIXED: Use wp_kses_post() for custom tags to allow HTML
 	$custom_tags = get_option('hozio_custom_tags', []);
