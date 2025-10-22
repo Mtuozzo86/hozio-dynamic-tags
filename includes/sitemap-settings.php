@@ -23,10 +23,35 @@ function hozio_sitemap_settings_admin_assets($hook) {
         return;
     }
     
+    // Enqueue WordPress color picker
+    wp_enqueue_style('wp-color-picker');
+    wp_enqueue_script('wp-color-picker');
+    
     // Add inline styles to match Hozio Pro styling
     add_action('admin_head', 'hozio_sitemap_settings_inline_styles');
+    
+    // Add color picker initialization script
+    add_action('admin_footer', 'hozio_sitemap_color_picker_script');
 }
 add_action('admin_enqueue_scripts', 'hozio_sitemap_settings_admin_assets', 999);
+
+// Color picker initialization script
+function hozio_sitemap_color_picker_script() {
+    ?>
+    <script>
+    jQuery(document).ready(function($) {
+        $('.hozio-color-picker').wpColorPicker({
+            change: function(event, ui) {
+                // Optional: Add preview functionality here
+            },
+            clear: function() {
+                // Optional: Handle clear button
+            }
+        });
+    });
+    </script>
+    <?php
+}
 
 // Inline styles for sitemap settings page
 function hozio_sitemap_settings_inline_styles() {
@@ -109,11 +134,44 @@ function hozio_sitemap_settings_inline_styles() {
             margin-bottom: 20px;
         }
         
+        .hozio-field-label {
+            font-weight: 600;
+            font-size: 15px;
+            color: #1f2937;
+            margin-bottom: 8px;
+            display: block;
+        }
+        
         .hozio-field-description {
             color: #6b7280;
             font-size: 14px;
-            margin: 12px 0 0 72px;
+            margin: 8px 0 0 0;
             line-height: 1.6;
+        }
+        
+        /* Color Picker Field Styles */
+        .hozio-color-field {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .hozio-color-input-wrapper {
+            flex: 0 0 auto;
+        }
+        
+        .hozio-color-info {
+            flex: 1;
+        }
+        
+        .wp-picker-container {
+            margin-top: 0;
+        }
+        
+        .wp-picker-input-wrap {
+            display: flex;
+            align-items: center;
         }
         
         /* Toggle Switch Styles */
@@ -277,16 +335,22 @@ function hozio_sitemap_settings_inline_styles() {
         
         .hozio-info-text {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 10px;
             color: #6b7280;
             margin: 0;
             font-size: 14px;
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border-left: 3px solid var(--hozio-blue);
         }
         
         .hozio-info-text .dashicons {
             color: var(--hozio-blue);
             font-size: 20px;
+            flex-shrink: 0;
+            margin-top: 2px;
         }
         
         .hozio-submit-wrapper {
@@ -326,8 +390,8 @@ function hozio_sitemap_settings_inline_styles() {
             .hozio-content {
                 padding: 0 20px 20px;
             }
-            .hozio-field-description {
-                margin-left: 0;
+            .hozio-color-field {
+                flex-direction: column;
             }
         }
     </style>
@@ -347,6 +411,10 @@ function hozio_sitemap_settings_page() {
     }
     
     settings_errors('hozio_sitemap_settings');
+    
+    // Get current color values
+    $link_color = get_option('hozio_sitemap_link_color', '');
+    $link_hover_color = get_option('hozio_sitemap_link_hover_color', '');
     ?>
     <div class="hozio-settings-wrapper">
         <div class="hozio-header">
@@ -413,6 +481,45 @@ function hozio_sitemap_settings_page() {
                     </div>
                 </div>
 
+                <!-- Link Color Customization Section -->
+                <div class="hozio-section">
+                    <div class="hozio-section-header">
+                        <span class="dashicons dashicons-admin-links"></span>
+                        <h2>Link Colors</h2>
+                    </div>
+                    
+                    <div class="hozio-info-text" style="margin-bottom: 24px;">
+                        <span class="dashicons dashicons-info"></span>
+                        <span>By default, links will inherit colors from your Elementor global styles. Set custom colors below to override the global settings for the sitemap only.</span>
+                    </div>
+
+                    <!-- Link Color Field -->
+                    <div class="hozio-color-field">
+                        <div class="hozio-color-input-wrapper">
+                            <label class="hozio-field-label">Link Color</label>
+                            <input type="text" name="hozio_sitemap_link_color" value="<?php echo esc_attr($link_color); ?>" class="hozio-color-picker" />
+                        </div>
+                        <div class="hozio-color-info">
+                            <p class="hozio-field-description" style="margin-top: 32px;">
+                                Set the default color for all links in the sitemap. Leave empty to use Elementor global link color.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Link Hover Color Field -->
+                    <div class="hozio-color-field">
+                        <div class="hozio-color-input-wrapper">
+                            <label class="hozio-field-label">Link Hover Color</label>
+                            <input type="text" name="hozio_sitemap_link_hover_color" value="<?php echo esc_attr($link_hover_color); ?>" class="hozio-color-picker" />
+                        </div>
+                        <div class="hozio-color-info">
+                            <p class="hozio-field-description" style="margin-top: 32px;">
+                                Set the color for links when hovering over them. Leave empty to use Elementor global hover color.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Additional Settings Section (Future Features) -->
                 <div class="hozio-section">
                     <div class="hozio-section-header">
@@ -421,7 +528,7 @@ function hozio_sitemap_settings_page() {
                     </div>
                     <p class="hozio-info-text">
                         <span class="dashicons dashicons-info"></span>
-                        More sitemap customization options will be available in future updates.
+                        <span>More sitemap customization options will be available in future updates.</span>
                     </p>
                 </div>
 
@@ -449,6 +556,14 @@ function hozio_save_sitemap_settings() {
 
     // Save dark mode setting
     update_option('hozio_sitemap_dark_mode', isset($_POST['hozio_sitemap_dark_mode']) ? '1' : '0');
+
+    // Save link color (sanitize as hex color or empty)
+    $link_color = isset($_POST['hozio_sitemap_link_color']) ? sanitize_hex_color($_POST['hozio_sitemap_link_color']) : '';
+    update_option('hozio_sitemap_link_color', $link_color);
+
+    // Save link hover color (sanitize as hex color or empty)
+    $link_hover_color = isset($_POST['hozio_sitemap_link_hover_color']) ? sanitize_hex_color($_POST['hozio_sitemap_link_hover_color']) : '';
+    update_option('hozio_sitemap_link_hover_color', $link_hover_color);
 
     // Redirect back with success message
     wp_redirect(add_query_arg('settings-updated', 'true', admin_url('admin.php?page=hozio-sitemap-settings')));
