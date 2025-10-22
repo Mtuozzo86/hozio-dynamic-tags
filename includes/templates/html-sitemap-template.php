@@ -3,7 +3,34 @@
 Template Name: HTML Sitemap
 */
 
-get_header(); ?>
+// Check if dark mode is enabled
+$dark_mode_enabled = get_option('hozio_sitemap_dark_mode', '0') === '1';
+
+// Set color variables based on dark mode setting
+if ($dark_mode_enabled) {
+    $bg_color = '#000000';
+    $text_color = '#ffffff';
+    $border_color = '#333333';
+    $border_light = '#555555';
+    $desc_color = '#cccccc';
+    $accordion_bg = '#1a1a1a';
+    $accordion_hover = '#2a2a2a';
+    $accordion_active = '#2a2a2a';
+    $link_color = '#ffffff';
+} else {
+    $bg_color = '#ffffff';
+    $text_color = '#000000';
+    $border_color = '#e0e0e0';
+    $border_light = '#000000';
+    $desc_color = '#666666';
+    $accordion_bg = '#f9f9f9';
+    $accordion_hover = '#f0f0f0';
+    $accordion_active = '#e8e8e8';
+    $link_color = '#000000';
+}
+
+get_header(); 
+?>
 
 <!-- SEO Meta Description -->
 <script>
@@ -383,7 +410,10 @@ document.addEventListener('DOMContentLoaded', function() {
     </main>
 </div>
 
-<style>
+<?php
+// Output styles with PHP variables
+echo '<style>';
+?>
 .sitemap-wrapper * {
     box-sizing: border-box;
 }
@@ -397,15 +427,15 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .sitemap-main {
-    background: #ffffff;
+    background: <?php echo $bg_color; ?>;
     border-radius: 0;
     box-shadow: none;
     overflow: hidden;
 }
 
 .sitemap-header {
-    background: #ffffff;
-    color: #000000;
+    background: <?php echo $bg_color; ?>;
+    color: <?php echo $text_color; ?>;
     padding: 0;
     text-align: center;
     width: 100%;
@@ -417,7 +447,7 @@ document.addEventListener('DOMContentLoaded', function() {
     font-weight: 700;
     margin: 0 0 1rem 0;
     text-shadow: none;
-    color: #000000;
+    color: <?php echo $text_color; ?>;
 }
 
 .sitemap-description {
@@ -425,7 +455,7 @@ document.addEventListener('DOMContentLoaded', function() {
     opacity: 1;
     max-width: none;
     margin: 0;
-    color: #000000;
+    color: <?php echo $desc_color; ?>;
     width: 100vw;
     position: relative;
     left: 50%;
@@ -446,10 +476,10 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .sitemap-section {
-    background: #ffffff;
+    background: <?php echo $bg_color; ?>;
     border-radius: 15px;
     padding: 1.5rem;
-    border: 1px solid #e0e0e0;
+    border: 1px solid <?php echo $border_color; ?>;
     transition: none;
     margin-bottom: 2rem;
     box-shadow: none;
@@ -466,15 +496,23 @@ document.addEventListener('DOMContentLoaded', function() {
     gap: 0.75rem;
     font-size: 1.25rem;
     font-weight: 600;
-    color: #000000;
+    color: <?php echo $text_color; ?>;
     margin: 0 0 1.5rem 0;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid #000000;
+    border-bottom: 1px solid <?php echo $border_light; ?>;
 }
 
 .section-icon {
-    color: #000000;
+    color: <?php echo $text_color; ?>;
     flex-shrink: 0;
+}
+
+/* Ensure all headings use correct color */
+.sitemap-section h2,
+.sitemap-section h3,
+h2.section-title,
+h3.section-title {
+    color: <?php echo $text_color; ?> !important;
 }
 
 /* Section Accordion Styles for Posts */
@@ -500,7 +538,7 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .section-accordion-header.active {
-    border-bottom: 1px solid #000000 !important;
+    border-bottom: 1px solid <?php echo $border_light; ?> !important;
     margin-bottom: 0 !important;
 }
 
@@ -527,15 +565,15 @@ document.addEventListener('DOMContentLoaded', function() {
 .accordion-helper-text {
     font-size: 1rem;
     font-weight: 500;
-    color: #000000;
+    color: <?php echo $text_color; ?>;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 .section-accordion-icon {
     flex-shrink: 0;
     transition: transform 0.3s ease;
-    color: #000000;
-    stroke: #000000;
+    color: <?php echo $text_color; ?>;
+    stroke: <?php echo $text_color; ?>;
     fill: none;
     width: 24px;
     height: 24px;
@@ -584,13 +622,13 @@ document.addEventListener('DOMContentLoaded', function() {
     justify-content: space-between !important;
     align-items: center !important;
     padding: 1rem 1.25rem !important;
-    background: #f9f9f9 !important;
-    background-color: #f9f9f9 !important;
+    background: <?php echo $accordion_bg; ?> !important;
+    background-color: <?php echo $accordion_bg; ?> !important;
     border: none !important;
     border-radius: 8px !important;
     cursor: pointer !important;
     font-weight: 600 !important;
-    color: #000000 !important;
+    color: <?php echo $text_color; ?> !important;
     text-align: left !important;
     transition: background-color 0.2s ease !important;
     box-shadow: none !important;
@@ -603,18 +641,18 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:hover {
-    background: #f0f0f0 !important;
-    background-color: #f0f0f0 !important;
-    color: #000000 !important;
+    background: <?php echo $accordion_hover; ?> !important;
+    background-color: <?php echo $accordion_hover; ?> !important;
+    color: <?php echo $text_color; ?> !important;
     box-shadow: none !important;
     transform: none !important;
     border: none !important;
 }
 
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header.active {
-    background: #e8e8e8 !important;
-    background-color: #e8e8e8 !important;
-    color: #000000 !important;
+    background: <?php echo $accordion_active; ?> !important;
+    background-color: <?php echo $accordion_active; ?> !important;
+    color: <?php echo $text_color; ?> !important;
     box-shadow: none !important;
     border: none !important;
 }
@@ -622,12 +660,12 @@ document.addEventListener('DOMContentLoaded', function() {
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:focus {
     outline: none !important;
     box-shadow: none !important;
-    background: #f0f0f0 !important;
+    background: <?php echo $accordion_hover; ?> !important;
 }
 
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-title.accordion-title {
     flex-grow: 1 !important;
-    color: #000000 !important;
+    color: <?php echo $text_color; ?> !important;
     text-shadow: none !important;
     font-weight: 600 !important;
     font-size: 18px !important;
@@ -636,8 +674,8 @@ document.addEventListener('DOMContentLoaded', function() {
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-icon.accordion-icon {
     flex-shrink: 0 !important;
     transition: transform 0.3s ease !important;
-    color: #000000 !important;
-    stroke: #000000 !important;
+    color: <?php echo $text_color; ?> !important;
+    stroke: <?php echo $text_color; ?> !important;
     fill: none !important;
 }
 
@@ -649,8 +687,8 @@ document.addEventListener('DOMContentLoaded', function() {
     max-height: 0 !important;
     overflow: hidden !important;
     transition: max-height 0.3s ease !important;
-    background: #ffffff !important;
-    background-color: #ffffff !important;
+    background: <?php echo $bg_color; ?> !important;
+    background-color: <?php echo $bg_color; ?> !important;
 }
 
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-content.active {
@@ -660,8 +698,8 @@ document.addEventListener('DOMContentLoaded', function() {
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list.accordion-child-list {
     padding: 40px 1.25rem !important;
     margin: 0 !important;
-    background: #ffffff !important;
-    background-color: #ffffff !important;
+    background: <?php echo $bg_color; ?> !important;
+    background-color: <?php echo $bg_color; ?> !important;
 }
 
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link {
@@ -691,7 +729,7 @@ document.addEventListener('DOMContentLoaded', function() {
     border-radius: 0;
     box-shadow: none;
     border: none;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid <?php echo $border_color; ?>;
     box-sizing: border-box;
 }
 
@@ -700,7 +738,7 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .sitemap-link {
-    color: #000000;
+    color: <?php echo $link_color; ?>;
     text-decoration: none;
     font-weight: 500;
     transition: none;
@@ -709,14 +747,14 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .sitemap-link:hover {
-    color: #000000;
+    color: <?php echo $link_color; ?>;
     text-decoration: underline;
 }
 
 .post-date,
 .post-count {
     font-size: 0.875rem;
-    color: #000000;
+    color: <?php echo $desc_color; ?>;
     font-weight: 400;
     flex-shrink: 0;
     margin-left: 1rem;
@@ -731,19 +769,19 @@ document.addEventListener('DOMContentLoaded', function() {
 .tag-link {
     display: inline-block;
     padding: 0.375rem 0.75rem;
-    background: #ffffff;
-    color: #000000;
+    background: <?php echo $bg_color; ?>;
+    color: <?php echo $text_color; ?>;
     text-decoration: none;
     border-radius: 0;
     font-size: 0.875rem;
     font-weight: 500;
     transition: none;
-    border: 1px solid #000000;
+    border: 1px solid <?php echo $text_color; ?>;
     margin: 0.25rem;
 }
 
 .tag-link:hover {
-    background: #ffffff;
+    background: <?php echo $bg_color; ?>;
     transform: none;
     box-shadow: none;
     text-decoration: underline;
@@ -819,8 +857,8 @@ document.addEventListener('DOMContentLoaded', function() {
 .sitemap-wrapper,
 .sitemap-main,
 .sitemap-section {
-    background: #ffffff !important;
-    color: #000000 !important;
+    background: <?php echo $bg_color; ?> !important;
+    color: <?php echo $text_color; ?> !important;
 }
 
 @media print {
@@ -831,21 +869,21 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     .sitemap-header {
-        background: #ffffff;
-        color: #000000;
+        background: <?php echo $bg_color; ?>;
+        color: <?php echo $text_color; ?>;
         text-shadow: none;
     }
     
     .sitemap-section {
-        background: #ffffff;
-        border: 1px solid #000000;
+        background: <?php echo $bg_color; ?>;
+        border: 1px solid <?php echo $text_color; ?>;
         break-inside: avoid;
     }
     
     .tag-link {
-        background: #ffffff;
-        color: #000000;
-        border: 1px solid #000000;
+        background: <?php echo $bg_color; ?>;
+        color: <?php echo $text_color; ?>;
+        border: 1px solid <?php echo $text_color; ?>;
     }
     
     .sitemap-accordion-content,
@@ -853,7 +891,9 @@ document.addEventListener('DOMContentLoaded', function() {
         max-height: none !important;
     }
 }
-</style>
+<?php
+echo '</style>';
+?>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
