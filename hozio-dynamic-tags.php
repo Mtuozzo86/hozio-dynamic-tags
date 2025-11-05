@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.65
+Version:         3.66
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -640,8 +640,12 @@ class Your_Plugin_ACF_Maps {
     }
 }
 
-// Initialize the ACF Maps functionality
-new Your_Plugin_ACF_Maps();
+// Initialize the ACF Maps functionality only if ACF is active
+add_action('plugins_loaded', function() {
+    if (function_exists('get_field')) {
+        new Your_Plugin_ACF_Maps();
+    }
+});
 
 
 // Force all ACF field groups to show in REST API
