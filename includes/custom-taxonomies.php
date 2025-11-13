@@ -3,6 +3,9 @@
 // 1) PAGE TAXONOMY
 // ========================
 function create_parent_pages_taxonomy() {
+    // Get the archive setting (default to disabled)
+    $archives_enabled = get_option('hozio_parent_pages_archive_enabled', 0);
+    
     $args = array(
         'hierarchical'      => true,
         'labels'            => array(
@@ -19,9 +22,10 @@ function create_parent_pages_taxonomy() {
             'menu_name'         => 'Page Taxonomies',
         ),
         'show_ui'           => true,
-        'show_admin_column' => false, // <-- disable WP's auto column (we add our own below)
-        'query_var'         => true,
-        'rewrite'           => array('slug' => 'parent-pages'),
+        'show_admin_column' => false,
+        'query_var'         => $archives_enabled ? true : false,
+        'publicly_queryable' => $archives_enabled ? true : false,
+        'rewrite'           => $archives_enabled ? array('slug' => 'parent-pages') : false,
     );
 
     register_taxonomy('parent_pages', 'page', $args);
@@ -32,6 +36,9 @@ add_action('init', 'create_parent_pages_taxonomy');
 // 2) TOWN TAXONOMY
 // ========================
 function create_town_taxonomies_taxonomy() {
+    // Get the archive setting (default to disabled)
+    $archives_enabled = get_option('hozio_town_taxonomies_archive_enabled', 0);
+    
     $args = array(
         'hierarchical'      => true,
         'labels'            => array(
@@ -48,14 +55,37 @@ function create_town_taxonomies_taxonomy() {
             'menu_name'         => 'Town Taxonomies',
         ),
         'show_ui'           => true,
-        'show_admin_column' => false, // <-- disable WP's auto column
-        'query_var'         => true,
-        'rewrite'           => array('slug' => 'town'),
+        'show_admin_column' => false,
+        'query_var'         => $archives_enabled ? true : false,
+        'publicly_queryable' => $archives_enabled ? true : false,
+        'rewrite'           => $archives_enabled ? array('slug' => 'town') : false,
     );
 
     register_taxonomy('town_taxonomies', array('page'), $args);
 }
 add_action('init', 'create_town_taxonomies_taxonomy');
+
+// ========================
+// REDIRECT DISABLED ARCHIVES
+// ========================
+add_action('template_redirect', 'hozio_redirect_disabled_taxonomy_archives');
+function hozio_redirect_disabled_taxonomy_archives() {
+    if (is_tax('parent_pages')) {
+        $enabled = get_option('hozio_parent_pages_archive_enabled', 0);
+        if (!$enabled) {
+            wp_redirect(home_url('/'), 301);
+            exit;
+        }
+    }
+    
+    if (is_tax('town_taxonomies')) {
+        $enabled = get_option('hozio_town_taxonomies_archive_enabled', 0);
+        if (!$enabled) {
+            wp_redirect(home_url('/'), 301);
+            exit;
+        }
+    }
+}
 
 // ========================
 // 3) SEARCH BARS ON PAGES LIST
