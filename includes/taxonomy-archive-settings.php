@@ -285,15 +285,16 @@ function hozio_taxonomy_archive_settings_page() {
             background: white;
             border: 1px solid #e5e7eb;
             border-radius: 6px;
-            padding: 12px 16px;
+            padding: 16px;
             margin-top: 12px;
             display: flex;
-            align-items: center;
-            gap: 8px;
+            align-items: flex-start;
+            gap: 12px;
         }
         
         .hozio-archive-preview .dashicons {
-            color: var(--hozio-blue);
+            flex-shrink: 0;
+            margin-top: 2px;
         }
         
         .hozio-archive-url {
@@ -302,6 +303,7 @@ function hozio_taxonomy_archive_settings_page() {
             font-family: monospace;
             font-size: 13px;
             word-break: break-all;
+            display: block;
         }
         
         .hozio-archive-url:hover {
@@ -449,22 +451,38 @@ function hozio_taxonomy_archive_settings_page() {
                             </div>
                         </div>
                         
-                        <div class="hozio-archive-preview">
-                            <?php if ($parent_pages_enabled && !empty($parent_pages_sample)): ?>
-                                <span class="dashicons dashicons-admin-links"></span>
-                                <a href="<?php echo esc_url(get_term_link($parent_pages_sample[0])); ?>" target="_blank" class="hozio-archive-url">
-                                    <?php echo esc_url(get_term_link($parent_pages_sample[0])); ?>
-                                </a>
-                            <?php elseif (!$parent_pages_enabled && !empty($parent_pages_sample)): ?>
-                                <span class="dashicons dashicons-lock" style="color: #9ca3af;"></span>
-                                <span class="hozio-disabled-text">
-                                    Example: <?php echo esc_html(home_url('/parent-pages/' . $parent_pages_sample[0]->slug . '/')); ?> (disabled)
+                        <?php if (!empty($parent_pages_sample)): ?>
+                            <div class="hozio-archive-preview">
+                                <?php if ($parent_pages_enabled): ?>
+                                    <span class="dashicons dashicons-admin-links"></span>
+                                    <div style="flex: 1;">
+                                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">
+                                            <strong style="color: var(--hozio-green);">✓ Enabled</strong> - Archive page is publicly accessible:
+                                        </div>
+                                        <a href="<?php echo esc_url(get_term_link($parent_pages_sample[0])); ?>" target="_blank" class="hozio-archive-url">
+                                            <?php echo esc_url(get_term_link($parent_pages_sample[0])); ?>
+                                        </a>
+                                    </div>
+                                <?php else: ?>
+                                    <span class="dashicons dashicons-hidden" style="color: #9ca3af;"></span>
+                                    <div style="flex: 1;">
+                                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">
+                                            <strong style="color: #9ca3af;">✕ Disabled</strong> - Example archive URL (not accessible):
+                                        </div>
+                                        <span style="color: #9ca3af; font-family: monospace; font-size: 13px;">
+                                            <?php echo esc_html(home_url('/parent-pages/' . $parent_pages_sample[0]->slug . '/')); ?>
+                                        </span>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="hozio-archive-preview">
+                                <span class="dashicons dashicons-warning" style="color: #f59e0b;"></span>
+                                <span style="color: #f59e0b; font-size: 13px;">
+                                    No Page Taxonomy terms exist yet. Create terms to see preview.
                                 </span>
-                            <?php else: ?>
-                                <span class="dashicons dashicons-warning" style="color: #9ca3af;"></span>
-                                <span class="hozio-disabled-text">No terms available for preview</span>
-                            <?php endif; ?>
-                        </div>
+                            </div>
+                        <?php endif; ?>
                     </div>
                     
                     <!-- Town Taxonomies Setting -->
@@ -486,22 +504,38 @@ function hozio_taxonomy_archive_settings_page() {
                             </div>
                         </div>
                         
-                        <div class="hozio-archive-preview">
-                            <?php if ($town_taxonomies_enabled && !empty($town_taxonomies_sample)): ?>
-                                <span class="dashicons dashicons-admin-links"></span>
-                                <a href="<?php echo esc_url(get_term_link($town_taxonomies_sample[0])); ?>" target="_blank" class="hozio-archive-url">
-                                    <?php echo esc_url(get_term_link($town_taxonomies_sample[0])); ?>
-                                </a>
-                            <?php elseif (!$town_taxonomies_enabled && !empty($town_taxonomies_sample)): ?>
-                                <span class="dashicons dashicons-lock" style="color: #9ca3af;"></span>
-                                <span class="hozio-disabled-text">
-                                    Example: <?php echo esc_html(home_url('/town/' . $town_taxonomies_sample[0]->slug . '/')); ?> (disabled)
+                        <?php if (!empty($town_taxonomies_sample)): ?>
+                            <div class="hozio-archive-preview">
+                                <?php if ($town_taxonomies_enabled): ?>
+                                    <span class="dashicons dashicons-admin-links"></span>
+                                    <div style="flex: 1;">
+                                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">
+                                            <strong style="color: var(--hozio-green);">✓ Enabled</strong> - Archive page is publicly accessible:
+                                        </div>
+                                        <a href="<?php echo esc_url(get_term_link($town_taxonomies_sample[0])); ?>" target="_blank" class="hozio-archive-url">
+                                            <?php echo esc_url(get_term_link($town_taxonomies_sample[0])); ?>
+                                        </a>
+                                    </div>
+                                <?php else: ?>
+                                    <span class="dashicons dashicons-hidden" style="color: #9ca3af;"></span>
+                                    <div style="flex: 1;">
+                                        <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">
+                                            <strong style="color: #9ca3af;">✕ Disabled</strong> - Example archive URL (not accessible):
+                                        </div>
+                                        <span style="color: #9ca3af; font-family: monospace; font-size: 13px;">
+                                            <?php echo esc_html(home_url('/town/' . $town_taxonomies_sample[0]->slug . '/')); ?>
+                                        </span>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="hozio-archive-preview">
+                                <span class="dashicons dashicons-warning" style="color: #f59e0b;"></span>
+                                <span style="color: #f59e0b; font-size: 13px;">
+                                    No Town Taxonomy terms exist yet. Create terms to see preview.
                                 </span>
-                            <?php else: ?>
-                                <span class="dashicons dashicons-warning" style="color: #9ca3af;"></span>
-                                <span class="hozio-disabled-text">No terms available for preview</span>
-                            <?php endif; ?>
-                        </div>
+                            </div>
+                        <?php endif; ?>
                     </div>
                     
                     <button type="submit" name="submit" class="hozio-btn-primary">
