@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.66
+Version:         3.67
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -26,6 +26,8 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/leads-digest.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-media-replace-endpoint.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/query-post-types.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/sitemap-settings.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/taxonomy-archive-settings.php';
+
 
 
 
@@ -104,6 +106,14 @@ function hozio_dynamic_tags_menu() {
         'hozio-query-post-types',
         'hozio_query_post_types_page'
     );
+    add_submenu_page(
+    'hozio_dynamic_tags',
+    'Taxonomy Archive Settings',
+    'Archive Settings',
+    'manage_options',
+    'hozio-taxonomy-archives',
+    'hozio_taxonomy_archive_settings_page'
+);
 }
 
 add_action('admin_menu', 'hozio_dynamic_tags_menu');
