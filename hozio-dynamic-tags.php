@@ -27,6 +27,8 @@ require_once plugin_dir_path(__FILE__) . 'includes/class-media-replace-endpoint.
 require_once plugin_dir_path( __FILE__ ) . 'includes/query-post-types.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/sitemap-settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/taxonomy-archive-settings.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/loop-configurations.php';
+
 
 
 
@@ -113,6 +115,14 @@ function hozio_dynamic_tags_menu() {
     'manage_options',
     'hozio-taxonomy-archives',
     'hozio_taxonomy_archive_settings_page'
+    );
+    add_submenu_page(
+    'hozio_dynamic_tags', // ✅ CORRECT - has underscore
+    'Loop Configurations',
+    'Loop Configurations',
+    'manage_options',
+    'hozio-loop-configurations',
+    'hozio_loop_configs_render_page'
 );
 }
 
