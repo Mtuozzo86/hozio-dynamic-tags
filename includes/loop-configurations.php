@@ -1,22 +1,18 @@
 <?php
-/**
- * Loop Configurations - Complete with Page Meta Box
- */
+
 
 if (!defined('ABSPATH')) exit;
 
-// ========================================
-// PAGE META BOX - SELECT CONFIGURATION
-// ========================================
+
 add_action('add_meta_boxes', 'hozio_add_page_config_meta_box');
 function hozio_add_page_config_meta_box() {
     add_meta_box(
         'hozio_page_loop_config',
-        'Loop Configuration',
+        '🎯 Loop Configuration',
         'hozio_page_config_meta_box_callback',
         'page',
-        'side',
-        'default'
+        'side',  // Keep in sidebar but will appear after page attributes
+        'low'    // Low priority = appears lower
     );
 }
 
@@ -36,7 +32,7 @@ function hozio_page_config_meta_box_callback($post) {
             Configuration:
         </label>
         
-        <select name="hozio_selected_loop_config" id="hozio_selected_loop_config" style="width: 100%; padding: 8px; border: 2px solid #ddd; border-radius: 4px;">
+        <select name="hozio_selected_loop_config" id="hozio_selected_loop_config" style="width: 100%; padding: 8px; border: 2px solid #ddd; border-radius: 4px; font-size: 14px;">
             <option value="">-- No Configuration (Default Query) --</option>
             <?php
             if (!empty($configs) && is_array($configs)) {
@@ -49,6 +45,12 @@ function hozio_page_config_meta_box_callback($post) {
             }
             ?>
         </select>
+        
+        <?php if (!empty($selected_config)): ?>
+            <div style="margin-top: 12px; padding: 10px; background: #d4edda; border-left: 3px solid #28a745; font-size: 12px;">
+                <strong>✓ Active:</strong> <?php echo esc_html($selected_config); ?>
+            </div>
+        <?php endif; ?>
         
         <?php if (empty($configs)): ?>
             <p style="margin-top: 12px; padding: 10px; background: #fff3cd; border-left: 3px solid #ffc107; font-size: 12px;">
@@ -91,18 +93,49 @@ function hozio_save_page_config($post_id) {
 }
 
 // ========================================
-// INTERCEPT LOOP QUERIES - CHECK PAGE META
+// INTERCEPT LOOP QUERIES - FIXED
 // ========================================
 add_action('elementor/query/query_args', 'hozio_intercept_loop_widget_query', 10, 2);
 
 function hozio_intercept_loop_widget_query($query_args, $widget) {
+    // Only target loop widgets
     $widget_name = $widget->get_name();
-    
     if (!in_array($widget_name, ['loop-grid', 'loop-carousel'])) {
         return $query_args;
     }
     
-    $current_page_id = get_the_ID();
+    // Get current page ID - try multiple methods
+    $current_page_id = null;
+    
+    // Method 1: Check if we're in Elementor preview
+    if (isset($_GET['elementor-preview'])) {
+        $current_page_id = absint($_GET['elementor-preview']);
+    }
+    
+    // Method 2: Get from global post
+    if (!$current_page_id) {
+        global $post;
+        if ($post && isset($post->ID)) {
+            $current_page_id = $post->ID;
+        }
+    }
+    
+    // Method 3: get_the_ID()
+    if (!$current_page_id) {
+        $current_page_id = get_the_ID();
+    }
+    
+    // Method 4: Check queried object
+    if (!$current_page_id) {
+        $queried_object = get_queried_object();
+        if ($queried_object && isset($queried_object->ID)) {
+            $current_page_id = $queried_object->ID;
+        }
+    }
+    
+    if (!$current_page_id) {
+        return $query_args;
+    }
     
     // Get configuration from page meta
     $config_name = get_post_meta($current_page_id, 'hozio_selected_loop_config', true);
@@ -111,6 +144,7 @@ function hozio_intercept_loop_widget_query($query_args, $widget) {
         return $query_args;
     }
     
+    // Apply configuration
     $query_args = hozio_apply_loop_configuration($config_name, $query_args, $current_page_id);
     
     return $query_args;
@@ -123,6 +157,7 @@ function hozio_apply_loop_configuration($config_name, $query_args, $current_page
         return $query_args;
     }
     
+    // Find the selected configuration
     $selected_config = null;
     foreach ($configs as $config) {
         if (isset($config['name']) && $config['name'] === $config_name) {
@@ -143,20 +178,25 @@ function hozio_apply_loop_configuration($config_name, $query_args, $current_page
         return $query_args;
     }
     
+    // Build exclusion list
     $post__not_in = isset($query_args['post__not_in']) ? $query_args['post__not_in'] : array();
-    $post__not_in[] = $current_page_id;
+    $post__not_in[] = $current_page_id; // Always exclude current page
     
     if (!empty($excluded_pages)) {
         $post__not_in = array_merge($post__not_in, array_map('intval', $excluded_pages));
     }
     
-    $post__not_in = array_unique($post__not_in);
+    $post__not_in = array_unique(array_filter($post__not_in));
     
+    // Override query args
     $query_args['post_type'] = 'page';
     $query_args['post__not_in'] = $post__not_in;
     
+    // Build tax query
     if (count($term_ids) > 1) {
-        $query_args['tax_query'] = array('relation' => 'OR');
+        $query_args['tax_query'] = array(
+            'relation' => 'OR'
+        );
         foreach ($term_ids as $term_id) {
             $query_args['tax_query'][] = array(
                 'taxonomy' => $taxonomy,
@@ -174,6 +214,15 @@ function hozio_apply_loop_configuration($config_name, $query_args, $current_page
                 'operator' => 'IN',
             ),
         );
+    }
+    
+    // Debug logging (remove in production)
+    if (defined('WP_DEBUG') && WP_DEBUG) {
+        error_log('Hozio Loop Config Applied:');
+        error_log('Config: ' . $config_name);
+        error_log('Taxonomy: ' . $taxonomy);
+        error_log('Terms: ' . implode(', ', $term_ids));
+        error_log('Excluded: ' . implode(', ', $post__not_in));
     }
     
     return $query_args;
