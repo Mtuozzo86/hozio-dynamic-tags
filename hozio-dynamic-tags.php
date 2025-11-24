@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.69
+Version:         3.70
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -28,8 +28,6 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/query-post-types.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/sitemap-settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/taxonomy-archive-settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/loop-configurations.php';
-
-
 
 
 
@@ -674,3 +672,166 @@ function force_acf_rest_api_on($field_group) {
     $field_group['show_in_rest'] = 1;
     return $field_group;
 }
+
+
+
+// ========================
+// ACF FIELD GROUPS REST API
+// ========================
+
+/**
+ * Register REST API endpoint for ACF field groups and fields
+ */
+function hozio_register_acf_fields_endpoint() {
+    register_rest_route('wp/v2', '/acf-fields', array(
+        'methods'             => 'GET',
+        'callback'            => 'hozio_get_acf_field_groups',
+        'permission_callback' => function() {
+            return current_user_can('edit_posts');
+        }
+    ));
+    
+    register_rest_route('wp/v1', '/acf-fields/(?P<group_key>[a-zA-Z0-9_-]+)', array(
+        'methods'             => 'GET',
+        'callback'            => 'hozio_get_acf_field_group_details',
+        'permission_callback' => function() {
+            return current_user_can('edit_posts');
+        }
+    ));
+}
+add_action('rest_api_init', 'hozio_register_acf_fields_endpoint');
+
+/**
+ * Get all ACF field groups with their fields
+ */
+function hozio_get_acf_field_groups($request) {
+    if (!function_exists('acf_get_field_groups')) {
+        return new WP_Error('acf_not_active', 'Advanced Custom Fields is not active', array('status' => 404));
+    }
+    
+    $field_groups = acf_get_field_groups();
+    $result = array();
+    
+    foreach ($field_groups as $group) {
+        $fields = acf_get_fields($group['key']);
+        
+        $group_data = array(
+            'key'       => $group['key'],
+            'title'     => $group['title'],
+            'active'    => $group['active'],
+            'location'  => $group['location'],
+            'fields'    => array()
+        );
+        
+        if ($fields) {
+            foreach ($fields as $field) {
+                $group_data['fields'][] = hozio_format_acf_field($field);
+            }
+        }
+        
+        $result[] = $group_data;
+    }
+    
+    return rest_ensure_response($result);
+}
+
+/**
+ * Get a specific field group by key
+ */
+function hozio_get_acf_field_group_details($request) {
+    if (!function_exists('acf_get_field_groups')) {
+        return new WP_Error('acf_not_active', 'Advanced Custom Fields is not active', array('status' => 404));
+    }
+    
+    $group_key = $request->get_param('group_key');
+    $group = acf_get_field_group($group_key);
+    
+    if (!$group) {
+        return new WP_Error('group_not_found', 'Field group not found', array('status' => 404));
+    }
+    
+    $fields = acf_get_fields($group_key);
+    
+    $result = array(
+        'key'       => $group['key'],
+        'title'     => $group['title'],
+        'active'    => $group['active'],
+        'location'  => $group['location'],
+        'fields'    => array()
+    );
+    
+    if ($fields) {
+        foreach ($fields as $field) {
+            $result['fields'][] = hozio_format_acf_field($field);
+        }
+    }
+    
+    return rest_ensure_response($result);
+}
+
+/**
+ * Format a single ACF field (handles nested fields like repeaters/groups)
+ */
+function hozio_format_acf_field($field) {
+    $formatted = array(
+        'key'           => $field['key'],
+        'name'          => $field['name'],
+        'label'         => $field['label'],
+        'type'          => $field['type'],
+        'required'      => !empty($field['required']),
+        'instructions'  => $field['instructions'] ?? '',
+    );
+    
+    if (in_array($field['type'], array('select', 'checkbox', 'radio', 'button_group'))) {
+        $formatted['choices'] = $field['choices'] ?? array();
+    }
+    
+    if (!empty($field['default_value'])) {
+        $formatted['default_value'] = $field['default_value'];
+    }
+    
+    if (!empty($field['sub_fields'])) {
+        $formatted['sub_fields'] = array();
+        foreach ($field['sub_fields'] as $sub_field) {
+            $formatted['sub_fields'][] = hozio_format_acf_field($sub_field);
+        }
+    }
+    
+    if (!empty($field['layouts'])) {
+        $formatted['layouts'] = array();
+        foreach ($field['layouts'] as $layout) {
+            $layout_data = array(
+                'key'   => $layout['key'],
+                'name'  => $layout['name'],
+                'label' => $layout['label'],
+                'sub_fields' => array()
+            );
+            if (!empty($layout['sub_fields'])) {
+                foreach ($layout['sub_fields'] as $sub_field) {
+                    $layout_data['sub_fields'][] = hozio_format_acf_field($sub_field);
+                }
+            }
+            $formatted['layouts'][] = $layout_data;
+        }
+    }
+    
+    return $formatted;
+}
+
+
+add_action('init', 'hozio_ensure_taxonomy_rest_support', 99);
+function hozio_ensure_taxonomy_rest_support() {
+    global $wp_taxonomies;
+    
+    if (isset($wp_taxonomies['parent_pages'])) {
+        $wp_taxonomies['parent_pages']->show_in_rest = true;
+        $wp_taxonomies['parent_pages']->rest_base = 'parent_pages';
+    }
+    
+    if (isset($wp_taxonomies['town_taxonomies'])) {
+        $wp_taxonomies['town_taxonomies']->show_in_rest = true;
+        $wp_taxonomies['town_taxonomies']->rest_base = 'town_taxonomies';
+    }
+}
+
+
