@@ -696,7 +696,7 @@ h3.section-title {
 }
 
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-content.active {
-    max-height: 2000px !important;
+    max-height: 100% !important;
 }
 
 .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list.accordion-child-list {
