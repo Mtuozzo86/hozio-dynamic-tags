@@ -7,8 +7,8 @@ function create_parent_pages_taxonomy() {
     $archives_enabled = get_option('hozio_parent_pages_archive_enabled', 0);
     
     $args = array(
-        'hierarchical'      => true,
-        'labels'            => array(
+        'hierarchical'          => true,
+        'labels'                => array(
             'name'              => 'Page Taxonomies',
             'singular_name'     => 'Page Taxonomy',
             'search_items'      => 'Search Taxonomies',
@@ -21,11 +21,15 @@ function create_parent_pages_taxonomy() {
             'new_item_name'     => 'New Page Taxonomy Name',
             'menu_name'         => 'Page Taxonomies',
         ),
-        'show_ui'           => true,
-        'show_admin_column' => false,
-        'query_var'         => $archives_enabled ? true : false,
-        'publicly_queryable' => $archives_enabled ? true : false,
-        'rewrite'           => $archives_enabled ? array('slug' => 'parent-pages') : false,
+        'show_ui'               => true,
+        'show_admin_column'     => false,
+        'public'                => true,
+        'publicly_queryable'    => true,
+        'query_var'             => $archives_enabled ? true : false,
+        'show_in_rest'          => true,
+        'rest_base'             => 'parent_pages',
+        'rest_controller_class' => 'WP_REST_Terms_Controller',
+        'rewrite'               => $archives_enabled ? array('slug' => 'parent-pages') : false,
     );
 
     register_taxonomy('parent_pages', 'page', $args);
@@ -40,8 +44,8 @@ function create_town_taxonomies_taxonomy() {
     $archives_enabled = get_option('hozio_town_taxonomies_archive_enabled', 0);
     
     $args = array(
-        'hierarchical'      => true,
-        'labels'            => array(
+        'hierarchical'          => true,
+        'labels'                => array(
             'name'              => 'Town Taxonomies',
             'singular_name'     => 'Town Taxonomy',
             'search_items'      => 'Search Towns',
@@ -54,11 +58,15 @@ function create_town_taxonomies_taxonomy() {
             'new_item_name'     => 'New Town Name',
             'menu_name'         => 'Town Taxonomies',
         ),
-        'show_ui'           => true,
-        'show_admin_column' => false,
-        'query_var'         => $archives_enabled ? true : false,
-        'publicly_queryable' => $archives_enabled ? true : false,
-        'rewrite'           => $archives_enabled ? array('slug' => 'town') : false,
+        'show_ui'               => true,
+        'show_admin_column'     => false,
+        'public'                => true,
+        'publicly_queryable'    => true,
+        'query_var'             => $archives_enabled ? true : false,
+        'show_in_rest'          => true,
+        'rest_base'             => 'town_taxonomies',
+        'rest_controller_class' => 'WP_REST_Terms_Controller',
+        'rewrite'               => $archives_enabled ? array('slug' => 'town') : false,
     );
 
     register_taxonomy('town_taxonomies', array('page'), $args);
