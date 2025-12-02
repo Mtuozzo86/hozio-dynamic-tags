@@ -131,7 +131,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
                             break;
 
                         case 'google-ads-phone':
-                            echo esc_url('tel:' . esc_attr($option_value));
+                            echo esc_url('tel:' . esc_attr(\$option_value));
                             break;
 
                         case 'sms-phone':
