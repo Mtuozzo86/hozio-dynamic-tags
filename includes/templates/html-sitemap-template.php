@@ -434,7 +434,6 @@ echo '<style>';
     background: <?php echo $bg_color; ?>;
     border-radius: 0;
     box-shadow: none;
-    overflow: hidden;
 }
 
 .sitemap-header {
