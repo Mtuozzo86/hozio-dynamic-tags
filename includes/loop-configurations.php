@@ -59,7 +59,7 @@ function hozio_page_config_meta_box_callback($post) {
             </p>
         <?php else: ?>
             <p style="margin-top: 12px; padding: 10px; background: #d1ecf1; border-left: 3px solid #0c5460; font-size: 12px;">
-                <strong>💡 Tip:</strong> This applies to all loop grids and carousels on this page.
+                <strong>💡 Tip:</strong> This applies to all loop grids and carousels on this page (excludes header/footer).
                 <a href="<?php echo admin_url('admin.php?page=hozio-loop-configurations'); ?>" target="_blank" style="display: block; margin-top: 6px;">Manage configurations →</a>
             </p>
         <?php endif; ?>
@@ -93,7 +93,7 @@ function hozio_save_page_config($post_id) {
 }
 
 // ========================================
-// INTERCEPT LOOP QUERIES - FIXED
+// INTERCEPT LOOP QUERIES - WITH HEADER/FOOTER EXCLUSION
 // ========================================
 add_action('elementor/query/query_args', 'hozio_intercept_loop_widget_query', 10, 2);
 
@@ -101,6 +101,11 @@ function hozio_intercept_loop_widget_query($query_args, $widget) {
     // Only target loop widgets
     $widget_name = $widget->get_name();
     if (!in_array($widget_name, ['loop-grid', 'loop-carousel'])) {
+        return $query_args;
+    }
+    
+    // Skip if widget is inside a header, footer, or other theme builder template
+    if (hozio_is_theme_builder_context()) {
         return $query_args;
     }
     
@@ -148,6 +153,54 @@ function hozio_intercept_loop_widget_query($query_args, $widget) {
     $query_args = hozio_apply_loop_configuration($config_name, $query_args, $current_page_id);
     
     return $query_args;
+}
+
+/**
+ * Check if we're currently rendering inside a theme builder template (header/footer/etc)
+ */
+function hozio_is_theme_builder_context() {
+    // Check if Elementor Pro is active
+    if (!class_exists('\ElementorPro\Plugin')) {
+        return false;
+    }
+    
+    // Method 1: Check Elementor's document stack for theme builder templates
+    if (class_exists('\Elementor\Plugin') && \Elementor\Plugin::$instance->documents) {
+        $current_doc = \Elementor\Plugin::$instance->documents->get_current();
+        
+        if ($current_doc) {
+            // Get the document's post ID
+            $doc_post_id = $current_doc->get_main_id();
+            
+            // Check if this is an elementor_library (theme builder template)
+            if (get_post_type($doc_post_id) === 'elementor_library') {
+                $template_type = get_post_meta($doc_post_id, '_elementor_template_type', true);
+                
+                // Skip for headers, footers, and other theme parts
+                $skip_types = ['header', 'footer', 'section', 'popup'];
+                if (in_array($template_type, $skip_types)) {
+                    return true;
+                }
+            }
+        }
+    }
+    
+    // Method 2: Check the theme builder locations module
+    if (class_exists('\ElementorPro\Modules\ThemeBuilder\Module')) {
+        $theme_builder = \ElementorPro\Modules\ThemeBuilder\Module::instance();
+        $locations = $theme_builder->get_locations_manager();
+        
+        if ($locations) {
+            $current_location = $locations->get_current_location();
+            
+            // Skip if we're in a header or footer location
+            if (in_array($current_location, ['header', 'footer'])) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
 }
 
 function hozio_apply_loop_configuration($config_name, $query_args, $current_page_id) {
@@ -300,6 +353,9 @@ function hozio_loop_configs_render_page() {
                     <span class="step-number">4</span>
                     <span>Loop widgets will automatically use the configuration</span>
                 </div>
+            </div>
+            <div style="margin-top: 16px; padding: 12px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;">
+                <strong>📌 Note:</strong> Configurations only apply to page content. Loop widgets in headers, footers, and popups are not affected.
             </div>
         </div>
         
