@@ -397,3 +397,39 @@ function hozio_is_license_valid() {
     }
     return false;
 }
+
+/**
+ * Auto-set license key on plugin activation/update
+ * This ensures all sites updating to v3.74+ automatically have the license key
+ */
+function hozio_auto_set_license_key() {
+    $license_key = 'HOZIO-PRO-2026';
+    $current_key = get_option('hozio_license_key', '');
+
+    // Only set if not already set or if different
+    if ($current_key !== $license_key) {
+        update_option('hozio_license_key', $license_key);
+        hozio_log('License key auto-configured on plugin activation/update', 'Updater');
+    }
+}
+
+// Run on plugin activation
+register_activation_hook(dirname(__DIR__) . '/hozio-dynamic-tags.php', 'hozio_auto_set_license_key');
+
+// Also run on every admin load to catch updates (runs once then stops)
+function hozio_check_license_on_update() {
+    // Only run in admin
+    if (!is_admin()) {
+        return;
+    }
+
+    // Check if we've already auto-set for this version
+    $version_licensed = get_option('hozio_license_version', '');
+    $current_version = '3.75';
+
+    if ($version_licensed !== $current_version) {
+        hozio_auto_set_license_key();
+        update_option('hozio_license_version', $current_version);
+    }
+}
+add_action('admin_init', 'hozio_check_license_on_update');

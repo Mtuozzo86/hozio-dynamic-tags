@@ -2,6 +2,17 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.75 (January 2026) ==
+
+= Improvements =
+
+* IMPROVED: Auto-license on update
+  - License key is now automatically configured when updating to v3.75+
+  - No manual entry required on existing sites
+  - File: includes/plugin-updater.php
+
+================================================================================
+
 == Version 3.74 (January 2026) ==
 
 = New Features =
