@@ -6,6 +6,18 @@
  */
 
 function sync_service_taxonomy_to_menus( $post_id ) {
+    // FEATURE TOGGLE: Check if service menu sync is enabled in Settings
+    if ( function_exists( 'hozio_service_menu_sync_enabled' ) && ! hozio_service_menu_sync_enabled() ) {
+        return;
+    }
+
+    // Prevent duplicate processing in the same request (function is hooked to multiple actions)
+    static $processed = array();
+    if ( in_array( $post_id, $processed, true ) ) {
+        return;
+    }
+    $processed[] = $post_id;
+
     // Avoid running on autosaves, revisions, or non-page post types.
     if ( wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
         return;
@@ -18,10 +30,28 @@ function sync_service_taxonomy_to_menus( $post_id ) {
     $terms = get_the_terms( $post_id, 'parent_pages' );
     // If no taxonomy data exists yet (may happen when WP All Import runs), schedule a delayed check.
     if ( empty( $terms ) ) {
+        // SAFETY: Limit retries to prevent infinite loops
+        $retry_key = 'hozio_menu_sync_retry_' . $post_id;
+        $retry_count = (int) get_transient( $retry_key );
+
+        // Maximum 3 retries (15 seconds total wait time)
+        if ( $retry_count >= 3 ) {
+            hozio_log( 'Menu sync for post ' . $post_id . ' exceeded retry limit. Giving up.', 'MenuSync' );
+            delete_transient( $retry_key );  // Clean up
+            return;
+        }
+
+        // Increment retry counter (expires in 60 seconds)
+        set_transient( $retry_key, $retry_count + 1, 60 );
+
         // Schedule a single event 5 seconds later to re-run the sync.
         wp_schedule_single_event( time() + 5, 'sync_service_taxonomy_delayed', array( $post_id ) );
         return;
     }
+
+    // Clear retry counter on successful term retrieval
+    $retry_key = 'hozio_menu_sync_retry_' . $post_id;
+    delete_transient( $retry_key );
     
     // Define the menus to update.
     $menu_names = array( 'Main Menu', 'Main Menu Toggle', 'Services' );

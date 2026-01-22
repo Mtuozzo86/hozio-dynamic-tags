@@ -12,19 +12,19 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
 
     if ($use_county_pages) {
         // 🔄 COUNTY PAGES LOGIC
-        error_log('Using County Pages logic.');
+        hozio_log('Using County Pages logic.', 'ParentPagesQuery');
 
         // Get the current page slug
         $current_page_slug = basename(get_permalink($current_page_id));
-        error_log('Current page slug: ' . $current_page_slug);
+        hozio_log('Current page slug: ' . $current_page_slug, 'ParentPagesQuery');
 
         // Fetch the terms assigned to the current page in the parent_pages taxonomy
         $terms = get_the_terms($current_page_id, 'parent_pages');
-        error_log('Fetched terms: ' . print_r($terms, true));
+        hozio_log('Fetched terms: ' . print_r($terms, true), 'ParentPagesQuery');
 
         // Handle WP_Error
         if (is_wp_error($terms) || empty($terms)) {
-            error_log('No valid terms found.');
+            hozio_log('No valid terms found.', 'ParentPagesQuery');
             return;
         }
 
@@ -40,7 +40,7 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
 
         if ($matching_term) {
             $query->set('post_type', 'page');
-            
+
             // ⭐ UPDATED: Exclude pages with "county" term
             $query->set('tax_query', [
                 'relation' => 'AND',
@@ -57,14 +57,14 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
                     'operator' => 'NOT IN', // ⭐ Exclude county pages
                 ],
             ]);
-            
+
             $query->set('post__not_in', [$current_page_id]); // Exclude the current page
-            error_log('Tax query set with term ID: ' . $matching_term->term_id . ' (excluding county pages)');
+            hozio_log('Tax query set with term ID: ' . $matching_term->term_id . ' (excluding county pages)', 'ParentPagesQuery');
         }
 
     } else {
         // ✅ OLD LOGIC
-        error_log('Using old term-matching logic.');
+        hozio_log('Using old term-matching logic.', 'ParentPagesQuery');
 
         // Get the current page slug
         $current_page_slug = basename(get_permalink($current_page_id));
@@ -85,7 +85,7 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
 
         if ($parent_term) {
             $query->set('post_type', 'page');
-            
+
             // ⭐ UPDATED: Exclude pages with "county" term
             $query->set('tax_query', [
                 'relation' => 'AND',
@@ -123,20 +123,20 @@ add_action('elementor/query/dynamic_town_pages_query', function( $query ) {
     // Current page ID
     $current_id = get_queried_object_id();
     if ( ! $current_id ) {
-        error_log('TownQuery: No queried object ID.');
+        hozio_log('No queried object ID.', 'TownQuery');
         return;
     }
 
     // Get last URL segment (page slug)
     $permalink = get_permalink( $current_id );
     if ( ! $permalink ) {
-        error_log('TownQuery: No permalink for current page.');
+        hozio_log('No permalink for current page.', 'TownQuery');
         return;
     }
 
     $last_segment = basename( untrailingslashit( $permalink ) ); // e.g. mike-t
     if ( empty( $last_segment ) ) {
-        error_log('TownQuery: Empty last segment.');
+        hozio_log('Empty last segment.', 'TownQuery');
         return;
     }
 
@@ -146,7 +146,7 @@ add_action('elementor/query/dynamic_town_pages_query', function( $query ) {
 
     if ( ! $term || is_wp_error( $term ) ) {
         // No matching town term, do nothing so Elementor falls back gracefully
-        error_log('TownQuery: No matching term for slug ' . $last_segment);
+        hozio_log('No matching term for slug ' . $last_segment, 'TownQuery');
         return;
     }
 
@@ -168,7 +168,7 @@ add_action('elementor/query/dynamic_town_pages_query', function( $query ) {
         $query->set( 'order', 'DESC' );
     }
 
-    error_log('TownQuery: Querying pages with town term slug ' . $last_segment . ' (term_id ' . $term->term_id . ')');
+    hozio_log('Querying pages with town term slug ' . $last_segment . ' (term_id ' . $term->term_id . ')', 'TownQuery');
 });
 
 // ========================================
@@ -185,7 +185,7 @@ add_action('elementor/query/dynamic_county_pages_query', function($query) {
     // Fetch the terms assigned to the current page in the parent_pages taxonomy
     $terms = get_the_terms($current_page_id, 'parent_pages');
 
-    // ⭐ Collect debug info for console
+    // ⭐ Collect debug info for logging
     $debug_info = [
         'query_id' => 'dynamic_county_pages_query',
         'current_page_id' => $current_page_id,
@@ -196,7 +196,8 @@ add_action('elementor/query/dynamic_county_pages_query', function($query) {
     // Handle WP_Error
     if (is_wp_error($terms) || empty($terms)) {
         $debug_info['error'] = 'No valid terms found';
-        console_log_debug($debug_info);
+        hozio_log($debug_info, 'CountyQuery');
+        hozio_console_log($debug_info, 'County Query Debug');
         return;
     }
 
@@ -220,7 +221,7 @@ add_action('elementor/query/dynamic_county_pages_query', function($query) {
 
         if ($matching_term) {
             $query->set('post_type', 'page');
-            
+
             // ⭐ Both "sprinter-service" AND "county" are terms in the SAME parent_pages taxonomy
             $tax_query = [
                 'relation' => 'AND',
@@ -237,7 +238,7 @@ add_action('elementor/query/dynamic_county_pages_query', function($query) {
                     'operator' => 'IN',
                 ],
             ];
-            
+
             $query->set('tax_query', $tax_query);
             $debug_info['tax_query_set'] = $tax_query;
             $query->set('post__not_in', [$current_page_id]);
@@ -263,7 +264,7 @@ add_action('elementor/query/dynamic_county_pages_query', function($query) {
 
         if ($parent_term) {
             $query->set('post_type', 'page');
-            
+
             // ⭐ Both terms are in the same parent_pages taxonomy
             $tax_query = [
                 'relation' => 'AND',
@@ -280,7 +281,7 @@ add_action('elementor/query/dynamic_county_pages_query', function($query) {
                     'operator' => 'IN',
                 ],
             ];
-            
+
             $query->set('tax_query', $tax_query);
             $debug_info['tax_query_set'] = $tax_query;
 
@@ -295,40 +296,31 @@ add_action('elementor/query/dynamic_county_pages_query', function($query) {
             $query->set('post__not_in', [$current_page_id]);
         }
     }
-    
-    console_log_debug($debug_info);
-    
-    // ⭐ AFTER the query runs, log what pages were actually found
-    add_action('wp_footer', function() use ($query) {
-        $found_pages = [];
-        if ($query->have_posts()) {
-            while ($query->have_posts()) {
-                $query->the_post();
-                $page_id = get_the_ID();
-                $found_pages[] = [
-                    'id' => $page_id,
-                    'title' => get_the_title(),
-                    'url' => get_permalink(),
-                    'parent_pages_terms' => wp_get_post_terms($page_id, 'parent_pages', ['fields' => 'names']),
-                ];
-            }
-            wp_reset_postdata();
-        }
-        
-        echo '<script>';
-        echo 'console.log("=== COUNTY PAGES FOUND ===");';
-        echo 'console.log(' . json_encode($found_pages, JSON_PRETTY_PRINT) . ');';
-        echo '</script>';
-    }, 999);
-});
 
-// ⭐ Helper function to output to browser console
-function console_log_debug($data) {
-    add_action('wp_footer', function() use ($data) {
-        echo '<script>';
-        echo 'console.log("=== COUNTY QUERY DEBUG ===");';
-        echo 'console.log(' . json_encode($data, JSON_PRETTY_PRINT) . ');';
-        echo '</script>';
-    });
-}
+    // Log debug info using HOZIO_DEBUG (no frontend output unless explicitly enabled)
+    hozio_log($debug_info, 'CountyQuery');
+    hozio_console_log($debug_info, 'County Query Debug');
+
+    // Log found pages when debug is enabled
+    if (hozio_debug_enabled()) {
+        add_action('wp_footer', function() use ($query) {
+            $found_pages = [];
+            if ($query->have_posts()) {
+                while ($query->have_posts()) {
+                    $query->the_post();
+                    $page_id = get_the_ID();
+                    $found_pages[] = [
+                        'id' => $page_id,
+                        'title' => get_the_title(),
+                        'url' => get_permalink(),
+                        'parent_pages_terms' => wp_get_post_terms($page_id, 'parent_pages', ['fields' => 'names']),
+                    ];
+                }
+                wp_reset_postdata();
+            }
+            hozio_log(['county_pages_found' => $found_pages], 'CountyQuery');
+            hozio_console_log($found_pages, 'County Pages Found');
+        }, 999);
+    }
+});
 

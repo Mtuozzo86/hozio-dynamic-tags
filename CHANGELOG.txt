@@ -1,0 +1,112 @@
+================================================================================
+HOZIO PRO - CHANGELOG
+================================================================================
+
+== Version 3.74 (January 2026) ==
+
+= New Features =
+
+* NEW: Self-hosted plugin auto-updater
+  - Automatic updates via GitHub Releases (no GitUpdater plugin required)
+  - License key validation for update access
+  - Caches update checks for 12 hours to minimize API calls
+  - "Enter License Key" action link on plugins page when not licensed
+  - File: includes/plugin-updater.php (new)
+
+* IMPROVED: Plugin Settings page
+  - Added License Key field with validation status
+  - License status displayed in System Information table
+  - File: includes/plugin-settings.php
+
+================================================================================
+
+== Version 3.73 (January 2026) ==
+
+= New Features =
+
+* NEW: Plugin Settings page (Hozio Pro > Settings)
+  - Enable/disable debug logging from admin UI (no wp-config.php editing required)
+  - View and clear debug log file
+  - Toggle ACF Field Hiding (DOM parsing) feature on/off
+  - Toggle Service Menu Auto-Sync feature on/off
+  - Clear plugin caches button
+  - System information display (versions, paths, feature status)
+  - File: includes/plugin-settings.php (new)
+
+* IMPROVED: Debug logging can now be enabled via Settings page
+  - wp-config.php HOZIO_DEBUG constant still takes priority if defined
+  - File: includes/hozio-logger.php
+
+================================================================================
+
+== Version 3.72 (January 2026) ==
+
+= Bug Fixes =
+
+* FIXED: Infinite retry loop prevention in service menu handler
+  - File: includes/service-menu-handler.php
+  - Added 3-retry limit with transient counter for taxonomy sync
+  - Prevents database bloat and server resource drain
+  - WP All Import sync still works (15 second wait is usually sufficient)
+  - Logs warning when retry limit exceeded (when HOZIO_DEBUG enabled)
+
+================================================================================
+
+== Version 3.71 (January 2026) ==
+
+= New Features =
+
+* NEW: Custom debug logging system (HOZIO_DEBUG)
+  - Enables debug logging WITHOUT requiring WP_DEBUG
+  - Logs to: wp-content/hozio-debug.log
+  - No errors displayed on frontend
+  - To enable: add define('HOZIO_DEBUG', true); to wp-config.php
+  - Files: includes/hozio-logger.php (new), custom-parent-pages-queries.php,
+           loop-configurations.php
+
+= Performance Optimizations =
+
+* IMPROVED: Replaced WP_DEBUG/error_log() with custom hozio_log() system
+  - File: includes/custom-parent-pages-queries.php
+  - File: includes/loop-configurations.php
+  - Logs only when HOZIO_DEBUG is enabled
+  - No more log file bloat or frontend error output
+
+* IMPROVED: Added early exit for DOM parsing when hide-if-empty-acf and
+  hide-if-no-wiki classes are not present
+  - File: hozio-dynamic-tags.php
+  - Saves 50-200ms on pages that don't use these classes
+
+* IMPROVED: Added is_admin() and wp_doing_ajax() checks to wp_footer styles
+  - File: hozio-dynamic-tags.php
+  - Reduces admin page overhead
+
+* IMPROVED: Added duplicate processing prevention for service menu handler
+  - File: includes/service-menu-handler.php
+  - Prevents function from running multiple times per post during imports
+
+* IMPROVED: Added cached permalink settings function with early exits
+  - File: includes/custom-permalink.php
+  - Reduces 6+ database calls to 2 (cached) per page load
+
+= Bug Fixes =
+
+* FIXED: Missing </style> closing tag causing fatal error on activation
+  - File: hozio-dynamic-tags.php (line 437)
+
+================================================================================
+
+== Version 3.70 ==
+
+* Initial release with dynamic tags functionality
+* Custom permalink structure for blog posts (/blog/ and /category/ prefixes)
+* Service pages taxonomy sync to navigation menus
+* Elementor loop query modifications for parent pages, town pages, county pages
+* ACF field-based content hiding (hide-if-empty-acf, hide-if-no-wiki)
+* Custom taxonomies: parent_pages, town_taxonomies
+* HTML sitemap generation
+* Leads digest email functionality
+* Media replace endpoint
+* Dynamic CTA text color styling
+
+================================================================================

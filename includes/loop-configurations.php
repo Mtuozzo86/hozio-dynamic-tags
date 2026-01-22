@@ -203,9 +203,19 @@ function hozio_is_theme_builder_context() {
     return false;
 }
 
+// PERFORMANCE: Cached loop configurations to avoid repeated get_option() calls
+function hozio_get_loop_configurations() {
+    static $configs = null;
+    if ($configs === null) {
+        $configs = get_option('hozio_loop_configurations', array());
+    }
+    return $configs;
+}
+
 function hozio_apply_loop_configuration($config_name, $query_args, $current_page_id) {
-    $configs = get_option('hozio_loop_configurations', array());
-    
+    // Use cached configurations to avoid repeated DB calls
+    $configs = hozio_get_loop_configurations();
+
     if (empty($configs)) {
         return $query_args;
     }
@@ -269,14 +279,9 @@ function hozio_apply_loop_configuration($config_name, $query_args, $current_page
         );
     }
     
-    // Debug logging (remove in production)
-    if (defined('WP_DEBUG') && WP_DEBUG) {
-        error_log('Hozio Loop Config Applied:');
-        error_log('Config: ' . $config_name);
-        error_log('Taxonomy: ' . $taxonomy);
-        error_log('Terms: ' . implode(', ', $term_ids));
-        error_log('Excluded: ' . implode(', ', $post__not_in));
-    }
+    // Debug logging (uses HOZIO_DEBUG, not WP_DEBUG)
+    hozio_log('Loop Config Applied: ' . $config_name, 'LoopConfig');
+    hozio_log('Taxonomy: ' . $taxonomy . ' | Terms: ' . implode(', ', $term_ids) . ' | Excluded: ' . implode(', ', $post__not_in), 'LoopConfig');
     
     return $query_args;
 }

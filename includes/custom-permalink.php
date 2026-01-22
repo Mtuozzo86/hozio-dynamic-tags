@@ -501,45 +501,65 @@ if (!function_exists('hozio_get_post_category_slug')) {
     }
 }
 
+// PERFORMANCE: Cached permalink settings to avoid repeated get_option() calls
+if (!function_exists('hozio_get_permalink_settings')) {
+    function hozio_get_permalink_settings() {
+        static $settings = null;
+        if ($settings === null) {
+            $settings = array(
+                'blog_enabled' => get_option('hozio_blog_prefix_enabled'),
+                'category_enabled' => get_option('hozio_category_prefix_enabled'),
+            );
+        }
+        return $settings;
+    }
+}
+
 // FORCEFULLY override the permalink - PRIMARY METHOD
 if (!function_exists('hozio_custom_post_link_override')) {
     add_filter('post_link', 'hozio_custom_post_link_override', 9999, 3);
     add_filter('post_type_link', 'hozio_custom_post_link_override', 9999, 3);
     function hozio_custom_post_link_override($permalink, $post, $leavename = false) {
-        // Check if either prefix is enabled
-        $blog_enabled = get_option('hozio_blog_prefix_enabled');
-        $category_enabled = get_option('hozio_category_prefix_enabled');
-        
-        // Only apply to posts (blog entries)
-        if (is_object($post) && $post->post_type == 'post') {
-            $url_parts = [];
-            
-            // Add /blog/ if enabled
-            if ($blog_enabled) {
-                $url_parts[] = 'blog';
-            }
-            
-            // Add /category/ if enabled - FIXED: Now properly includes category
-            if ($category_enabled) {
-                $cat_slug = hozio_get_post_category_slug($post->ID);
-                if ($cat_slug) {
-                    $url_parts[] = $cat_slug;
-                }
-            }
-            
-            // Add post name
-            if ($leavename) {
-                $url_parts[] = '%postname%';
-            } else {
-                $url_parts[] = $post->post_name;
-            }
-            
-            // Build the permalink - FORCE override
-            if (!empty($url_parts)) {
-                return home_url('/' . implode('/', $url_parts) . '/');
+        // EARLY EXIT: Only apply to posts (blog entries)
+        if (!is_object($post) || $post->post_type !== 'post') {
+            return $permalink;
+        }
+
+        // Use cached settings to avoid repeated DB calls
+        $settings = hozio_get_permalink_settings();
+
+        // EARLY EXIT: Nothing enabled, skip processing
+        if (!$settings['blog_enabled'] && !$settings['category_enabled']) {
+            return $permalink;
+        }
+
+        $url_parts = [];
+
+        // Add /blog/ if enabled
+        if ($settings['blog_enabled']) {
+            $url_parts[] = 'blog';
+        }
+
+        // Add /category/ if enabled
+        if ($settings['category_enabled']) {
+            $cat_slug = hozio_get_post_category_slug($post->ID);
+            if ($cat_slug) {
+                $url_parts[] = $cat_slug;
             }
         }
-        
+
+        // Add post name
+        if ($leavename) {
+            $url_parts[] = '%postname%';
+        } else {
+            $url_parts[] = $post->post_name;
+        }
+
+        // Build the permalink - FORCE override
+        if (!empty($url_parts)) {
+            return home_url('/' . implode('/', $url_parts) . '/');
+        }
+
         return $permalink;
     }
 }
@@ -548,29 +568,35 @@ if (!function_exists('hozio_custom_post_link_override')) {
 if (!function_exists('hozio_override_the_permalink')) {
     add_filter('the_permalink', 'hozio_override_the_permalink', 9999, 2);
     function hozio_override_the_permalink($permalink, $post) {
-        $blog_enabled = get_option('hozio_blog_prefix_enabled');
-        $category_enabled = get_option('hozio_category_prefix_enabled');
-        
-        if (($blog_enabled || $category_enabled) && is_object($post) && $post->post_type == 'post') {
-            $url_parts = [];
-            
-            if ($blog_enabled) {
-                $url_parts[] = 'blog';
-            }
-            
-            if ($category_enabled) {
-                $cat_slug = hozio_get_post_category_slug($post->ID);
-                if ($cat_slug) {
-                    $url_parts[] = $cat_slug;
-                }
-            }
-            
-            $url_parts[] = $post->post_name;
-            
-            return home_url('/' . implode('/', $url_parts) . '/');
+        // EARLY EXIT: Only apply to posts
+        if (!is_object($post) || $post->post_type !== 'post') {
+            return $permalink;
         }
-        
-        return $permalink;
+
+        // Use cached settings to avoid repeated DB calls
+        $settings = hozio_get_permalink_settings();
+
+        // EARLY EXIT: Nothing enabled
+        if (!$settings['blog_enabled'] && !$settings['category_enabled']) {
+            return $permalink;
+        }
+
+        $url_parts = [];
+
+        if ($settings['blog_enabled']) {
+            $url_parts[] = 'blog';
+        }
+
+        if ($settings['category_enabled']) {
+            $cat_slug = hozio_get_post_category_slug($post->ID);
+            if ($cat_slug) {
+                $url_parts[] = $cat_slug;
+            }
+        }
+
+        $url_parts[] = $post->post_name;
+
+        return home_url('/' . implode('/', $url_parts) . '/');
     }
 }
 
@@ -578,39 +604,39 @@ if (!function_exists('hozio_override_the_permalink')) {
 if (!function_exists('hozio_override_get_permalink')) {
     add_filter('pre_post_link', 'hozio_override_get_permalink', 9999, 3);
     function hozio_override_get_permalink($permalink, $post, $leavename) {
-        $blog_enabled = get_option('hozio_blog_prefix_enabled');
-        $category_enabled = get_option('hozio_category_prefix_enabled');
-        
-        // If nothing is enabled, return null to use default
-        if (!$blog_enabled && !$category_enabled) {
+        // EARLY EXIT: Only apply to posts
+        if (!is_object($post) || $post->post_type !== 'post') {
             return null;
         }
-        
-        // Only apply to posts
-        if (is_object($post) && $post->post_type == 'post') {
-            $url_parts = [];
-            
-            if ($blog_enabled) {
-                $url_parts[] = 'blog';
-            }
-            
-            if ($category_enabled) {
-                $cat_slug = hozio_get_post_category_slug($post->ID);
-                if ($cat_slug) {
-                    $url_parts[] = $cat_slug;
-                }
-            }
-            
-            if ($leavename) {
-                $url_parts[] = '%postname%';
-            } else {
-                $url_parts[] = $post->post_name;
-            }
-            
-            return home_url('/' . implode('/', $url_parts) . '/');
+
+        // Use cached settings to avoid repeated DB calls
+        $settings = hozio_get_permalink_settings();
+
+        // If nothing is enabled, return null to use default
+        if (!$settings['blog_enabled'] && !$settings['category_enabled']) {
+            return null;
         }
-        
-        return null;
+
+        $url_parts = [];
+
+        if ($settings['blog_enabled']) {
+            $url_parts[] = 'blog';
+        }
+
+        if ($settings['category_enabled']) {
+            $cat_slug = hozio_get_post_category_slug($post->ID);
+            if ($cat_slug) {
+                $url_parts[] = $cat_slug;
+            }
+        }
+
+        if ($leavename) {
+            $url_parts[] = '%postname%';
+        } else {
+            $url_parts[] = $post->post_name;
+        }
+
+        return home_url('/' . implode('/', $url_parts) . '/');
     }
 }
 

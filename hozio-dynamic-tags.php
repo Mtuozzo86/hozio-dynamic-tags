@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.71
+Version:         3.74
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -14,6 +14,14 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+// Load custom logger first (enables HOZIO_DEBUG logging without WP_DEBUG)
+require_once plugin_dir_path( __FILE__ ) . 'includes/hozio-logger.php';
+
+// Load plugin settings page (debug toggles, feature toggles, system info)
+require_once plugin_dir_path( __FILE__ ) . 'includes/plugin-settings.php';
+
+// Load self-hosted plugin updater (checks GitHub Releases for updates)
+require_once plugin_dir_path( __FILE__ ) . 'includes/plugin-updater.php';
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/dynamic-tags.php';
@@ -121,7 +129,17 @@ function hozio_dynamic_tags_menu() {
     'manage_options',
     'hozio-loop-configurations',
     'hozio_loop_configs_render_page'
-);
+    );
+
+    // Plugin Settings (debug, feature toggles, system info)
+    add_submenu_page(
+        'hozio_dynamic_tags',
+        'Hozio Pro Settings',
+        'Hozio Pro Settings',
+        'manage_options',
+        'hozio-plugin-settings',
+        'hozio_plugin_settings_page'
+    );
 }
 
 add_action('admin_menu', 'hozio_dynamic_tags_menu');
@@ -412,6 +430,11 @@ add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
 
 add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_styles');
 function hozio_dynamic_nav_menu_inline_styles() {
+    // Skip on admin pages and AJAX requests - these styles are only needed on frontend
+    if ( is_admin() || wp_doing_ajax() ) {
+        return;
+    }
+
     $text_color = esc_attr(get_option('hozio_nav_text_color', 'black')); // Dynamically retrieve text color
     ?>
     <style type="text/css">
@@ -429,6 +452,7 @@ function hozio_dynamic_nav_menu_inline_styles() {
             background-color: var(--e-global-color-secondary, #FFFFFF) !important;
             color: <?php echo $text_color; ?> !important;
         }
+    </style>
 
     <style type="text/css">
         /* Apply the dynamic text color to the default state */
@@ -519,6 +543,17 @@ add_shortcode( 'final_cta', 'show_final_cta_from_page' );
 //Hides Useful Links on HOG Template if ACF Value is empty
 add_filter( 'the_content', function( $content ) {
     if ( is_admin() ) {
+        return $content;
+    }
+
+    // FEATURE TOGGLE: Check if DOM parsing is enabled in Settings
+    if ( function_exists( 'hozio_dom_parsing_enabled' ) && ! hozio_dom_parsing_enabled() ) {
+        return $content;
+    }
+
+    // EARLY EXIT: Skip expensive DOM parsing if target classes don't exist in content
+    if ( strpos( $content, 'hide-if-empty-acf' ) === false &&
+         strpos( $content, 'hide-if-no-wiki' ) === false ) {
         return $content;
     }
 
