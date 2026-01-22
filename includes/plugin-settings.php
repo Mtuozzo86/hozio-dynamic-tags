@@ -116,6 +116,50 @@ function hozio_ajax_clear_plugin_caches() {
 add_action('wp_ajax_hozio_clear_plugin_caches', 'hozio_ajax_clear_plugin_caches');
 
 /**
+ * Handle AJAX action to check for plugin updates
+ */
+function hozio_ajax_check_for_updates() {
+    check_ajax_referer('hozio_check_updates_nonce', 'nonce');
+
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Permission denied');
+    }
+
+    // Check if license is valid
+    if (function_exists('hozio_is_license_valid') && !hozio_is_license_valid()) {
+        wp_send_json_error('Please enter a valid license key first.');
+    }
+
+    // Clear update cache and force WordPress to check for updates
+    delete_transient('hozio_plugin_update_cache');
+    delete_site_transient('update_plugins');
+
+    // Force WordPress to check for plugin updates
+    wp_update_plugins();
+
+    // Get fresh update data
+    $update_plugins = get_site_transient('update_plugins');
+    $plugin_file = 'hozio-dynamic-tags/hozio-dynamic-tags.php';
+
+    if (isset($update_plugins->response[$plugin_file])) {
+        $update = $update_plugins->response[$plugin_file];
+        wp_send_json_success([
+            'has_update' => true,
+            'message' => 'Update available! Version ' . $update->new_version . ' is ready to install.',
+            'new_version' => $update->new_version,
+            'update_url' => admin_url('update-core.php')
+        ]);
+    } else {
+        wp_send_json_success([
+            'has_update' => false,
+            'message' => 'You are running the latest version.',
+            'current_version' => hozio_get_plugin_version()
+        ]);
+    }
+}
+add_action('wp_ajax_hozio_check_for_updates', 'hozio_ajax_check_for_updates');
+
+/**
  * Save plugin settings
  */
 function hozio_plugin_settings_save() {
@@ -253,6 +297,16 @@ function hozio_plugin_settings_page() {
                             <?php echo esc_html($license_status['message']); ?>
                         </p>
                     </div>
+                </div>
+
+                <!-- Check for Updates Button -->
+                <div class="hozio-field" style="margin-top: 20px;">
+                    <button type="button" class="button button-secondary hozio-check-updates-btn"
+                            data-nonce="<?php echo wp_create_nonce('hozio_check_updates_nonce'); ?>">
+                        <span class="dashicons dashicons-update" style="margin-top: 3px;"></span>
+                        Check for Updates
+                    </button>
+                    <span class="hozio-update-result" style="margin-left: 10px;"></span>
                 </div>
             </div>
 
@@ -753,6 +807,28 @@ function hozio_plugin_settings_page() {
         font-size: 13px;
         margin-top: 8px;
     }
+
+    /* Spinning animation for update check */
+    @keyframes hozio-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    .hozio-check-updates-btn .dashicons.spin {
+        animation: hozio-spin 1s linear infinite;
+    }
+
+    .hozio-update-result {
+        display: inline-block;
+        vertical-align: middle;
+    }
+
+    .hozio-update-result .dashicons {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+        vertical-align: text-bottom;
+    }
     </style>
 
     <script>
@@ -856,6 +932,45 @@ function hozio_plugin_settings_page() {
                 error: function() {
                     alert('An error occurred while clearing caches');
                     $btn.text('Clear Plugin Caches').prop('disabled', false);
+                }
+            });
+        });
+
+        // Check for updates
+        $('.hozio-check-updates-btn').on('click', function() {
+            var $btn = $(this);
+            var $result = $('.hozio-update-result');
+            var nonce = $btn.data('nonce');
+
+            $btn.prop('disabled', true);
+            $btn.find('.dashicons').addClass('spin');
+            $result.html('<span style="color: #666;">Checking...</span>');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'hozio_check_for_updates',
+                    nonce: nonce
+                },
+                success: function(response) {
+                    $btn.find('.dashicons').removeClass('spin');
+                    $btn.prop('disabled', false);
+
+                    if (response.success) {
+                        if (response.data.has_update) {
+                            $result.html('<span style="color: #00a32a;"><span class="dashicons dashicons-yes"></span> ' + response.data.message + ' <a href="' + response.data.update_url + '">Update Now</a></span>');
+                        } else {
+                            $result.html('<span style="color: #00a32a;"><span class="dashicons dashicons-yes"></span> ' + response.data.message + '</span>');
+                        }
+                    } else {
+                        $result.html('<span style="color: #d63638;"><span class="dashicons dashicons-warning"></span> ' + response.data + '</span>');
+                    }
+                },
+                error: function() {
+                    $btn.find('.dashicons').removeClass('spin');
+                    $btn.prop('disabled', false);
+                    $result.html('<span style="color: #d63638;">Error checking for updates</span>');
                 }
             });
         });

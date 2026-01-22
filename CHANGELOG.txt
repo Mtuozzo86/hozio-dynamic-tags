@@ -2,6 +2,18 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.76 (January 2026) ==
+
+= New Features =
+
+* NEW: "Check for Updates" button on Settings page
+  - Manually trigger update check from Hozio Pro > Settings
+  - Shows spinning indicator while checking
+  - Displays result with link to update if available
+  - File: includes/plugin-settings.php
+
+================================================================================
+
 == Version 3.75 (January 2026) ==
 
 = Improvements =
