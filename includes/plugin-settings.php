@@ -152,16 +152,10 @@ function hozio_ajax_check_for_updates() {
 
     // Get timing info
     $auto_updates_enabled = get_option('hozio_auto_updates_enabled', '1') === '1';
-    $next_auto_update = function_exists('hozio_get_next_auto_update') ? hozio_get_next_auto_update() : 'Unknown';
+    $auto_update_status = function_exists('hozio_get_auto_update_status') ? hozio_get_auto_update_status() : 'Unknown';
 
     if (isset($update_plugins->response[$plugin_file])) {
         $update = $update_plugins->response[$plugin_file];
-
-        // Build auto-update message
-        $auto_update_msg = '';
-        if ($auto_updates_enabled && hozio_is_license_valid()) {
-            $auto_update_msg = ' Auto-update ' . $next_auto_update . '.';
-        }
 
         // Build direct update URL that triggers the update immediately
         $update_url = wp_nonce_url(
@@ -176,7 +170,7 @@ function hozio_ajax_check_for_updates() {
             'update_url' => $update_url,
             'last_checked' => 'Just now',
             'next_check' => function_exists('hozio_get_next_update_check') ? hozio_get_next_update_check() : 'Unknown',
-            'auto_update_in' => $auto_updates_enabled ? $next_auto_update : 'Disabled',
+            'auto_update_status' => $auto_update_status,
             'auto_updates_enabled' => $auto_updates_enabled
         ]);
     } else {
@@ -186,6 +180,7 @@ function hozio_ajax_check_for_updates() {
             'current_version' => hozio_get_plugin_version(),
             'last_checked' => 'Just now',
             'next_check' => function_exists('hozio_get_next_update_check') ? hozio_get_next_update_check() : 'Unknown',
+            'auto_update_status' => $auto_update_status,
             'auto_updates_enabled' => $auto_updates_enabled
         ]);
     }
@@ -275,7 +270,7 @@ function hozio_plugin_settings_page() {
     // Get update timing info
     $last_update_check = function_exists('hozio_get_last_update_check') ? hozio_get_last_update_check() : 'Unknown';
     $next_update_check = function_exists('hozio_get_next_update_check') ? hozio_get_next_update_check() : 'Unknown';
-    $next_auto_update = function_exists('hozio_get_next_auto_update') ? hozio_get_next_auto_update() : 'Unknown';
+    $auto_update_status = function_exists('hozio_get_auto_update_status') ? hozio_get_auto_update_status() : 'Unknown';
 
     // Get license status (if updater is loaded)
     $license_status = function_exists('hozio_get_license_status') ? hozio_get_license_status() : [
@@ -380,13 +375,9 @@ function hozio_plugin_settings_page() {
                             <td class="hozio-next-check" style="padding: 5px 0;"><?php echo esc_html($next_update_check); ?></td>
                         </tr>
                         <tr>
-                            <td style="padding: 5px 15px 5px 0; color: #666;">Auto-Update:</td>
-                            <td class="hozio-auto-update-time" style="padding: 5px 0;">
-                                <?php if ($auto_updates_enabled === '1' && $license_status['status'] === 'valid'): ?>
-                                    <?php echo esc_html($next_auto_update); ?>
-                                <?php else: ?>
-                                    <span style="color: #999;">Disabled</span>
-                                <?php endif; ?>
+                            <td style="padding: 5px 15px 5px 0; color: #666;">Auto-Update Status:</td>
+                            <td class="hozio-auto-update-status" style="padding: 5px 0;">
+                                <?php echo esc_html($auto_update_status); ?>
                             </td>
                         </tr>
                     </table>
@@ -1048,14 +1039,12 @@ function hozio_plugin_settings_page() {
                         if (response.data.next_check) {
                             $('.hozio-next-check').text(response.data.next_check);
                         }
+                        if (response.data.auto_update_status) {
+                            $('.hozio-auto-update-status').text(response.data.auto_update_status);
+                        }
 
                         if (response.data.has_update) {
-                            var autoUpdateMsg = '';
-                            if (response.data.auto_updates_enabled && response.data.auto_update_in && response.data.auto_update_in !== 'Disabled') {
-                                autoUpdateMsg = '<br><small style="color: #666;">Auto-update ' + response.data.auto_update_in + '</small>';
-                                $('.hozio-auto-update-time').text(response.data.auto_update_in);
-                            }
-                            $result.html('<span style="color: #00a32a;"><span class="dashicons dashicons-yes"></span> ' + response.data.message + ' <a href="' + response.data.update_url + '">Update Now</a>' + autoUpdateMsg + '</span>');
+                            $result.html('<span style="color: #00a32a;"><span class="dashicons dashicons-yes"></span> ' + response.data.message + ' <a href="' + response.data.update_url + '">Update Now</a></span>');
                         } else {
                             $result.html('<span style="color: #00a32a;"><span class="dashicons dashicons-yes"></span> ' + response.data.message + '</span>');
                         }

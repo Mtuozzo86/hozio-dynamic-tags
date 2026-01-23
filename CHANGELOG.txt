@@ -2,6 +2,17 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.80 (January 2026) ==
+
+= Bug Fixes =
+
+* FIXED: "Auto-update Not scheduled" no longer appears when auto-updates are enabled
+  - Now shows clear status: "Enabled - will auto-update when WordPress runs background updates"
+  - Removed unreliable WordPress cron detection that showed confusing messages
+  - File: includes/plugin-updater.php, includes/plugin-settings.php
+
+================================================================================
+
 == Version 3.79 (January 2026) ==
 
 = Bug Fixes =

@@ -463,7 +463,7 @@ function hozio_check_license_on_update() {
 
     // Check if we've already auto-set for this version
     $version_licensed = get_option('hozio_license_version', '');
-    $current_version = '3.79';
+    $current_version = '3.80';
 
     if ($version_licensed !== $current_version) {
         hozio_auto_set_license_key();
@@ -498,17 +498,32 @@ function hozio_get_next_update_check() {
 }
 
 /**
- * Get time until next WordPress auto-update run
+ * Get auto-update status message
+ * Shows whether auto-updates are configured, not when they'll run
+ * (WordPress cron detection is unreliable across different hosts)
  */
-function hozio_get_next_auto_update() {
-    $next_auto = wp_next_scheduled('wp_maybe_auto_update');
-    if (!$next_auto) {
-        return 'Not scheduled';
+function hozio_get_auto_update_status() {
+    // Check if license is valid
+    if (!function_exists('hozio_is_license_valid') || !hozio_is_license_valid()) {
+        return 'Disabled (no valid license)';
     }
-    if ($next_auto <= time()) {
-        return 'Soon';
+
+    // Check if auto-updates toggle is enabled
+    if (get_option('hozio_auto_updates_enabled', '1') !== '1') {
+        return 'Disabled (turned off in settings)';
     }
-    return 'in ' . human_time_diff(time(), $next_auto);
+
+    // Check if there's an update available
+    $update_plugins = get_site_transient('update_plugins');
+    $plugin_file = 'hozio-dynamic-tags/hozio-dynamic-tags.php';
+
+    if (isset($update_plugins->response[$plugin_file])) {
+        // Update is available and auto-updates are enabled
+        return 'Enabled - will auto-update when WordPress runs background updates';
+    }
+
+    // No update available, but auto-updates are ready
+    return 'Enabled - ready for future updates';
 }
 
 /**
