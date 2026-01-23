@@ -1,0 +1,872 @@
+<?php
+/*
+Plugin Name:     Hozio Pro
+Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
+Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
+Version:         3.78
+Author:          Hozio Web Dev
+Author URI:      https://hozio.com
+License:         GPL2
+Text Domain:     hozio-dynamic-tags
+GitHub Plugin URI: https://github.com/Mtuozzo86/hozio-dynamic-tags
+GitHub Branch:   main
+*/
+
+if ( ! defined( 'ABSPATH' ) ) exit;
+
+// Load custom logger first (enables HOZIO_DEBUG logging without WP_DEBUG)
+require_once plugin_dir_path( __FILE__ ) . 'includes/hozio-logger.php';
+
+// Load plugin settings page (debug toggles, feature toggles, system info)
+require_once plugin_dir_path( __FILE__ ) . 'includes/plugin-settings.php';
+
+// Load self-hosted plugin updater (checks GitHub Releases for updates)
+require_once plugin_dir_path( __FILE__ ) . 'includes/plugin-updater.php';
+
+require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dynamic-tags.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/service-menu-handler.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/custom-permalink.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/custom-taxonomies.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/custom-parent-pages-queries.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/acf-filters.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/leads-digest.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-media-replace-endpoint.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/query-post-types.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/sitemap-settings.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/taxonomy-archive-settings.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/loop-configurations.php';
+
+
+
+
+add_action( 'init', function() {
+    // only run on sites that have a page whose slug is exactly "leads-page"
+    $leads_page = get_page_by_path( 'leads-page' );
+    if ( ! $leads_page ) {
+        return;
+    }
+
+    // bring in the file that itself calls add_shortcode('leads_digest', …)
+    require_once plugin_dir_path( __FILE__ ) . 'includes/leads-digest.php';
+
+    // force HTML mails
+    add_action( 'phpmailer_init', function( $phpmailer ) {
+        $phpmailer->isHTML( true );
+    } );
+
+    // swap the placeholder link in outgoing emails
+    add_filter( 'wp_mail', function( $args ) {
+        if ( empty( $args['message'] ) ) {
+            return $args;
+        }
+        $pattern = '/<a\s+href="\[site_url\]\/leads-page"([^>]*)>(.*?)<\/a>/is';
+        $args['message'] = preg_replace_callback( $pattern, function( $matches ) {
+            return '<a href="' . esc_url( home_url( '/leads-page' ) ) . '"'
+                   . $matches[1]
+                   . '>View All Leads →</a>';
+        }, $args['message'] );
+        return $args;
+    }, 20, 1 );
+} );
+
+function hozio_current_year() {
+  return date('Y');
+}
+add_shortcode('hozio_current_year','hozio_current_year');
+
+
+// Add the custom admin menu
+function hozio_dynamic_tags_menu() {
+    add_menu_page(
+        'Hozio Dynamic Tags Settings',
+        'Hozio Pro',
+        'manage_options',
+        'hozio_dynamic_tags',
+        'hozio_dynamic_tags_contact_info',
+        plugins_url('assets/hozio-logo.png', __FILE__),
+        25
+    );
+
+    add_submenu_page(
+        'hozio_dynamic_tags',
+        'Add / Remove Dynamic Tags',
+        'Add / Remove',
+        'manage_options',
+        'hozio-add-remove-tags',
+        'hozio_add_remove_tags_page'
+    );
+
+    add_submenu_page(
+        'hozio_dynamic_tags',
+        'Custom Permalink Settings',
+        'Blog Permalink Settings',
+        'manage_options',
+        'hozio-permalink-settings',
+        'hozio_custom_permalink_settings_page'
+    );
+        // Add the new submenu for post type configuration
+    add_submenu_page(
+        'hozio_dynamic_tags',
+        'Dynamic Query Post Types',
+        'Query Post Types',
+        'manage_options',
+        'hozio-query-post-types',
+        'hozio_query_post_types_page'
+    );
+    add_submenu_page(
+    'hozio_dynamic_tags',
+    'Taxonomy Archive Settings',
+    'Archive Settings',
+    'manage_options',
+    'hozio-taxonomy-archives',
+    'hozio_taxonomy_archive_settings_page'
+    );
+    add_submenu_page(
+    'hozio_dynamic_tags', // ✅ CORRECT - has underscore
+    'Loop Configurations',
+    'Loop Configurations',
+    'manage_options',
+    'hozio-loop-configurations',
+    'hozio_loop_configs_render_page'
+    );
+
+    // Plugin Settings (debug, feature toggles, system info)
+    add_submenu_page(
+        'hozio_dynamic_tags',
+        'Hozio Pro Settings',
+        'Hozio Pro Settings',
+        'manage_options',
+        'hozio-plugin-settings',
+        'hozio_plugin_settings_page'
+    );
+}
+
+add_action('admin_menu', 'hozio_dynamic_tags_menu');
+
+
+
+
+// Add custom CSS for the plugin's settings page
+function hozio_dynamic_tags_custom_styles() {
+    ?>
+    <style type="text/css">
+        /* Adjust the width of the textarea fields */
+        #hozio_company_address, #hozio_business_hours {
+            width: 100%;
+            max-width: 350px;
+            min-width: 300px;
+        }
+    </style>
+    <?php
+}
+
+
+
+add_action('admin_head', 'hozio_dynamic_tags_custom_styles');
+
+// Add a settings link under the plugin details
+add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'hozio_dynamic_tags_action_links');
+function hozio_dynamic_tags_action_links($links) {
+    $settings_link = '<a href="admin.php?page=hozio_dynamic_tags">Settings</a>';
+    array_unshift($links, $settings_link);
+    return $links;
+}
+
+// Function to display the settings page
+function hozio_dynamic_tags_contact_info() {
+    hozio_dynamic_tags_settings_page();
+}
+
+// Function for displaying the Add/Remove page content
+function hozio_add_remove_tags_page() {
+    include plugin_dir_path(__FILE__) . 'includes/add-remove-tags.php';
+}
+
+// Handle the add tag form submission
+add_action('admin_post_hozio_add_tag', 'hozio_add_dynamic_tag');
+function hozio_add_dynamic_tag() {
+    if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['_wpnonce'], 'hozio_add_tag_nonce')) {
+        wp_die('Unauthorized request');
+    }
+
+    $tag_title = sanitize_text_field($_POST['tag_title']);
+    $tag_type = sanitize_text_field($_POST['tag_type']);
+    $tag_value = sanitize_title($tag_title); // Ensure the tag's value is sanitized for use as a key
+
+    // Fetch the existing tags from the options table
+    $custom_tags = get_option('hozio_custom_tags', []);
+    
+    // Check if tag already exists to prevent duplicates
+    foreach ($custom_tags as $tag) {
+        if ($tag['value'] === $tag_value) {
+            wp_die('This tag already exists.');
+        }
+    }
+
+    // Add the new tag to the array
+    $custom_tags[] = [
+        'title' => $tag_title,
+        'value' => $tag_value,
+        'type' => $tag_type
+    ];
+
+    // Update the tags in the options table
+    update_option('hozio_custom_tags', $custom_tags);
+
+    // Redirect back to the add/remove tags page
+    wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
+    exit;
+}
+
+// Handle tag removal
+add_action('admin_post_hozio_remove_tag', 'hozio_remove_dynamic_tag');
+function hozio_remove_dynamic_tag() {
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized request');
+    }
+
+    // Get the tag value to be removed
+    $tag_value = sanitize_text_field($_GET['tag']);
+    $custom_tags = get_option('hozio_custom_tags', []);
+
+    // Loop through tags and remove the one that matches
+    foreach ($custom_tags as $key => $tag) {
+        if ($tag['value'] === $tag_value) {
+            unset($custom_tags[$key]);
+            break;
+        }
+    }
+
+    // Update the tags in the options table after removal
+    update_option('hozio_custom_tags', array_values($custom_tags));
+
+    // Redirect back to the add/remove tags page
+    wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
+    exit;
+}
+
+// Register the setting to save the enable/disable option for custom permalinks
+add_action('admin_init', 'hozio_custom_permalink_register_setting');
+function hozio_custom_permalink_register_setting() {
+    register_setting('hozio_permalink_settings', 'hozio_custom_permalink_enabled');
+}
+
+
+
+// Hook to modify the permalink structure
+add_filter('post_link', 'hozio_custom_post_link', 10, 2);
+function hozio_custom_post_link($permalink, $post) {
+    $is_enabled = get_option('hozio_custom_permalink_enabled');
+
+    if (!$is_enabled || $post->post_type !== 'post') {
+        return $permalink;
+    }
+
+    $categories = get_the_category($post->ID);
+    if (!empty($categories)) {
+        $category = $categories[0]->slug;
+        $permalink = home_url('/blog/' . $category . '/' . $post->post_name . '/');
+    }
+    return $permalink;
+}
+
+// Register custom dynamic tags
+add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
+    $url_tags = [
+        ['company-phone-1', 'Company Phone Number 1', 'hozio_company_phone_1', 'tel'],
+        ['company-phone-2', 'Company Phone Number 2', 'hozio_company_phone_2', 'tel'],
+        ['google-ads-phone', 'Google Ads Phone Number', 'URL'],
+        ['sms-phone', 'SMS Phone Number', 'hozio_sms_phone', 'sms'],
+        ['company-email', 'Company Email', 'hozio_company_email', 'mailto'],
+        ['gmb-link', 'GMB Link', 'hozio_gmb_link', 'url'],
+        ['facebook', 'Facebook', 'hozio_facebook_url', 'url'],
+        ['instagram', 'Instagram', 'hozio_instagram_url', 'url'],
+        ['twitter', 'Twitter', 'hozio_twitter_url', 'url'],
+        ['tiktok', 'TikTok', 'hozio_tiktok_url', 'url'],
+        ['linkedin', 'LinkedIn', 'hozio_linkedin_url', 'url'],
+        ['bbb', 'BBB', 'hozio_bbb_url', 'url'],
+        ['sitemap-xml', 'Sitemap', 'sitemap_url', 'url'],
+        ['yelp', 'Yelp', 'hozio_yelp_url', 'url'],
+        ['youtube', 'YouTube', 'hozio_youtube_url', 'url'],
+        ['angies-list', "Angi's List", 'hozio_angies_list_url', 'url'],
+        ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url', 'url'],
+    ];
+
+    foreach ($url_tags as $tag) {
+        if (isset($tag[3])) {
+            $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
+            if (!class_exists($class_name)) {
+                eval("
+                    class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                        public function get_name() {
+                            return '" . esc_attr($tag[0]) . "';
+                        }
+
+                        public function get_title() {
+                            return __('" . esc_attr($tag[1]) . "', 'plugin-name');
+                        }
+
+                        public function get_group() {
+                            return 'site';
+                        }
+
+                        public function get_categories() {
+                            return [\\Elementor\\Modules\\DynamicTags\\Module::URL_CATEGORY];
+                        }
+
+                        protected function register_controls() {}
+
+                        public function render() {
+                            if ('tel' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url('tel:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            } elseif ('sms' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url('sms:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            } elseif ('mailto' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url('mailto:' . esc_attr(get_option('" . esc_attr($tag[2]) . "')));
+                            } elseif ('url' === '" . esc_attr($tag[3]) . "') {
+                                echo esc_url(get_option('" . esc_attr($tag[2]) . "') ?: home_url('/sitemap.xml'));
+                            } else {
+                                echo esc_url(get_option('" . esc_attr($tag[2]) . "'));
+                            }
+                        }
+                    }
+                ");
+                $dynamic_tags->register(new $class_name());
+            }
+        }
+    }
+
+    $text_tags = [
+        ['company-phone-1-name', 'Company Phone #1 Name', 'hozio_company_phone_1'],
+        ['company-phone-2-name', 'Company Phone #2 Name', 'hozio_company_phone_2'],
+        ['sms-phone-name', 'SMS Phone # Name', 'hozio_sms_phone'],
+        ['company-address', 'Company Address', 'hozio_company_address'],
+        ['business-hours', 'Business Hours', 'hozio_business_hours'],
+        ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
+        ['years-of-experience', 'Years of Experience', 'hozio_start_year'],
+    ];
+
+    foreach ($text_tags as $tag) {
+        if (isset($tag[2])) {
+            $class_name = 'My_' . str_replace('-', '_', ucwords($tag[0], '-')) . '_Tag';
+
+            if (!class_exists($class_name)) {
+                eval("
+                    class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                        public function get_name() {
+                            return '" . esc_attr($tag[0]) . "';
+                        }
+
+                        public function get_title() {
+                            return __('" . esc_attr($tag[1]) . "', 'plugin-name');
+                        }
+
+                        public function get_group() {
+                            return 'site';
+                        }
+
+                        public function get_categories() {
+                            return [\\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
+                        }
+
+                        protected function register_controls() {}
+
+                        public function render() {
+                            if ('years-of-experience' === '" . esc_attr($tag[0]) . "') {
+                                \$start_year = get_option('hozio_start_year', 0);
+                                \$current_year = (int) date('Y');
+                                \$years_of_experience = (\$start_year > 0) ? \$current_year - (int) \$start_year : 0;
+                                echo esc_html(\$years_of_experience);
+                            } elseif ('company-address' === '" . esc_attr($tag[0]) . "') {
+                                echo wp_kses_post(get_option('hozio_company_address'));
+                            } elseif ('business-hours' === '" . esc_attr($tag[0]) . "') {
+                                echo wp_kses_post(get_option('hozio_business_hours'));
+                            } else {
+                                echo esc_html(get_option('" . esc_attr($tag[2]) . "'));
+                            }
+                        }
+                    }
+                ");
+                $dynamic_tags->register(new $class_name());
+            }
+        }
+    }
+
+
+    // Register services_children dynamic tag (fixed value)
+    $class_name = 'My_Services_Children_Tag';
+
+    if (!class_exists($class_name)) {
+        eval("
+            class $class_name extends \\Elementor\\Core\\DynamicTags\\Tag {
+                public function get_name() {
+                    return 'services_children';
+                }
+
+                public function get_title() {
+                    return __('Query ID Service Child Pages', 'plugin-name');
+                }
+
+                public function get_group() {
+                    return 'site';
+                }
+
+                public function get_categories() {
+                    return [\\Elementor\\Modules\\DynamicTags\\Module::TEXT_CATEGORY];
+                }
+
+                protected function register_controls() {}
+
+                public function render() {
+                    // Render the fixed value for services_children
+                    echo 'services_children';
+                }
+            }
+        ");
+        $dynamic_tags->register(new $class_name());
+    }
+});
+
+add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_styles');
+function hozio_dynamic_nav_menu_inline_styles() {
+    // Skip on admin pages and AJAX requests - these styles are only needed on frontend
+    if ( is_admin() || wp_doing_ajax() ) {
+        return;
+    }
+
+    $text_color = esc_attr(get_option('hozio_nav_text_color', 'black')); // Dynamically retrieve text color
+    ?>
+    <style type="text/css">
+        /* Style for the last menu item */
+        #toggle-menu li:last-of-type > .elementor-item {
+            background-color: var(--e-global-color-secondary, #FFFFFF) !important;
+            color: <?php echo $text_color; ?> !important;
+            padding: 25px 24px;
+            font-weight: 600;
+            font-size: 17px;
+            text-align: center;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        #toggle-menu li:last-of-type > .elementor-item:hover {
+            background-color: var(--e-global-color-secondary, #FFFFFF) !important;
+            color: <?php echo $text_color; ?> !important;
+        }
+    </style>
+
+    <style type="text/css">
+        /* Apply the dynamic text color to the default state */
+        #cta-text-color .elementor-cta__button,
+        #cta-text-color .elementor-ribbon-inner {
+            color: <?php echo $text_color; ?> !important; /* Apply dynamic color to the default state */
+        }
+
+        /* Completely avoid overriding hover styles */
+        #cta-text-color .elementor-cta__button:hover,
+        #cta-text-color .elementor-ribbon-inner:hover {
+            color: auto !important; /* Allow Elementor's hover settings to take full effect */
+        }
+    </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const textColor = '<?php echo esc_js($text_color); ?>';
+            const elements = document.querySelectorAll('#cta-text-color .elementor-cta__button, #cta-text-color .elementor-ribbon-inner');
+
+            elements.forEach(function (element) {
+                // Set default color dynamically
+                element.style.color = textColor;
+
+                // Let Elementor handle hover styles completely
+                element.addEventListener('mouseenter', function () {
+                    element.style.color = ''; // Clear dynamic styles on hover
+                });
+
+                element.addEventListener('mouseleave', function () {
+                    element.style.color = textColor; // Reapply dynamic color after hover
+                });
+            });
+        });
+    </script>
+    <?php
+}
+
+add_action('admin_head', 'hozio_set_icon');
+function hozio_set_icon() {
+    $icon_url = plugins_url('assets/hozio-logo.gif', __FILE__); // Update with correct path
+    echo '<style>
+        .plugin-title img[src*="geopattern-icon"] {
+            content: url("' . esc_url($icon_url) . '") !important;
+            width: 64px !important;
+            height: 64px !important;
+        }
+    </style>';
+}
+
+// Modify the query for child pages of "Services" when the query ID is "services_children"
+add_action('elementor/query/services_children', function ($query) {
+    // Get the ID of the "Services" page by its slug
+    $parent_page_id = get_page_by_path('services')->ID; // Replace 'services' with your parent slug
+
+    // Set the query to only include pages
+    $query->set('post_type', 'page');
+
+    // Set the query to only include child pages of the "Services" page
+    $query->set('post_parent', $parent_page_id);
+});
+
+
+
+
+// Shortcode to display ACF fields from a specific page (by page ID)
+function show_final_cta_from_page( $atts ) {
+    $atts = shortcode_atts( array(
+        'field' => '',
+        'page_id' => '', // You'll add the page ID here
+    ), $atts, 'final_cta' );
+
+    if( empty($atts['page_id']) ) return '';
+
+    // Get field value from the specific page ID
+    $field_value = get_field( $atts['field'], (int)$atts['page_id'] );
+
+    if( $field_value ) {
+        return wp_kses_post( $field_value );
+    }
+
+    return '';
+}
+add_shortcode( 'final_cta', 'show_final_cta_from_page' );
+
+
+
+
+//Hides Useful Links on HOG Template if ACF Value is empty
+add_filter( 'the_content', function( $content ) {
+    if ( is_admin() ) {
+        return $content;
+    }
+
+    // FEATURE TOGGLE: Check if DOM parsing is enabled in Settings
+    if ( function_exists( 'hozio_dom_parsing_enabled' ) && ! hozio_dom_parsing_enabled() ) {
+        return $content;
+    }
+
+    // EARLY EXIT: Skip expensive DOM parsing if target classes don't exist in content
+    if ( strpos( $content, 'hide-if-empty-acf' ) === false &&
+         strpos( $content, 'hide-if-no-wiki' ) === false ) {
+        return $content;
+    }
+
+    // Fallbacks for Icon Lists
+    $icon_fallbacks = [
+        '', 'Google Map Link', 'USPS Link',
+        'Pharmacy Link', 'Weather Link', 'County & State Wiki Link',
+    ];
+
+    // **Corrected** fallback for Wiki container
+    $wiki_fallbacks = [
+        '',                            // truly empty
+        'County & State Wiki Link',    // your ACF dynamic-tag fallback
+    ];
+
+    // Load into DOM
+    libxml_use_internal_errors( true );
+    $dom   = new DOMDocument();
+    $dom->loadHTML( '<?xml encoding="utf-8"?>' . $content,
+        LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+    );
+    $xpath = new DOMXPath( $dom );
+
+    //
+    // PART 1: Icon List cleanup
+    //
+    $widgets = $xpath->query(
+        "//div[contains(@class,'elementor-widget-icon-list') and contains(@class,'hide-if-empty-acf')]"
+    );
+    foreach ( $widgets as $wrapper ) {
+        $items     = $xpath->query( ".//li[contains(@class,'elementor-icon-list-item')]", $wrapper );
+        $realCount = 0;
+        foreach ( $items as $li ) {
+            $text = trim( $li->textContent );
+            if ( '' === $text || in_array( $text, $icon_fallbacks, true ) ) {
+                $li->parentNode->removeChild( $li );
+            } else {
+                $realCount++;
+            }
+        }
+        if ( 0 === $realCount ) {
+            $wrapper->parentNode->removeChild( $wrapper );
+        }
+    }
+
+    //
+    // PART 2: Wiki container removal
+    //
+    $containers = $xpath->query(
+        "//div[contains(concat(' ',normalize-space(@class),' '),' hide-if-no-wiki ')]"
+    );
+    foreach ( $containers as $wrapper ) {
+        // Grab the first Text Editor inside
+        $textEditor = $xpath->query(
+            ".//div[contains(concat(' ',normalize-space(@class),' '),' elementor-widget-text-editor ')]",
+            $wrapper
+        );
+        $text = '';
+        if ( $textEditor->length ) {
+            $text = trim( $textEditor->item(0)->textContent );
+        }
+        // Hide if empty or exactly the fallback
+        if ( '' === $text || in_array( $text, $wiki_fallbacks, true ) ) {
+            $wrapper->parentNode->removeChild( $wrapper );
+        }
+    }
+
+    return $dom->saveHTML();
+}, 20 );
+
+
+
+// Register custom page templates
+add_filter('theme_page_templates', function($templates) {
+    $templates['html-sitemap-template.php'] = 'HTML Sitemap';
+    return $templates;
+});
+
+// Load the template from the plugin includes folder
+add_filter('template_include', function($template) {
+    if (is_page()) {
+        $current_template = get_page_template_slug(get_queried_object_id());
+        if ($current_template === 'html-sitemap-template.php') {
+            return plugin_dir_path(__FILE__) . 'includes/templates/html-sitemap-template.php';
+        }
+    }
+    return $template;
+});
+
+class Your_Plugin_ACF_Maps {
+    
+    public function __construct() {
+        // Register shortcode
+        add_shortcode('gmb_map', array($this, 'output_gmb_map'));
+        
+        // Allow iframes for administrators
+        add_filter('content_save_pre', array($this, 'allow_iframes'));
+    }
+    
+    /**
+     * Output GMB map shortcode
+     */
+    public function output_gmb_map($atts) {
+        $atts = shortcode_atts(array(
+            'field' => 'gmb_map',
+            'post_id' => get_the_ID()
+        ), $atts);
+        
+        $map_code = get_field($atts['field'], $atts['post_id'], false);
+        
+        if (!empty($map_code)) {
+            return $map_code;
+        }
+        
+        return '';
+    }
+    
+    /**
+     * Allow iframes in content
+     */
+    public function allow_iframes($content) {
+        global $allowedposttags;
+        
+        $allowedposttags['iframe'] = array(
+            'src' => true,
+            'width' => true,
+            'height' => true,
+            'frameborder' => true,
+            'allowfullscreen' => true,
+            'style' => true,
+            'loading' => true,
+            'referrerpolicy' => true,
+            'allow' => true,
+        );
+        
+        return $content;
+    }
+}
+
+// Initialize the ACF Maps functionality only if ACF is active
+add_action('plugins_loaded', function() {
+    if (function_exists('get_field')) {
+        new Your_Plugin_ACF_Maps();
+    }
+});
+
+
+// Force all ACF field groups to show in REST API
+add_filter('acf/get_field_group', 'force_acf_rest_api_on');
+function force_acf_rest_api_on($field_group) {
+    $field_group['show_in_rest'] = 1;
+    return $field_group;
+}
+
+
+
+// ========================
+// ACF FIELD GROUPS REST API
+// ========================
+
+/**
+ * Register REST API endpoint for ACF field groups and fields
+ */
+function hozio_register_acf_fields_endpoint() {
+    register_rest_route('wp/v2', '/acf-fields', array(
+        'methods'             => 'GET',
+        'callback'            => 'hozio_get_acf_field_groups',
+        'permission_callback' => function() {
+            return current_user_can('edit_posts');
+        }
+    ));
+    
+    register_rest_route('wp/v1', '/acf-fields/(?P<group_key>[a-zA-Z0-9_-]+)', array(
+        'methods'             => 'GET',
+        'callback'            => 'hozio_get_acf_field_group_details',
+        'permission_callback' => function() {
+            return current_user_can('edit_posts');
+        }
+    ));
+}
+add_action('rest_api_init', 'hozio_register_acf_fields_endpoint');
+
+/**
+ * Get all ACF field groups with their fields
+ */
+function hozio_get_acf_field_groups($request) {
+    if (!function_exists('acf_get_field_groups')) {
+        return new WP_Error('acf_not_active', 'Advanced Custom Fields is not active', array('status' => 404));
+    }
+    
+    $field_groups = acf_get_field_groups();
+    $result = array();
+    
+    foreach ($field_groups as $group) {
+        $fields = acf_get_fields($group['key']);
+        
+        $group_data = array(
+            'key'       => $group['key'],
+            'title'     => $group['title'],
+            'active'    => $group['active'],
+            'location'  => $group['location'],
+            'fields'    => array()
+        );
+        
+        if ($fields) {
+            foreach ($fields as $field) {
+                $group_data['fields'][] = hozio_format_acf_field($field);
+            }
+        }
+        
+        $result[] = $group_data;
+    }
+    
+    return rest_ensure_response($result);
+}
+
+/**
+ * Get a specific field group by key
+ */
+function hozio_get_acf_field_group_details($request) {
+    if (!function_exists('acf_get_field_groups')) {
+        return new WP_Error('acf_not_active', 'Advanced Custom Fields is not active', array('status' => 404));
+    }
+    
+    $group_key = $request->get_param('group_key');
+    $group = acf_get_field_group($group_key);
+    
+    if (!$group) {
+        return new WP_Error('group_not_found', 'Field group not found', array('status' => 404));
+    }
+    
+    $fields = acf_get_fields($group_key);
+    
+    $result = array(
+        'key'       => $group['key'],
+        'title'     => $group['title'],
+        'active'    => $group['active'],
+        'location'  => $group['location'],
+        'fields'    => array()
+    );
+    
+    if ($fields) {
+        foreach ($fields as $field) {
+            $result['fields'][] = hozio_format_acf_field($field);
+        }
+    }
+    
+    return rest_ensure_response($result);
+}
+
+/**
+ * Format a single ACF field (handles nested fields like repeaters/groups)
+ */
+function hozio_format_acf_field($field) {
+    $formatted = array(
+        'key'           => $field['key'],
+        'name'          => $field['name'],
+        'label'         => $field['label'],
+        'type'          => $field['type'],
+        'required'      => !empty($field['required']),
+        'instructions'  => $field['instructions'] ?? '',
+    );
+    
+    if (in_array($field['type'], array('select', 'checkbox', 'radio', 'button_group'))) {
+        $formatted['choices'] = $field['choices'] ?? array();
+    }
+    
+    if (!empty($field['default_value'])) {
+        $formatted['default_value'] = $field['default_value'];
+    }
+    
+    if (!empty($field['sub_fields'])) {
+        $formatted['sub_fields'] = array();
+        foreach ($field['sub_fields'] as $sub_field) {
+            $formatted['sub_fields'][] = hozio_format_acf_field($sub_field);
+        }
+    }
+    
+    if (!empty($field['layouts'])) {
+        $formatted['layouts'] = array();
+        foreach ($field['layouts'] as $layout) {
+            $layout_data = array(
+                'key'   => $layout['key'],
+                'name'  => $layout['name'],
+                'label' => $layout['label'],
+                'sub_fields' => array()
+            );
+            if (!empty($layout['sub_fields'])) {
+                foreach ($layout['sub_fields'] as $sub_field) {
+                    $layout_data['sub_fields'][] = hozio_format_acf_field($sub_field);
+                }
+            }
+            $formatted['layouts'][] = $layout_data;
+        }
+    }
+    
+    return $formatted;
+}
+
+
+add_action('init', 'hozio_ensure_taxonomy_rest_support', 99);
+function hozio_ensure_taxonomy_rest_support() {
+    global $wp_taxonomies;
+    
+    if (isset($wp_taxonomies['parent_pages'])) {
+        $wp_taxonomies['parent_pages']->show_in_rest = true;
+        $wp_taxonomies['parent_pages']->rest_base = 'parent_pages';
+    }
+    
+    if (isset($wp_taxonomies['town_taxonomies'])) {
+        $wp_taxonomies['town_taxonomies']->show_in_rest = true;
+        $wp_taxonomies['town_taxonomies']->rest_base = 'town_taxonomies';
+    }
+}
+
+
