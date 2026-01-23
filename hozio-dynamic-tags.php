@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.81
+Version:         3.82
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -165,11 +165,11 @@ function hozio_dynamic_tags_custom_styles() {
 
 add_action('admin_head', 'hozio_dynamic_tags_custom_styles');
 
-// Add a settings link under the plugin details
+// Add a Dynamic Tags link under the plugin details
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'hozio_dynamic_tags_action_links');
 function hozio_dynamic_tags_action_links($links) {
-    $settings_link = '<a href="admin.php?page=hozio_dynamic_tags">Settings</a>';
-    array_unshift($links, $settings_link);
+    $dynamic_tags_link = '<a href="admin.php?page=hozio_dynamic_tags">Dynamic Tags</a>';
+    array_unshift($links, $dynamic_tags_link);
     return $links;
 }
 

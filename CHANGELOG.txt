@@ -2,6 +2,17 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.82 (January 2026) ==
+
+= Bug Fixes =
+
+* FIXED: Duplicate "Settings" link on Plugins page
+  - First link now correctly labeled "Settings" (goes to Hozio Pro Settings)
+  - Second link now correctly labeled "Dynamic Tags" (goes to Dynamic Tags page)
+  - File: hozio-dynamic-tags.php
+
+================================================================================
+
 == Version 3.81 (January 2026) ==
 
 = Bug Fixes =
