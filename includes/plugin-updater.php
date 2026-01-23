@@ -463,7 +463,7 @@ function hozio_check_license_on_update() {
 
     // Check if we've already auto-set for this version
     $version_licensed = get_option('hozio_license_version', '');
-    $current_version = '3.78';
+    $current_version = '3.79';
 
     if ($version_licensed !== $current_version) {
         hozio_auto_set_license_key();

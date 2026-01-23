@@ -163,11 +163,17 @@ function hozio_ajax_check_for_updates() {
             $auto_update_msg = ' Auto-update ' . $next_auto_update . '.';
         }
 
+        // Build direct update URL that triggers the update immediately
+        $update_url = wp_nonce_url(
+            admin_url('update.php?action=upgrade-plugin&plugin=' . urlencode($plugin_file)),
+            'upgrade-plugin_' . $plugin_file
+        );
+
         wp_send_json_success([
             'has_update' => true,
             'message' => 'Update available! Version ' . $update->new_version . ' is ready.',
             'new_version' => $update->new_version,
-            'update_url' => admin_url('update-core.php'),
+            'update_url' => $update_url,
             'last_checked' => 'Just now',
             'next_check' => function_exists('hozio_get_next_update_check') ? hozio_get_next_update_check() : 'Unknown',
             'auto_update_in' => $auto_updates_enabled ? $next_auto_update : 'Disabled',

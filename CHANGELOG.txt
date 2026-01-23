@@ -2,6 +2,17 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.79 (January 2026) ==
+
+= Bug Fixes =
+
+* FIXED: "Update Now" link now triggers update directly
+  - Previously went to Dashboard > Updates page which didn't work
+  - Now goes directly to plugin update screen and starts the update
+  - File: includes/plugin-settings.php
+
+================================================================================
+
 == Version 3.78 (January 2026) ==
 
 = New Features =

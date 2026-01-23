@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(powershell -Command \"Remove-Item -Path ''hozio-dynamic-tags-optimized.zip'' -Force -ErrorAction SilentlyContinue; $source = ''hozio-dynamic-tags-main''; $dest = ''hozio-dynamic-tags-optimized.zip''; $exclude = @\\(''.claude''\\); $files = Get-ChildItem -Path $source -Recurse | Where-Object { $relativePath = $_FullName.Substring\\(\\(Get-Item $source\\).FullName.Length + 1\\); -not \\($exclude | Where-Object { $relativePath -like \"\"$_\"\" }\\) }; Compress-Archive -Path \\($files.FullName\\) -DestinationPath $dest -Force\")",
+      "Bash(powershell -Command:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File create-zip.ps1:*)",
+      "Bash(del create-zip.ps1)",
+      "Bash(powershell -ExecutionPolicy Bypass -File:*)",
+      "Bash(php -l:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -Command:*)",
+      "Bash(dir /s /b \"C:\\\\Users\\\\Michael Tallo\\\\OneDrive - Hozio, Inc\\\\Documents\\\\Hozio Plugin Debugging\\\\hozio-dynamic-tags-main\\\\test-extract\")"
+    ]
+  }
+}
