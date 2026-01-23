@@ -157,11 +157,8 @@ function hozio_ajax_check_for_updates() {
     if (isset($update_plugins->response[$plugin_file])) {
         $update = $update_plugins->response[$plugin_file];
 
-        // Build direct update URL that triggers the update immediately
-        $update_url = wp_nonce_url(
-            admin_url('update.php?action=upgrade-plugin&plugin=' . urlencode($plugin_file)),
-            'upgrade-plugin_' . $plugin_file
-        );
+        // Link to plugins page where user can click "update now" for the plugin
+        $update_url = admin_url('plugins.php');
 
         wp_send_json_success([
             'has_update' => true,

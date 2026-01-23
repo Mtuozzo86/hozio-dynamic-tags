@@ -2,6 +2,21 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.81 (January 2026) ==
+
+= Bug Fixes =
+
+* FIXED: "Update Now" link now goes to the Plugins page instead of Dashboard Updates page
+  - Users can update directly from the Plugins screen
+  - File: includes/plugin-settings.php
+
+* NEW: Added "Settings" link on Plugins page
+  - Settings link now appears for all users (licensed or not)
+  - Links directly to Hozio Pro Settings page
+  - File: includes/plugin-updater.php
+
+================================================================================
+
 == Version 3.80 (January 2026) ==
 
 = Bug Fixes =

@@ -385,9 +385,14 @@ class Hozio_Plugin_Updater {
     public function add_action_links($links) {
         $license_status = $this->get_license_status();
 
+        // Always add Settings link
+        $settings_link = '<a href="' . admin_url('admin.php?page=hozio-plugin-settings') . '">Settings</a>';
+        array_unshift($links, $settings_link);
+
+        // Add warning if not licensed
         if ($license_status['status'] !== 'valid') {
-            $settings_link = '<a href="' . admin_url('admin.php?page=hozio-plugin-settings') . '" style="color: #d63638;">Enter License Key</a>';
-            array_unshift($links, $settings_link);
+            $license_link = '<a href="' . admin_url('admin.php?page=hozio-plugin-settings') . '" style="color: #d63638;">Enter License Key</a>';
+            array_unshift($links, $license_link);
         }
 
         return $links;
@@ -463,7 +468,7 @@ function hozio_check_license_on_update() {
 
     // Check if we've already auto-set for this version
     $version_licensed = get_option('hozio_license_version', '');
-    $current_version = '3.80';
+    $current_version = '3.81';
 
     if ($version_licensed !== $current_version) {
         hozio_auto_set_license_key();
