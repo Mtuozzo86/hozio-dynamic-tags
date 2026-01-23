@@ -2,6 +2,16 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.77 (January 2026) ==
+
+= Test Release =
+
+* TEST: Version bump to verify auto-update system
+  - No code changes, version number only
+  - Verifies self-hosted updater works correctly
+
+================================================================================
+
 == Version 3.76 (January 2026) ==
 
 = New Features =
