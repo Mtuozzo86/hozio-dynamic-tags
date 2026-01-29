@@ -25,9 +25,9 @@ class Hozio_Plugin_Updater {
     private $github_repo = 'hozio-dynamic-tags';
 
     /**
-     * License key (single key for all sites)
+     * License key hash for validation (key itself is not stored in code)
      */
-    private $valid_license_key = 'HOZIO-PRO-2026';
+    private $valid_license_hash = 'e00b3bdbd1afe6e17d67e3f074da0203';
 
     /**
      * Cache settings
@@ -105,7 +105,7 @@ class Hozio_Plugin_Updater {
      */
     public function is_license_valid() {
         $entered_key = get_option('hozio_license_key', '');
-        return trim($entered_key) === $this->valid_license_key;
+        return md5(trim($entered_key)) === $this->valid_license_hash;
     }
 
     /**
@@ -440,42 +440,6 @@ function hozio_is_license_valid() {
     }
     return false;
 }
-
-/**
- * Auto-set license key on plugin activation/update
- * This ensures all sites updating to v3.74+ automatically have the license key
- */
-function hozio_auto_set_license_key() {
-    $license_key = 'HOZIO-PRO-2026';
-    $current_key = get_option('hozio_license_key', '');
-
-    // Only set if not already set or if different
-    if ($current_key !== $license_key) {
-        update_option('hozio_license_key', $license_key);
-        hozio_log('License key auto-configured on plugin activation/update', 'Updater');
-    }
-}
-
-// Run on plugin activation
-register_activation_hook(dirname(__DIR__) . '/hozio-dynamic-tags.php', 'hozio_auto_set_license_key');
-
-// Also run on every admin load to catch updates (runs once then stops)
-function hozio_check_license_on_update() {
-    // Only run in admin
-    if (!is_admin()) {
-        return;
-    }
-
-    // Check if we've already auto-set for this version
-    $version_licensed = get_option('hozio_license_version', '');
-    $current_version = '3.82';
-
-    if ($version_licensed !== $current_version) {
-        hozio_auto_set_license_key();
-        update_option('hozio_license_version', $current_version);
-    }
-}
-add_action('admin_init', 'hozio_check_license_on_update');
 
 /**
  * Get human-readable time since last update check

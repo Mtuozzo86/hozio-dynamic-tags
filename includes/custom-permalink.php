@@ -606,15 +606,15 @@ if (!function_exists('hozio_override_get_permalink')) {
     function hozio_override_get_permalink($permalink, $post, $leavename) {
         // EARLY EXIT: Only apply to posts
         if (!is_object($post) || $post->post_type !== 'post') {
-            return null;
+            return $permalink;
         }
 
         // Use cached settings to avoid repeated DB calls
         $settings = hozio_get_permalink_settings();
 
-        // If nothing is enabled, return null to use default
+        // If nothing is enabled, pass through original permalink structure
         if (!$settings['blog_enabled'] && !$settings['category_enabled']) {
-            return null;
+            return $permalink;
         }
 
         $url_parts = [];

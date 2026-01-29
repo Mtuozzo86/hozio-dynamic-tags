@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website’s performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.82
+Version:         3.84
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -244,31 +244,6 @@ function hozio_remove_dynamic_tag() {
     // Redirect back to the add/remove tags page
     wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
     exit;
-}
-
-// Register the setting to save the enable/disable option for custom permalinks
-add_action('admin_init', 'hozio_custom_permalink_register_setting');
-function hozio_custom_permalink_register_setting() {
-    register_setting('hozio_permalink_settings', 'hozio_custom_permalink_enabled');
-}
-
-
-
-// Hook to modify the permalink structure
-add_filter('post_link', 'hozio_custom_post_link', 10, 2);
-function hozio_custom_post_link($permalink, $post) {
-    $is_enabled = get_option('hozio_custom_permalink_enabled');
-
-    if (!$is_enabled || $post->post_type !== 'post') {
-        return $permalink;
-    }
-
-    $categories = get_the_category($post->ID);
-    if (!empty($categories)) {
-        $category = $categories[0]->slug;
-        $permalink = home_url('/blog/' . $category . '/' . $post->post_name . '/');
-    }
-    return $permalink;
 }
 
 // Register custom dynamic tags

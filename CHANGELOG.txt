@@ -2,6 +2,39 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.84 (January 2026) ==
+
+= Security =
+
+* REMOVED: Hardcoded license key from plugin source code
+  - License key is now validated using a hash (cannot be reverse-engineered)
+  - Existing sites with the key already in their database are unaffected
+  - New installations must enter the license key manually
+  - File: includes/plugin-updater.php
+
+* REMOVED: Auto-set license key functionality
+  - Removed hozio_auto_set_license_key() function
+  - Removed hozio_check_license_on_update() function
+  - Plugin no longer auto-populates the license key on activation or update
+
+================================================================================
+
+== Version 3.83 (January 2026) ==
+
+= Bug Fixes =
+
+* FIXED: Blog post links showing as ?p=123 when blog prefix is disabled
+  - The pre_post_link filter was returning null instead of the original permalink
+    structure, causing WordPress to fall back to query string format
+  - File: includes/custom-permalink.php
+
+* REMOVED: Legacy duplicate permalink filter from main plugin file
+  - Old hozio_custom_post_link() filter at priority 10 conflicted with the
+    custom-permalink.php system at priority 9999
+  - File: hozio-dynamic-tags.php
+
+================================================================================
+
 == Version 3.82 (January 2026) ==
 
 = Bug Fixes =
