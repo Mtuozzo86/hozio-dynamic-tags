@@ -157,8 +157,11 @@ function hozio_ajax_check_for_updates() {
     if (isset($update_plugins->response[$plugin_file])) {
         $update = $update_plugins->response[$plugin_file];
 
-        // Link to plugins page where user can click "update now" for the plugin
-        $update_url = admin_url('plugins.php');
+        // Direct update URL that triggers the update immediately
+        $update_url = wp_nonce_url(
+            admin_url('update.php?action=upgrade-plugin&plugin=' . urlencode($plugin_file)),
+            'upgrade-plugin_' . $plugin_file
+        );
 
         wp_send_json_success([
             'has_update' => true,
@@ -314,10 +317,17 @@ function hozio_plugin_settings_page() {
                     <div class="hozio-license-wrapper">
                         <label for="hozio_license_key" class="hozio-license-label">License Key</label>
                         <div class="hozio-license-input-wrapper">
+                            <?php if ($license_status['status'] === 'valid'): ?>
+                            <input type="password" id="hozio_license_key" name="hozio_license_key"
+                                   value="<?php echo esc_attr($license_key); ?>"
+                                   class="regular-text hozio-license-input"
+                                   placeholder="Enter your license key">
+                            <?php else: ?>
                             <input type="text" id="hozio_license_key" name="hozio_license_key"
                                    value="<?php echo esc_attr($license_key); ?>"
                                    class="regular-text hozio-license-input"
                                    placeholder="Enter your license key">
+                            <?php endif; ?>
                             <span class="hozio-license-status <?php echo esc_attr($license_status['class']); ?>">
                                 <?php if ($license_status['status'] === 'valid'): ?>
                                     <span class="dashicons dashicons-yes-alt"></span> Licensed

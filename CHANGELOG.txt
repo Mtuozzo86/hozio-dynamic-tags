@@ -2,6 +2,22 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.85 (January 2026) ==
+
+= Bug Fixes =
+
+* FIXED: License key is now masked (starred out) in the settings page once validated
+  - Prevents anyone from reading the license key from the admin screen
+  - Key is shown as password dots when license status is valid
+  - File: includes/plugin-settings.php
+
+* FIXED: "Update Now" link now triggers the actual plugin update
+  - Previously just redirected to the Plugins page without updating
+  - Now uses WordPress's native update action with proper nonce
+  - File: includes/plugin-settings.php
+
+================================================================================
+
 == Version 3.84 (January 2026) ==
 
 = Security =
