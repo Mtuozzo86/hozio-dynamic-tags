@@ -808,6 +808,11 @@ function hozio_custom_permalink_settings_page() {
                             </div>
                         </div>
                     </div>
+
+                    <button type="submit" name="submit" class="button hozio-save-btn">
+                        <span class="dashicons dashicons-yes"></span>
+                        Save Settings
+                    </button>
                 </div>
 
                 <!-- Preview Card -->
