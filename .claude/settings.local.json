@@ -9,7 +9,8 @@
       "Bash(powershell -ExecutionPolicy Bypass -File:*)",
       "Bash(php -l:*)",
       "Bash(powershell -ExecutionPolicy Bypass -Command:*)",
-      "Bash(dir /s /b \"C:\\\\Users\\\\Michael Tallo\\\\OneDrive - Hozio, Inc\\\\Documents\\\\Hozio Plugin Debugging\\\\hozio-dynamic-tags-main\\\\test-extract\")"
+      "Bash(dir /s /b \"C:\\\\Users\\\\Michael Tallo\\\\OneDrive - Hozio, Inc\\\\Documents\\\\Hozio Plugin Debugging\\\\hozio-dynamic-tags-main\\\\test-extract\")",
+      "Bash(dir:*)"
     ]
   }
 }

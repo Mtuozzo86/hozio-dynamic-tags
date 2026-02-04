@@ -435,6 +435,7 @@ if (!function_exists('hozio_custom_permalink_register_setting')) {
     function hozio_custom_permalink_register_setting() {
         register_setting('hozio_permalink_settings', 'hozio_blog_prefix_enabled');
         register_setting('hozio_permalink_settings', 'hozio_category_prefix_enabled');
+        register_setting('hozio_permalink_settings', 'hozio_rss_override_enabled');
     }
 }
 
@@ -674,6 +675,9 @@ function hozio_custom_permalink_settings_page() {
         
         update_option('hozio_blog_prefix_enabled', $blog_enabled);
         update_option('hozio_category_prefix_enabled', $category_enabled);
+
+        $rss_override_enabled = isset($_POST['hozio_rss_override_enabled']) ? 1 : 0;
+        update_option('hozio_rss_override_enabled', $rss_override_enabled);
         
         // Force hard flush
         flush_rewrite_rules(true);
@@ -690,6 +694,7 @@ function hozio_custom_permalink_settings_page() {
     
     $blog_setting = get_option('hozio_blog_prefix_enabled', 0);
     $category_setting = get_option('hozio_category_prefix_enabled', 0);
+    $rss_setting = get_option('hozio_rss_override_enabled', 0);
     
     // Build current URL example
     $current_url = home_url('/');
@@ -779,7 +784,32 @@ function hozio_custom_permalink_settings_page() {
                         Flush Rewrite Rules
                     </button>
                 </div>
-                
+
+                <!-- RSS Feed Override Card -->
+                <div class="hozio-permalink-card" style="border-left-color: #9b59b6;">
+                    <div class="hozio-card-header">
+                        <span class="dashicons dashicons-rss" style="color: #9b59b6;"></span>
+                        <h2>RSS Feed Settings</h2>
+                    </div>
+
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox"
+                                   id="hozio_rss_override_enabled"
+                                   name="hozio_rss_override_enabled"
+                                   value="1"
+                                   <?php checked($rss_setting, 1); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">ACF RSS Feed Override</div>
+                            <div class="hozio-toggle-description">
+                                Replace default RSS feed content with ACF field content (introduction and section headings/body text). When enabled, the RSS feed will display structured content from your ACF fields instead of the default post content.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Preview Card -->
                 <div class="hozio-permalink-card preview-card">
                     <div class="hozio-card-header">
