@@ -49,10 +49,18 @@ add_action( 'admin_menu', function() {
 
 // Redirect non-admins away from disallowed admin pages
 add_action( 'admin_init', function() {
-    if ( current_user_can( 'manage_options' ) || wp_doing_ajax() ) return;
+    // Skip for admins, AJAX, and Cron
+    if ( current_user_can( 'manage_options' ) || wp_doing_ajax() || wp_doing_cron() ) return;
 
-    $allowed_pages   = [ 'hozio-leads', 'hozio-lead-view' ];
-    $allowed_scripts = [ 'profile.php', 'admin-ajax.php' ];
+    // Skip if user isn't fully logged in yet (prevents login redirect loop)
+    if ( ! is_user_logged_in() ) return;
+
+    // Skip during login/logout process
+    $pagenow = $GLOBALS['pagenow'] ?? '';
+    if ( in_array( $pagenow, [ 'wp-login.php', 'wp-signup.php' ], true ) ) return;
+
+    $allowed_pages   = [ 'hozio-leads', 'hozio-lead-view', 'hozio-leads-settings' ];
+    $allowed_scripts = [ 'profile.php', 'admin-ajax.php', 'wp-login.php', 'admin-post.php' ];
 
     $current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : '';
     $script       = basename( sanitize_file_name( $_SERVER['SCRIPT_NAME'] ?? '' ) );
@@ -60,9 +68,22 @@ add_action( 'admin_init', function() {
     if ( in_array( $script, $allowed_scripts, true ) ) return;
     if ( $script === 'admin.php' && in_array( $current_page, $allowed_pages, true ) ) return;
 
-    wp_safe_redirect( admin_url( 'admin.php?page=hozio-leads' ) );
+    // Prevent redirect loop: only redirect if not already heading to hozio-leads
+    $redirect_url = admin_url( 'admin.php?page=hozio-leads' );
+    $current_url  = ( is_ssl() ? 'https' : 'http' ) . '://' . ( $_SERVER['HTTP_HOST'] ?? '' ) . ( $_SERVER['REQUEST_URI'] ?? '' );
+    if ( strpos( $current_url, 'page=hozio-leads' ) !== false ) return;
+
+    wp_safe_redirect( $redirect_url );
     exit;
 });
+
+// Send non-admin users directly to Lead Submissions after login
+add_filter( 'login_redirect', function( $redirect_to, $requested_redirect_to, $user ) {
+    if ( ! is_wp_error( $user ) && is_a( $user, 'WP_User' ) && ! $user->has_cap( 'manage_options' ) ) {
+        return admin_url( 'admin.php?page=hozio-leads' );
+    }
+    return $redirect_to;
+}, 10, 3 );
 
 
 // ══════════════════════════════════════════════════════════

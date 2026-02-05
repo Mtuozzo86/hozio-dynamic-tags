@@ -2,6 +2,22 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.88 (February 2026) ==
+
+= Bug Fixes =
+
+* FIXED: Login redirect loop for non-admin users
+  - Added checks for cron, login status, and login/signup pages
+  - Added 'hozio-leads-settings' to allowed pages for non-admins
+  - Added redirect loop prevention check
+  - File: includes/leads-digest.php
+
+* NEW: Non-admin users redirect directly to Lead Submissions after login
+  - Uses login_redirect filter to send non-admins straight to leads page
+  - File: includes/leads-digest.php
+
+================================================================================
+
 == Version 3.87 (February 2026) ==
 
 = New Features =
