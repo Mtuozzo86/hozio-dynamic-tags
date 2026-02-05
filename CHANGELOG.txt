@@ -2,6 +2,23 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.86 (February 2026) ==
+
+= New Features =
+
+* NEW: ACF RSS Feed Override
+  - Replaces default RSS feed content with ACF field content for blog posts
+  - Pulls content from introduction and sections 1-7 (headings and body text)
+  - Excerpt uses ACF excerpt, summary, or introduction fields
+  - Toggle in Blog Permalink Settings to enable/disable
+  - File: includes/rss-feed-override.php
+
+* NEW: RSS Feed Settings card in Blog Permalink Settings page
+  - New toggle for "ACF RSS Feed Override" option
+  - File: includes/custom-permalink.php
+
+================================================================================
+
 == Version 3.85 (January 2026) ==
 
 = Bug Fixes =
