@@ -2,6 +2,39 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.87 (February 2026) ==
+
+= New Features =
+
+* NEW: Full CRM Dashboard for Lead Submissions
+  - New "Lead Submissions" admin menu page with CRM-style dashboard
+  - Stat cards showing Total Leads, Today, and This Week counts
+  - Searchable and filterable table with expandable detail rows
+  - Column sorting by date, name, email, phone
+  - Pagination for large datasets (50 per page)
+  - Single submission detail view page
+  - File: includes/leads-digest.php
+
+* NEW: Non-Admin User Restrictions
+  - Non-admin users only see Lead Submissions and Profile in admin menu
+  - Automatic redirect to Lead Submissions page for restricted pages
+  - File: includes/leads-digest.php
+
+* NEW: Leads Display Settings Page
+  - Customizable colors for the front-end [leads_digest] shortcode
+  - 10 color options: element background, text colors, links, buttons, search bar, borders
+  - Reset to defaults button
+  - File: includes/leads-digest.php
+
+* IMPROVED: Front-end Shortcode Performance & Styling
+  - Single bulk query for all field data (eliminates N+1 queries)
+  - Form field label caching per request
+  - CSS custom properties for theming
+  - Improved mobile responsive design
+  - File: includes/leads-digest.php
+
+================================================================================
+
 == Version 3.86 (February 2026) ==
 
 = New Features =
