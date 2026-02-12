@@ -2,6 +2,18 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.89 (February 2026) ==
+
+= Improvements =
+
+* IMPROVED: RSS Feed now includes featured image as enclosure
+  - Adds <enclosure> tag with featured image URL, file size, and MIME type
+  - Compatible with Zapier and other RSS feed automation tools
+  - Allows automatic image inclusion when cross-posting to other platforms
+  - File: includes/rss-feed-override.php
+
+================================================================================
+
 == Version 3.88 (February 2026) ==
 
 = Bug Fixes =

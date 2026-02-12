@@ -128,4 +128,41 @@ if ( $hozio_rss_override ) {
         return $excerpt;
     }
 
+    add_action( 'rss2_item', 'hozio_rss_featured_image_enclosure' );
+
+    function hozio_rss_featured_image_enclosure() {
+        global $post;
+
+        if ( ! $post || $post->post_type !== 'post' ) {
+            return;
+        }
+
+        // Get the featured image ID
+        $thumbnail_id = get_post_thumbnail_id( $post->ID );
+
+        if ( ! $thumbnail_id ) {
+            return;
+        }
+
+        // Get the image URL (full size)
+        $thumbnail_url = wp_get_attachment_url( $thumbnail_id );
+
+        if ( ! $thumbnail_url ) {
+            return;
+        }
+
+        // Get the image file path to determine file size
+        $thumbnail_path = get_attached_file( $thumbnail_id );
+        $file_size = file_exists( $thumbnail_path ) ? filesize( $thumbnail_path ) : 0;
+
+        // Get the MIME type
+        $mime_type = get_post_mime_type( $thumbnail_id );
+        if ( ! $mime_type ) {
+            $mime_type = 'image/jpeg'; // Default fallback
+        }
+
+        // Output the enclosure tag
+        echo '<enclosure url="' . esc_url( $thumbnail_url ) . '" length="' . absint( $file_size ) . '" type="' . esc_attr( $mime_type ) . '" />';
+    }
+
 }
