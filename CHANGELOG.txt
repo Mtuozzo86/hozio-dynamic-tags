@@ -2,6 +2,36 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 3.90 (February 2026) ==
+
+= New Features =
+
+* NEW: Parent Page Filtering for taxonomy query disambiguation
+  - Adds "Parent Pages Query Options" meta box to page editor sidebar
+  - Checkbox enables post_parent filtering on dynamic_parent_pages_query
+  - Solves taxonomy term collisions when multiple page hierarchies share the same slug
+  - Works with both standard and county pages query logic paths
+  - File: includes/parent-page-filtering.php, includes/custom-parent-pages-queries.php
+
+* NEW: Support & Help documentation page
+  - Searchable FAQ-style documentation for all Hozio Pro features
+  - 12 feature sections with step-by-step setup instructions
+  - Real-time search filtering with collapsible sections
+  - Accessible via Hozio Pro > Support & Help in the admin menu
+  - File: includes/support-page.php
+
+* IMPROVED: HTML Sitemap nested accordion support for Service Hub taxonomy
+  - 4-level nested accordion hierarchy: Services > Service Hub > SPLI > Town pages
+  - Service Hub pages detected via "Service Hub" taxonomy term
+  - Sub-sections badge and pages badge indicators on accordion headers
+  - Progressive width reduction for nested accordions (centered)
+  - Performance: batch cache priming reduces ~800+ DB queries to ~8-12
+  - Responsive mobile layout with reduced indentation and padding
+  - Services page detection now uses slug (post_name) instead of title
+  - File: includes/templates/html-sitemap-template.php
+
+================================================================================
+
 == Version 3.89 (February 2026) ==
 
 = Improvements =

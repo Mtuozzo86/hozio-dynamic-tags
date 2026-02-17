@@ -58,6 +58,24 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
                 ],
             ]);
 
+            // Parent page filtering: check current page first, then walk up ancestors
+            $filter_on_self = get_post_meta($current_page_id, 'hozio_filter_by_parent_page', true);
+            if ($filter_on_self) {
+                $query->set('post_parent', $current_page_id);
+                hozio_log('Parent filtering enabled on current page (county path). Restricting to post_parent=' . $current_page_id, 'ParentPagesQuery');
+            } else {
+                $ancestor_id = wp_get_post_parent_id($current_page_id);
+                while ($ancestor_id) {
+                    $filter_by_ancestor = get_post_meta($ancestor_id, 'hozio_filter_by_parent_page', true);
+                    if ($filter_by_ancestor) {
+                        $query->set('post_parent', $ancestor_id);
+                        hozio_log('Parent filtering enabled on ancestor (county path). Restricting to post_parent=' . $ancestor_id, 'ParentPagesQuery');
+                        break;
+                    }
+                    $ancestor_id = wp_get_post_parent_id($ancestor_id);
+                }
+            }
+
             $query->set('post__not_in', [$current_page_id]); // Exclude the current page
             hozio_log('Tax query set with term ID: ' . $matching_term->term_id . ' (excluding county pages)', 'ParentPagesQuery');
         }
@@ -110,6 +128,24 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
                     'compare' => '!=',
                 ],
             ]);
+
+            // Parent page filtering: check current page first, then walk up ancestors
+            $filter_on_self = get_post_meta($current_page_id, 'hozio_filter_by_parent_page', true);
+            if ($filter_on_self) {
+                $query->set('post_parent', $current_page_id);
+                hozio_log('Parent filtering enabled on current page. Restricting to post_parent=' . $current_page_id, 'ParentPagesQuery');
+            } else {
+                $ancestor_id = wp_get_post_parent_id($current_page_id);
+                while ($ancestor_id) {
+                    $filter_by_ancestor = get_post_meta($ancestor_id, 'hozio_filter_by_parent_page', true);
+                    if ($filter_by_ancestor) {
+                        $query->set('post_parent', $ancestor_id);
+                        hozio_log('Parent filtering enabled on ancestor. Restricting to post_parent=' . $ancestor_id, 'ParentPagesQuery');
+                        break;
+                    }
+                    $ancestor_id = wp_get_post_parent_id($ancestor_id);
+                }
+            }
 
             $query->set('post__not_in', [$current_page_id]); // Exclude the current page
         }
@@ -241,6 +277,28 @@ add_action('elementor/query/dynamic_county_pages_query', function($query) {
 
             $query->set('tax_query', $tax_query);
             $debug_info['tax_query_set'] = $tax_query;
+
+            // Parent page filtering: check current page first, then walk up ancestors
+            $filter_on_self = get_post_meta($current_page_id, 'hozio_filter_by_parent_page', true);
+            $debug_info['filter_on_self'] = $filter_on_self;
+            if ($filter_on_self) {
+                $query->set('post_parent', $current_page_id);
+                $debug_info['post_parent_filter_applied'] = $current_page_id;
+                $debug_info['filter_source'] = 'current_page';
+            } else {
+                $ancestor_id = wp_get_post_parent_id($current_page_id);
+                while ($ancestor_id) {
+                    $filter_by_ancestor = get_post_meta($ancestor_id, 'hozio_filter_by_parent_page', true);
+                    if ($filter_by_ancestor) {
+                        $query->set('post_parent', $ancestor_id);
+                        $debug_info['post_parent_filter_applied'] = $ancestor_id;
+                        $debug_info['filter_source'] = 'ancestor';
+                        break;
+                    }
+                    $ancestor_id = wp_get_post_parent_id($ancestor_id);
+                }
+            }
+
             $query->set('post__not_in', [$current_page_id]);
         }
 
@@ -292,6 +350,27 @@ add_action('elementor/query/dynamic_county_pages_query', function($query) {
                     'compare' => '!=',
                 ],
             ]);
+
+            // Parent page filtering: check current page first, then walk up ancestors
+            $filter_on_self = get_post_meta($current_page_id, 'hozio_filter_by_parent_page', true);
+            $debug_info['filter_on_self'] = $filter_on_self;
+            if ($filter_on_self) {
+                $query->set('post_parent', $current_page_id);
+                $debug_info['post_parent_filter_applied'] = $current_page_id;
+                $debug_info['filter_source'] = 'current_page';
+            } else {
+                $ancestor_id = wp_get_post_parent_id($current_page_id);
+                while ($ancestor_id) {
+                    $filter_by_ancestor = get_post_meta($ancestor_id, 'hozio_filter_by_parent_page', true);
+                    if ($filter_by_ancestor) {
+                        $query->set('post_parent', $ancestor_id);
+                        $debug_info['post_parent_filter_applied'] = $ancestor_id;
+                        $debug_info['filter_source'] = 'ancestor';
+                        break;
+                    }
+                    $ancestor_id = wp_get_post_parent_id($ancestor_id);
+                }
+            }
 
             $query->set('post__not_in', [$current_page_id]);
         }
