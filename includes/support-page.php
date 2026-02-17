@@ -7,6 +7,29 @@
 if (!defined('ABSPATH')) exit;
 
 function hozio_support_page() {
+    // Check if license is active
+    if (!function_exists('hozio_is_license_valid') || !hozio_is_license_valid()) {
+        $settings_url = admin_url('admin.php?page=hozio-plugin-settings');
+        ?>
+        <div class="hozio-settings-wrapper">
+            <div class="hozio-header">
+                <div class="hozio-header-content">
+                    <h1><span class="dashicons dashicons-book-alt"></span> Support & Help</h1>
+                    <p class="hozio-subtitle">Step-by-step guides for all Hozio Pro features</p>
+                </div>
+            </div>
+            <div class="hozio-content">
+                <div style="text-align:center; padding:60px 20px;">
+                    <span class="dashicons dashicons-lock" style="font-size:48px; width:48px; height:48px; color:#d63638; margin-bottom:16px; display:block; margin-left:auto; margin-right:auto;"></span>
+                    <h2 style="margin:0 0 12px; font-size:22px; color:#1f2937;">License Required</h2>
+                    <p style="margin:0 0 24px; font-size:15px; color:#6b7280; max-width:450px; margin-left:auto; margin-right:auto;">A valid license key is required to access Support & Help documentation. Please enter your license key in the plugin settings.</p>
+                    <a href="<?php echo esc_url($settings_url); ?>" class="button button-primary" style="font-size:14px; padding:8px 24px; height:auto;">Enter License Key</a>
+                </div>
+            </div>
+        </div>
+        <?php
+        return;
+    }
     ?>
     <div class="hozio-settings-wrapper">
         <!-- Header -->
