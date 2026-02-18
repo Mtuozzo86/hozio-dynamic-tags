@@ -1,15 +1,15 @@
 <?php
 /**
- * HTML Sitemap Settings Page
- * Separate menu item for HTML Sitemap configuration
+ * Sitemap Settings Page (Tabbed)
+ * Combines Appearance settings and Layout Editor under one menu item
  */
 
 // Add the sitemap settings submenu to Hozio Pro menu
 function hozio_register_sitemap_settings_menu() {
     add_submenu_page(
         'hozio_dynamic_tags',           // Parent slug (Hozio Pro menu)
-        'HTML Sitemap Settings',        // Page title
-        'HTML Sitemap Settings',        // Menu title
+        'Sitemap Settings',             // Page title
+        'Sitemap Settings',             // Menu title
         'manage_options',               // Capability
         'hozio-sitemap-settings',       // Menu slug
         'hozio_sitemap_settings_page'   // Callback function
@@ -22,16 +22,16 @@ function hozio_sitemap_settings_admin_assets($hook) {
     if (strpos($hook, 'hozio-sitemap-settings') === false) {
         return;
     }
-    
-    // Enqueue WordPress color picker
-    wp_enqueue_style('wp-color-picker');
-    wp_enqueue_script('wp-color-picker');
-    
-    // Add inline styles to match Hozio Pro styling
-    add_action('admin_head', 'hozio_sitemap_settings_inline_styles');
-    
-    // Add color picker initialization script
-    add_action('admin_footer', 'hozio_sitemap_color_picker_script');
+
+    $tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'appearance';
+
+    // Only load color picker assets on the appearance tab
+    if ($tab !== 'layout') {
+        wp_enqueue_style('wp-color-picker');
+        wp_enqueue_script('wp-color-picker');
+        add_action('admin_head', 'hozio_sitemap_settings_inline_styles');
+        add_action('admin_footer', 'hozio_sitemap_color_picker_script');
+    }
 }
 add_action('admin_enqueue_scripts', 'hozio_sitemap_settings_admin_assets', 999);
 
@@ -63,20 +63,20 @@ function hozio_sitemap_settings_inline_styles() {
             --hozio-green: #8DC63F;
             --hozio-orange: #F7941D;
         }
-        
+
         .hozio-settings-wrapper {
             background: #f9fafb;
             margin: 20px 20px 20px 0;
             border-radius: 8px;
         }
-        
+
         .hozio-header {
             background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 50%, var(--hozio-orange) 100%);
             color: white;
             padding: 40px;
             border-radius: 8px 8px 0 0;
         }
-        
+
         .hozio-header-content h1 {
             color: white !important;
             font-size: 32px;
@@ -85,18 +85,67 @@ function hozio_sitemap_settings_inline_styles() {
             align-items: center;
             gap: 12px;
         }
-        
+
         .hozio-subtitle {
             color: rgba(255, 255, 255, 0.9);
             font-size: 16px;
             margin: 0;
         }
-        
+
         .hozio-content {
             padding: 0 40px 40px;
             margin-top: -30px;
         }
-        
+
+        /* Tab bar — overrides content margin when present */
+        .hozio-tab-bar {
+            display: flex;
+            gap: 0;
+            background: white;
+            padding: 0 40px;
+            margin-top: -30px;
+            border-bottom: 2px solid #e5e7eb;
+            position: relative;
+            z-index: 1;
+        }
+        .hozio-tab-bar + .hozio-content {
+            margin-top: 0;
+            padding-top: 24px;
+        }
+        .hozio-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 24px;
+            font-size: 15px;
+            font-weight: 500;
+            color: #6b7280;
+            text-decoration: none;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .hozio-tab:hover {
+            color: var(--hozio-blue);
+            background: #f0f9ff;
+            text-decoration: none;
+        }
+        .hozio-tab:focus {
+            outline: none;
+            box-shadow: none;
+            text-decoration: none;
+        }
+        .hozio-tab.active {
+            color: var(--hozio-blue);
+            border-bottom-color: var(--hozio-blue);
+            font-weight: 600;
+        }
+        .hozio-tab .dashicons {
+            font-size: 18px;
+            width: 18px;
+            height: 18px;
+        }
+
         .hozio-section {
             background: white;
             border-radius: 12px;
@@ -106,7 +155,7 @@ function hozio_sitemap_settings_inline_styles() {
             border: 1px solid #e5e7eb;
             border-left: 4px solid var(--hozio-blue);
         }
-        
+
         .hozio-section-header {
             display: flex;
             align-items: center;
@@ -115,25 +164,25 @@ function hozio_sitemap_settings_inline_styles() {
             padding-bottom: 16px;
             border-bottom: 2px solid #f3f4f6;
         }
-        
+
         .hozio-section-header .dashicons {
             color: var(--hozio-blue);
             font-size: 24px;
             width: 24px;
             height: 24px;
         }
-        
+
         .hozio-section-header h2 {
             margin: 0;
             font-size: 20px;
             color: #1f2937;
             font-weight: 600;
         }
-        
+
         .hozio-field {
             margin-bottom: 20px;
         }
-        
+
         .hozio-field-label {
             font-weight: 600;
             font-size: 15px;
@@ -141,14 +190,14 @@ function hozio_sitemap_settings_inline_styles() {
             margin-bottom: 8px;
             display: block;
         }
-        
+
         .hozio-field-description {
             color: #6b7280;
             font-size: 14px;
             margin: 8px 0 0 0;
             line-height: 1.6;
         }
-        
+
         /* Color Picker Field Styles */
         .hozio-color-field {
             display: flex;
@@ -156,44 +205,44 @@ function hozio_sitemap_settings_inline_styles() {
             gap: 16px;
             margin-bottom: 24px;
         }
-        
+
         .hozio-color-input-wrapper {
             flex: 0 0 auto;
         }
-        
+
         .hozio-color-info {
             flex: 1;
         }
-        
+
         .wp-picker-container {
             margin-top: 0;
         }
-        
+
         .wp-picker-input-wrap {
             display: flex;
             align-items: center;
         }
-        
+
         /* Toggle Switch Styles */
         .hozio-toggle-wrapper {
             display: flex;
             align-items: center;
             gap: 12px;
         }
-        
+
         .hozio-toggle-switch {
             position: relative;
             display: inline-block;
             width: 60px;
             height: 32px;
         }
-        
+
         .hozio-toggle-switch input {
             opacity: 0;
             width: 0;
             height: 0;
         }
-        
+
         .hozio-toggle-slider {
             position: absolute;
             cursor: pointer;
@@ -205,7 +254,7 @@ function hozio_sitemap_settings_inline_styles() {
             transition: .4s;
             border-radius: 32px;
         }
-        
+
         .hozio-toggle-slider:before {
             position: absolute;
             content: "";
@@ -217,21 +266,21 @@ function hozio_sitemap_settings_inline_styles() {
             transition: .4s;
             border-radius: 50%;
         }
-        
+
         input:checked + .hozio-toggle-slider {
             background-color: var(--hozio-blue);
         }
-        
+
         input:checked + .hozio-toggle-slider:before {
             transform: translateX(28px);
         }
-        
+
         .hozio-toggle-label {
             font-weight: 600;
             font-size: 16px;
             color: #1f2937;
         }
-        
+
         /* Preview Styles */
         .hozio-dark-mode-preview {
             margin-top: 24px;
@@ -240,7 +289,7 @@ function hozio_sitemap_settings_inline_styles() {
             border-radius: 8px;
             border: 1px solid #e5e7eb;
         }
-        
+
         .preview-label {
             display: flex;
             align-items: center;
@@ -250,33 +299,33 @@ function hozio_sitemap_settings_inline_styles() {
             margin-bottom: 16px;
             font-size: 14px;
         }
-        
+
         .preview-label .dashicons {
             color: var(--hozio-blue);
         }
-        
+
         .preview-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 20px;
         }
-        
+
         .preview-box {
             border-radius: 8px;
             padding: 20px;
             border: 2px solid #e5e7eb;
         }
-        
+
         .preview-box.light-mode {
             background: #ffffff;
             border-color: #e5e7eb;
         }
-        
+
         .preview-box.dark-mode {
             background: #000000;
             border-color: #333333;
         }
-        
+
         .preview-title {
             font-size: 11px;
             font-weight: 700;
@@ -284,55 +333,55 @@ function hozio_sitemap_settings_inline_styles() {
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-        
+
         .preview-box.light-mode .preview-title {
             color: #6b7280;
         }
-        
+
         .preview-box.dark-mode .preview-title {
             color: #9ca3af;
         }
-        
+
         .preview-sample {
             padding: 16px;
             border-radius: 6px;
         }
-        
+
         .preview-box.light-mode .preview-sample {
             background: #f9fafb;
         }
-        
+
         .preview-box.dark-mode .preview-sample {
             background: #1a1a1a;
         }
-        
+
         .sample-heading {
             font-weight: 600;
             font-size: 16px;
             margin-bottom: 8px;
         }
-        
+
         .preview-box.light-mode .sample-heading {
             color: #000000;
         }
-        
+
         .preview-box.dark-mode .sample-heading {
             color: #ffffff;
         }
-        
+
         .sample-text {
             font-size: 14px;
             line-height: 1.5;
         }
-        
+
         .preview-box.light-mode .sample-text {
             color: #374151;
         }
-        
+
         .preview-box.dark-mode .sample-text {
             color: #cccccc;
         }
-        
+
         .hozio-info-text {
             display: flex;
             align-items: flex-start;
@@ -345,19 +394,19 @@ function hozio_sitemap_settings_inline_styles() {
             border-radius: 8px;
             border-left: 3px solid var(--hozio-blue);
         }
-        
+
         .hozio-info-text .dashicons {
             color: var(--hozio-blue);
             font-size: 20px;
             flex-shrink: 0;
             margin-top: 2px;
         }
-        
+
         .hozio-submit-wrapper {
             margin-top: 30px;
             text-align: left;
         }
-        
+
         .hozio-submit-btn {
             background: var(--hozio-blue) !important;
             border-color: var(--hozio-blue-dark) !important;
@@ -370,16 +419,16 @@ function hozio_sitemap_settings_inline_styles() {
             height: auto !important;
             text-shadow: none !important;
         }
-        
+
         .hozio-submit-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0, 160, 227, 0.3) !important;
         }
-        
+
         .notice {
             margin: 20px 40px 0;
         }
-        
+
         @media (max-width: 768px) {
             .preview-grid {
                 grid-template-columns: 1fr;
@@ -393,13 +442,28 @@ function hozio_sitemap_settings_inline_styles() {
             .hozio-color-field {
                 flex-direction: column;
             }
+            .hozio-tab-bar {
+                padding: 0 20px;
+            }
+            .hozio-tab {
+                padding: 12px 16px;
+                font-size: 14px;
+            }
         }
     </style>
     <?php
 }
 
-// Display the HTML Sitemap settings page
+// Display the settings page (tab dispatcher)
 function hozio_sitemap_settings_page() {
+    $tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'appearance';
+
+    // Delegate to layout editor if on layout tab
+    if ($tab === 'layout') {
+        hozio_sitemap_layout_page();
+        return;
+    }
+
     // Check if settings were saved
     if (isset($_GET['settings-updated']) && $_GET['settings-updated'] === 'true') {
         add_settings_error(
@@ -409,9 +473,9 @@ function hozio_sitemap_settings_page() {
             'success'
         );
     }
-    
+
     settings_errors('hozio_sitemap_settings');
-    
+
     // Get current color values
     $link_color = get_option('hozio_sitemap_link_color', '');
     $link_hover_color = get_option('hozio_sitemap_link_hover_color', '');
@@ -420,11 +484,20 @@ function hozio_sitemap_settings_page() {
         <div class="hozio-header">
             <div class="hozio-header-content">
                 <h1>
-                    <span class="dashicons dashicons-admin-site-alt3"></span>
-                    HTML Sitemap Settings
+                    <span class="dashicons dashicons-admin-site-alt3" style="font-size: 32px; width: 32px; height: 32px;"></span>
+                    Sitemap Settings
                 </h1>
-                <p class="hozio-subtitle">Configure your HTML sitemap appearance and functionality</p>
+                <p class="hozio-subtitle">Configure your HTML sitemap appearance and layout</p>
             </div>
+        </div>
+
+        <div class="hozio-tab-bar">
+            <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-sitemap-settings&tab=appearance')); ?>" class="hozio-tab active">
+                <span class="dashicons dashicons-admin-appearance"></span> Appearance
+            </a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-sitemap-settings&tab=layout')); ?>" class="hozio-tab">
+                <span class="dashicons dashicons-layout"></span> Layout Editor
+            </a>
         </div>
 
         <div class="hozio-content">
@@ -438,7 +511,7 @@ function hozio_sitemap_settings_page() {
                         <span class="dashicons dashicons-admin-appearance"></span>
                         <h2>Display Settings</h2>
                     </div>
-                    
+
                     <div class="hozio-field">
                         <div class="hozio-toggle-wrapper">
                             <label class="hozio-toggle-switch">
@@ -448,7 +521,7 @@ function hozio_sitemap_settings_page() {
                             <span class="hozio-toggle-label">Enable Dark Mode</span>
                         </div>
                         <p class="hozio-field-description">
-                            When enabled, the HTML sitemap will display with a dark theme featuring black backgrounds and white text. 
+                            When enabled, the HTML sitemap will display with a dark theme featuring black backgrounds and white text.
                             This provides better visibility for dark-themed websites and reduces eye strain in low-light conditions.
                         </p>
                     </div>
@@ -464,7 +537,7 @@ function hozio_sitemap_settings_page() {
                                     <div class="preview-title">Light Mode (Default)</div>
                                     <div class="preview-sample">
                                         <div class="sample-heading">Pages Heading</div>
-                                        <div class="sample-text">About Us • Contact • Services</div>
+                                        <div class="sample-text">About Us &bull; Contact &bull; Services</div>
                                     </div>
                                 </div>
                             </div>
@@ -473,7 +546,7 @@ function hozio_sitemap_settings_page() {
                                     <div class="preview-title">Dark Mode</div>
                                     <div class="preview-sample">
                                         <div class="sample-heading">Pages Heading</div>
-                                        <div class="sample-text">About Us • Contact • Services</div>
+                                        <div class="sample-text">About Us &bull; Contact &bull; Services</div>
                                     </div>
                                 </div>
                             </div>
@@ -487,7 +560,7 @@ function hozio_sitemap_settings_page() {
                         <span class="dashicons dashicons-admin-links"></span>
                         <h2>Link Colors</h2>
                     </div>
-                    
+
                     <div class="hozio-info-text" style="margin-bottom: 24px;">
                         <span class="dashicons dashicons-info"></span>
                         <span>By default, links will inherit colors from your Elementor global styles. Set custom colors below to override the global settings for the sitemap only.</span>
@@ -520,18 +593,6 @@ function hozio_sitemap_settings_page() {
                     </div>
                 </div>
 
-                <!-- Additional Settings Section (Future Features) -->
-                <div class="hozio-section">
-                    <div class="hozio-section-header">
-                        <span class="dashicons dashicons-admin-settings"></span>
-                        <h2>Additional Settings</h2>
-                    </div>
-                    <p class="hozio-info-text">
-                        <span class="dashicons dashicons-info"></span>
-                        <span>More sitemap customization options will be available in future updates.</span>
-                    </p>
-                </div>
-
                 <div class="hozio-submit-wrapper">
                     <?php submit_button('Save Settings', 'primary hozio-submit-btn', 'submit', false); ?>
                 </div>
@@ -544,7 +605,7 @@ function hozio_sitemap_settings_page() {
 // Handle the sitemap settings save functionality
 function hozio_save_sitemap_settings() {
     // Verify nonce
-    if (!isset($_POST['hozio_save_sitemap_settings_nonce_field']) || 
+    if (!isset($_POST['hozio_save_sitemap_settings_nonce_field']) ||
         !wp_verify_nonce($_POST['hozio_save_sitemap_settings_nonce_field'], 'hozio_save_sitemap_settings_nonce')) {
         wp_die('Security check failed');
     }

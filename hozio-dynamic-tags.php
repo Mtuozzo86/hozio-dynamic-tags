@@ -39,6 +39,7 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/taxonomy-archive-settings.p
 require_once plugin_dir_path( __FILE__ ) . 'includes/loop-configurations.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/parent-page-filtering.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/support-page.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/sitemap-layout.php';
 
 
 
@@ -79,6 +80,20 @@ function hozio_current_year() {
 add_shortcode('hozio_current_year','hozio_current_year');
 
 
+// Hide all third-party admin notices on Hozio plugin pages
+// Our own notices are rendered inline in page templates, so they're unaffected
+function hozio_hide_third_party_notices() {
+    $screen = get_current_screen();
+    if (!$screen) return;
+
+    // Check if we're on any Hozio plugin page
+    if (strpos($screen->id, 'hozio') === false && strpos($screen->id, 'hozio_dynamic_tags') === false) return;
+
+    remove_all_actions('admin_notices');
+    remove_all_actions('all_admin_notices');
+}
+add_action('in_admin_header', 'hozio_hide_third_party_notices', 999);
+
 // Add the custom admin menu
 function hozio_dynamic_tags_menu() {
     add_menu_page(
@@ -103,7 +118,7 @@ function hozio_dynamic_tags_menu() {
     add_submenu_page(
         'hozio_dynamic_tags',
         'Custom Permalink Settings',
-        'Blog Permalink Settings',
+        'Blog Permalink & RSS Feed',
         'manage_options',
         'hozio-permalink-settings',
         'hozio_custom_permalink_settings_page'

@@ -493,7 +493,7 @@ function hozio_support_page() {
                             <li><strong>Create a new page</strong> in WordPress (e.g., title it "Sitemap").</li>
                             <li><strong>In the Page Attributes</strong> section, select <strong>"HTML Sitemap"</strong> as the page template.</li>
                             <li><strong>Publish the page.</strong></li>
-                            <li><strong>Customize colors</strong> by going to Hozio Pro &rarr; HTML Sitemap Settings.</li>
+                            <li><strong>Customize colors</strong> by going to Hozio Pro &rarr; Sitemap Settings &rarr; Appearance tab.</li>
                         </ol>
                     </div>
 

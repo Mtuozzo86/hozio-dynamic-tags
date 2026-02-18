@@ -178,12 +178,199 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     // ========================================
+                    // HELPER: Build manual override accordions from saved layout
+                    // ========================================
+                    if (!function_exists('hozio_sitemap_build_overrides')) {
+                        function hozio_sitemap_build_overrides($all_pages, $noindex_ids) {
+                            $overrides = get_option('hozio_sitemap_layout_overrides', array());
+
+                            $empty_result = array(
+                                'accordions'   => array(),
+                                'consumed_ids' => array(),
+                                'excluded_ids' => array(),
+                                'mode'         => 'override_first',
+                            );
+
+                            if (empty($overrides) || empty($overrides['enabled']) || empty($overrides['accordions'])) {
+                                return $empty_result;
+                            }
+
+                            // Build pages lookup
+                            $pages_by_id = array();
+                            foreach ($all_pages as $page) {
+                                $pages_by_id[$page->ID] = $page;
+                            }
+
+                            $consumed_ids = array();
+                            $excluded_ids = isset($overrides['exclude_ids']) ? array_map('intval', $overrides['exclude_ids']) : array();
+
+                            $built_accordions = array();
+                            foreach ($overrides['accordions'] as $acc_data) {
+                                $acc = hozio_sitemap_build_override_accordion($acc_data, $pages_by_id, $consumed_ids, $noindex_ids);
+                                if ($acc) {
+                                    $built_accordions[] = $acc;
+                                }
+                            }
+
+                            usort($built_accordions, function($a, $b) {
+                                return ($a['order'] ?? 0) - ($b['order'] ?? 0);
+                            });
+
+                            return array(
+                                'accordions'   => $built_accordions,
+                                'consumed_ids' => $consumed_ids,
+                                'excluded_ids' => $excluded_ids,
+                                'mode'         => isset($overrides['mode']) ? $overrides['mode'] : 'override_first',
+                            );
+                        }
+                    }
+
+                    if (!function_exists('hozio_sitemap_build_override_accordion')) {
+                        function hozio_sitemap_build_override_accordion($data, &$pages_by_id, &$consumed_ids, $noindex_ids) {
+                            $page_id = intval($data['page_id']);
+                            if (!isset($pages_by_id[$page_id]) || isset($noindex_ids[$page_id])) {
+                                return null;
+                            }
+
+                            $consumed_ids[] = $page_id;
+                            $page = $pages_by_id[$page_id];
+
+                            $sub_accordions = array();
+                            $child_pages = array();
+
+                            if (!empty($data['children'])) {
+                                foreach ($data['children'] as $child_data) {
+                                    $child_id = intval($child_data['page_id']);
+                                    if (!isset($pages_by_id[$child_id]) || isset($noindex_ids[$child_id])) {
+                                        continue;
+                                    }
+
+                                    if (!empty($child_data['children'])) {
+                                        $sub = hozio_sitemap_build_override_accordion($child_data, $pages_by_id, $consumed_ids, $noindex_ids);
+                                        if ($sub) {
+                                            $sub_accordions[] = $sub;
+                                        }
+                                    } else {
+                                        $consumed_ids[] = $child_id;
+                                        $child_pages[] = $pages_by_id[$child_id];
+                                    }
+                                }
+                            }
+
+                            return array(
+                                'page'           => $page,
+                                'sub_accordions' => $sub_accordions,
+                                'child_pages'    => $child_pages,
+                                'order'          => isset($data['order']) ? intval($data['order']) : 0,
+                            );
+                        }
+                    }
+
+                    if (!function_exists('hozio_sitemap_render_override_accordion')) {
+                        function hozio_sitemap_render_override_accordion($accordion, $level) {
+                            $page = $accordion['page'];
+                            $title = hozio_sitemap_accordion_title($page);
+                            $sub_accordions = $accordion['sub_accordions'];
+                            $child_pages = $accordion['child_pages'];
+                            $total_count = count($child_pages) + 1;
+                            $sub_count = count($sub_accordions);
+                            foreach ($sub_accordions as $sub) {
+                                $total_count += count($sub['child_pages']) + 1;
+                                if (!empty($sub['sub_accordions'])) {
+                                    foreach ($sub['sub_accordions'] as $subsub) {
+                                        $total_count += count($subsub['child_pages']) + 1;
+                                    }
+                                    $total_count += count($sub['sub_accordions']);
+                                }
+                            }
+                            $level_class = 'sitemap-accordion-level-' . min($level, 3);
+
+                            // If no children and no sub-accordions, render as plain link
+                            if (empty($child_pages) && empty($sub_accordions)) {
+                                ?>
+                                <ul class="sitemap-list accordion-child-list"><li class="sitemap-item">
+                                    <a href="<?php echo get_permalink($page->ID); ?>" class="sitemap-link">
+                                        <?php echo esc_html($title); ?>
+                                    </a>
+                                </li></ul>
+                                <?php
+                                return;
+                            }
+                            ?>
+                            <div class="sitemap-accordion <?php echo $level_class; ?>">
+                                <div class="sitemap-accordion-header" role="button" tabindex="0" aria-expanded="false">
+                                    <span class="accordion-title">
+                                        <?php echo esc_html($title); ?>
+                                        <span class="accordion-count">(<?php echo $total_count; ?>)</span>
+                                        <?php if ($sub_count > 0): ?>
+                                            <span class="accordion-nested-badge">
+                                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="9" height="9" rx="1.5"/><rect x="6" y="6" width="9" height="9" rx="1.5"/></svg>
+                                                <?php echo $sub_count; ?> sub-section<?php echo $sub_count > 1 ? 's' : ''; ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </span>
+                                    <svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="sitemap-accordion-content">
+                                    <!-- Pages (visible by default, toggle at top) -->
+                                    <?php $page_count = count($child_pages) + 1; ?>
+                                    <?php if (!empty($sub_accordions)): ?>
+                                        <div class="pages-drawer-divider" role="button" tabindex="0" aria-expanded="true" data-page-count="<?php echo $page_count; ?>">
+                                            <span class="pages-drawer-line"></span>
+                                            <span class="pages-drawer-label">
+                                                <span class="pages-drawer-text">Hide <?php echo $page_count; ?> page<?php echo $page_count > 1 ? 's' : ''; ?></span>
+                                                <svg class="pages-drawer-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 15 12 9 18 15"></polyline></svg>
+                                            </span>
+                                            <span class="pages-drawer-line"></span>
+                                        </div>
+                                        <div class="pages-drawer-content">
+                                    <?php endif; ?>
+                                    <ul class="sitemap-list accordion-child-list">
+                                        <li class="sitemap-item">
+                                            <a href="<?php echo get_permalink($page->ID); ?>" class="sitemap-link">
+                                                <?php echo esc_html($title); ?>
+                                            </a>
+                                        </li>
+                                        <?php foreach ($child_pages as $child): ?>
+                                            <li class="sitemap-item">
+                                                <a href="<?php echo get_permalink($child->ID); ?>" class="sitemap-link">
+                                                    <?php echo esc_html($child->post_title ? $child->post_title : 'Untitled'); ?>
+                                                </a>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                    <?php if (!empty($sub_accordions)): ?>
+                                        </div>
+                                    <?php endif; ?>
+
+                                    <!-- Sub-accordions -->
+                                    <?php foreach ($sub_accordions as $sub): ?>
+                                        <?php hozio_sitemap_render_override_accordion($sub, $level + 1); ?>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            <?php
+                        }
+                    }
+
+                    // ========================================
+                    // PHASE 0: Manual Override Check
+                    // ========================================
+                    $override_result = hozio_sitemap_build_overrides($all_pages, $noindex_ids);
+                    $override_accordions = $override_result['accordions'];
+                    $override_consumed_ids = $override_result['consumed_ids'];
+                    $override_excluded_ids = $override_result['excluded_ids'];
+                    $run_auto_detection = ($override_result['mode'] !== 'manual_only');
+
+                    // ========================================
                     // CLASSIFICATION: Build nested data structure
                     // ========================================
                     $services_accordion = null;     // The Services page + its nested hubs
                     $standalone_accordions = array(); // SPLI pages NOT under a Service Hub
                     $regular_pages = array();        // Everything else
-                    $consumed_ids = array();         // All page IDs consumed by the hierarchy
+                    $consumed_ids = array_merge($override_consumed_ids, $override_excluded_ids);
 
                     // First pass: index pages by ID and find the Services page
                     $pages_by_id = array();
@@ -194,6 +381,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             $services_page = $page;
                         }
                     }
+
+                    // Auto-detection: taxonomy-based classification (skipped in manual_only mode)
+                    if ($run_auto_detection):
 
                     // Build lookup: which pages are Service Hubs and which are SPLIs
                     // (term cache is primed, so wp_get_post_terms reads from cache — 0 queries)
@@ -335,6 +525,53 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     }
 
+                    // Implicit hubs: regular pages (no Service Hub taxonomy) that have SPLI children
+                    // This handles sites where SPLI pages live under normal parent pages
+                    foreach ($all_pages as $page) {
+                        if (in_array($page->ID, $consumed_ids)) continue;
+                        if (isset($service_hub_ids[$page->ID]) || isset($spli_ids[$page->ID])) continue;
+
+                        // Check if this page has any SPLI children that haven't been consumed yet
+                        $page_children = hozio_sitemap_get_children($page->ID);
+                        $implicit_services = array();
+                        $implicit_other_children = array();
+
+                        foreach ($page_children as $child) {
+                            if (in_array($child->ID, $consumed_ids)) continue;
+
+                            if (isset($spli_ids[$child->ID])) {
+                                // SPLI child — build its town pages
+                                $consumed_ids[] = $child->ID;
+                                $town_pages = hozio_sitemap_get_children($child->ID);
+                                foreach ($town_pages as $town) {
+                                    $consumed_ids[] = $town->ID;
+                                }
+                                $implicit_services[] = array(
+                                    'page'     => $child,
+                                    'children' => $town_pages
+                                );
+                            } else {
+                                // Non-SPLI child — will be a plain link inside the accordion
+                                $implicit_other_children[] = $child;
+                            }
+                        }
+
+                        // If this page has SPLI children, treat it as an implicit hub
+                        if (!empty($implicit_services)) {
+                            $consumed_ids[] = $page->ID;
+                            foreach ($implicit_other_children as $child) {
+                                $consumed_ids[] = $child->ID;
+                            }
+                            $standalone_accordions[] = array(
+                                'page'           => $page,
+                                'services'       => $implicit_services,
+                                'other_children' => $implicit_other_children
+                            );
+                        }
+                    }
+
+                    endif; // $run_auto_detection
+
                     // Regular pages: everything not consumed
                     foreach ($all_pages as $page) {
                         if (!in_array($page->ID, $consumed_ids)) {
@@ -347,7 +584,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                     ?>
 
-                    <!-- Regular Pages -->
+                    <!-- Regular Pages (displayed first, above accordions) -->
                     <?php if (!empty($regular_pages)): ?>
                         <ul class="sitemap-list">
                             <?php foreach ($regular_pages as $page): ?>
@@ -358,6 +595,15 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </li>
                             <?php endforeach; ?>
                         </ul>
+                    <?php endif; ?>
+
+                    <!-- Manual Override Accordions -->
+                    <?php if (!empty($override_accordions)): ?>
+                        <div class="sitemap-accordions">
+                            <?php foreach ($override_accordions as $accordion): ?>
+                                <?php hozio_sitemap_render_override_accordion($accordion, 1); ?>
+                            <?php endforeach; ?>
+                        </div>
                     <?php endif; ?>
 
                     <!-- Services Accordion (nested: Services → Hubs → SPLIs → Towns) -->
@@ -394,7 +640,19 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </svg>
                                 </div>
                                 <div class="sitemap-accordion-content">
-                                    <!-- Services page link + plain children -->
+                                    <!-- Services page link + plain children (visible by default, toggle at top) -->
+                                    <?php $services_page_count = 1 + count($services_accordion['other_children']); ?>
+                                    <?php if (!empty($services_accordion['hubs'])): ?>
+                                        <div class="pages-drawer-divider" role="button" tabindex="0" aria-expanded="true" data-page-count="<?php echo $services_page_count; ?>">
+                                            <span class="pages-drawer-line"></span>
+                                            <span class="pages-drawer-label">
+                                                <span class="pages-drawer-text">Hide <?php echo $services_page_count; ?> page<?php echo $services_page_count > 1 ? 's' : ''; ?></span>
+                                                <svg class="pages-drawer-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 15 12 9 18 15"></polyline></svg>
+                                            </span>
+                                            <span class="pages-drawer-line"></span>
+                                        </div>
+                                        <div class="pages-drawer-content">
+                                    <?php endif; ?>
                                     <ul class="sitemap-list accordion-child-list">
                                         <li class="sitemap-item">
                                             <a href="<?php echo get_permalink($services_accordion['page']->ID); ?>" class="sitemap-link">
@@ -409,6 +667,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </li>
                                         <?php endforeach; ?>
                                     </ul>
+                                    <?php if (!empty($services_accordion['hubs'])): ?>
+                                        </div>
+                                    <?php endif; ?>
 
                                     <!-- Service Hub sub-accordions -->
                                     <?php foreach ($services_accordion['hubs'] as $hub): ?>
@@ -451,7 +712,48 @@ document.addEventListener('DOMContentLoaded', function() {
                                                     </svg>
                                                 </div>
                                                 <div class="sitemap-accordion-content">
-                                                    <!-- SPLI sub-accordions at the top -->
+                                                    <!-- Pages (visible by default, toggle at top) -->
+                                                    <?php if ($hub_sub_sections > 0): ?>
+                                                        <div class="pages-drawer-divider" role="button" tabindex="0" aria-expanded="true" data-page-count="<?php echo $hub_plain_pages; ?>">
+                                                            <span class="pages-drawer-line"></span>
+                                                            <span class="pages-drawer-label">
+                                                                <span class="pages-drawer-text">Hide <?php echo $hub_plain_pages; ?> page<?php echo $hub_plain_pages > 1 ? 's' : ''; ?></span>
+                                                                <svg class="pages-drawer-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 15 12 9 18 15"></polyline></svg>
+                                                            </span>
+                                                            <span class="pages-drawer-line"></span>
+                                                        </div>
+                                                        <div class="pages-drawer-content">
+                                                    <?php endif; ?>
+                                                    <ul class="sitemap-list accordion-child-list">
+                                                        <li class="sitemap-item">
+                                                            <a href="<?php echo get_permalink($hub['page']->ID); ?>" class="sitemap-link">
+                                                                <?php echo esc_html($hub['page']->post_title ? $hub['page']->post_title : 'Untitled'); ?>
+                                                            </a>
+                                                        </li>
+                                                        <?php // Childless SPLIs first (e.g., Roof Installation, Roof Maintenance) ?>
+                                                        <?php foreach ($hub['services'] as $service): ?>
+                                                            <?php if (empty($service['children'])): ?>
+                                                                <li class="sitemap-item">
+                                                                    <a href="<?php echo get_permalink($service['page']->ID); ?>" class="sitemap-link">
+                                                                        <?php echo esc_html($service['page']->post_title ? $service['page']->post_title : 'Untitled'); ?>
+                                                                    </a>
+                                                                </li>
+                                                            <?php endif; ?>
+                                                        <?php endforeach; ?>
+                                                        <?php // Then other children (town pages) ?>
+                                                        <?php foreach ($hub['other_children'] as $child): ?>
+                                                            <li class="sitemap-item">
+                                                                <a href="<?php echo get_permalink($child->ID); ?>" class="sitemap-link">
+                                                                    <?php echo esc_html($child->post_title ? $child->post_title : 'Untitled'); ?>
+                                                                </a>
+                                                            </li>
+                                                        <?php endforeach; ?>
+                                                    </ul>
+                                                    <?php if ($hub_sub_sections > 0): ?>
+                                                        </div>
+                                                    <?php endif; ?>
+
+                                                    <!-- SPLI sub-accordions -->
                                                     <?php foreach ($hub['services'] as $service): ?>
                                                         <?php if (!empty($service['children'])): ?>
                                                             <?php $spli_count = 1 + count($service['children']); ?>
@@ -484,33 +786,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                                             </div>
                                                         <?php endif; ?>
                                                     <?php endforeach; ?>
-
-                                                    <!-- Plain links below: Hub page + childless SPLIs first, then other children (town pages) -->
-                                                    <ul class="sitemap-list accordion-child-list">
-                                                        <li class="sitemap-item">
-                                                            <a href="<?php echo get_permalink($hub['page']->ID); ?>" class="sitemap-link">
-                                                                <?php echo esc_html($hub['page']->post_title ? $hub['page']->post_title : 'Untitled'); ?>
-                                                            </a>
-                                                        </li>
-                                                        <?php // Childless SPLIs first (e.g., Roof Installation, Roof Maintenance) ?>
-                                                        <?php foreach ($hub['services'] as $service): ?>
-                                                            <?php if (empty($service['children'])): ?>
-                                                                <li class="sitemap-item">
-                                                                    <a href="<?php echo get_permalink($service['page']->ID); ?>" class="sitemap-link">
-                                                                        <?php echo esc_html($service['page']->post_title ? $service['page']->post_title : 'Untitled'); ?>
-                                                                    </a>
-                                                                </li>
-                                                            <?php endif; ?>
-                                                        <?php endforeach; ?>
-                                                        <?php // Then other children (town pages) ?>
-                                                        <?php foreach ($hub['other_children'] as $child): ?>
-                                                            <li class="sitemap-item">
-                                                                <a href="<?php echo get_permalink($child->ID); ?>" class="sitemap-link">
-                                                                    <?php echo esc_html($child->post_title ? $child->post_title : 'Untitled'); ?>
-                                                                </a>
-                                                            </li>
-                                                        <?php endforeach; ?>
-                                                    </ul>
                                                 </div>
                                             </div>
                                         <?php else: ?>
@@ -595,7 +870,50 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </svg>
                                         </div>
                                         <div class="sitemap-accordion-content">
-                                            <?php // SPLI sub-accordions at the top ?>
+                                            <!-- Pages (visible by default, toggle at top) -->
+                                            <?php if ($sa_hub_sub_sections > 0): ?>
+                                                <div class="pages-drawer-divider" role="button" tabindex="0" aria-expanded="true" data-page-count="<?php echo $sa_hub_plain_pages; ?>">
+                                                    <span class="pages-drawer-line"></span>
+                                                    <span class="pages-drawer-label">
+                                                        <span class="pages-drawer-text">Hide <?php echo $sa_hub_plain_pages; ?> page<?php echo $sa_hub_plain_pages > 1 ? 's' : ''; ?></span>
+                                                        <svg class="pages-drawer-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 15 12 9 18 15"></polyline></svg>
+                                                    </span>
+                                                    <span class="pages-drawer-line"></span>
+                                                </div>
+                                                <div class="pages-drawer-content">
+                                            <?php endif; ?>
+                                            <ul class="sitemap-list accordion-child-list">
+                                                <li class="sitemap-item">
+                                                    <a href="<?php echo get_permalink($accordion['page']->ID); ?>" class="sitemap-link">
+                                                        <?php echo esc_html($accordion['page']->post_title ? $accordion['page']->post_title : 'Untitled'); ?>
+                                                    </a>
+                                                </li>
+                                                <?php // Childless SPLIs first ?>
+                                                <?php foreach ($accordion['services'] as $service): ?>
+                                                    <?php if (empty($service['children'])): ?>
+                                                        <li class="sitemap-item">
+                                                            <a href="<?php echo get_permalink($service['page']->ID); ?>" class="sitemap-link">
+                                                                <?php echo esc_html($service['page']->post_title ? $service['page']->post_title : 'Untitled'); ?>
+                                                            </a>
+                                                        </li>
+                                                    <?php endif; ?>
+                                                <?php endforeach; ?>
+                                                <?php // Then other children (town pages) ?>
+                                                <?php if (isset($accordion['other_children'])): ?>
+                                                    <?php foreach ($accordion['other_children'] as $child): ?>
+                                                        <li class="sitemap-item">
+                                                            <a href="<?php echo get_permalink($child->ID); ?>" class="sitemap-link">
+                                                                <?php echo esc_html($child->post_title ? $child->post_title : 'Untitled'); ?>
+                                                            </a>
+                                                        </li>
+                                                    <?php endforeach; ?>
+                                                <?php endif; ?>
+                                            </ul>
+                                            <?php if ($sa_hub_sub_sections > 0): ?>
+                                                </div>
+                                            <?php endif; ?>
+
+                                            <?php // SPLI sub-accordions ?>
                                             <?php foreach ($accordion['services'] as $service): ?>
                                                 <?php if (!empty($service['children'])): ?>
                                                     <?php $sa_spli_count = 1 + count($service['children']); ?>
@@ -628,35 +946,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                                     </div>
                                                 <?php endif; ?>
                                             <?php endforeach; ?>
-
-                                            <!-- Plain links below sub-accordions: childless SPLIs first, then other children -->
-                                            <ul class="sitemap-list accordion-child-list">
-                                                <li class="sitemap-item">
-                                                    <a href="<?php echo get_permalink($accordion['page']->ID); ?>" class="sitemap-link">
-                                                        <?php echo esc_html($accordion['page']->post_title ? $accordion['page']->post_title : 'Untitled'); ?>
-                                                    </a>
-                                                </li>
-                                                <?php // Childless SPLIs first ?>
-                                                <?php foreach ($accordion['services'] as $service): ?>
-                                                    <?php if (empty($service['children'])): ?>
-                                                        <li class="sitemap-item">
-                                                            <a href="<?php echo get_permalink($service['page']->ID); ?>" class="sitemap-link">
-                                                                <?php echo esc_html($service['page']->post_title ? $service['page']->post_title : 'Untitled'); ?>
-                                                            </a>
-                                                        </li>
-                                                    <?php endif; ?>
-                                                <?php endforeach; ?>
-                                                <?php // Then other children (town pages) ?>
-                                                <?php if (isset($accordion['other_children'])): ?>
-                                                    <?php foreach ($accordion['other_children'] as $child): ?>
-                                                        <li class="sitemap-item">
-                                                            <a href="<?php echo get_permalink($child->ID); ?>" class="sitemap-link">
-                                                                <?php echo esc_html($child->post_title ? $child->post_title : 'Untitled'); ?>
-                                                            </a>
-                                                        </li>
-                                                    <?php endforeach; ?>
-                                                <?php endif; ?>
-                                            </ul>
                                         </div>
                                     </div>
                                 <?php else: ?>
@@ -1222,6 +1511,67 @@ h3.section-title {
     opacity: 0.7 !important;
 }
 
+/* Pages Drawer — collapsible page list with centered divider toggle */
+.sitemap-wrapper .pages-drawer-content {
+    overflow: hidden !important;
+    transition: max-height 0.4s ease !important;
+}
+
+.sitemap-wrapper .pages-drawer-divider {
+    display: flex !important;
+    align-items: center !important;
+    gap: 16px !important;
+    padding: 8px 4px !important;
+    margin: 4px 0 8px 0 !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    border: none !important;
+    background: none !important;
+}
+.sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-label {
+    color: <?php echo $link_color; ?> !important;
+}
+.sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-line {
+    border-color: <?php echo $dark_mode_enabled ? '#555555' : '#bbb'; ?> !important;
+}
+.sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-chevron {
+    color: <?php echo $link_color; ?> !important;
+}
+
+.sitemap-wrapper .pages-drawer-line {
+    flex: 1 !important;
+    height: 0 !important;
+    border: none !important;
+    border-top: 1px dashed <?php echo $dark_mode_enabled ? '#444444' : '#d0d0d0'; ?> !important;
+    transition: border-color 0.2s !important;
+}
+
+.sitemap-wrapper .pages-drawer-label {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    color: <?php echo $dark_mode_enabled ? '#888888' : '#999999'; ?> !important;
+    white-space: nowrap !important;
+    transition: color 0.2s !important;
+    letter-spacing: 0.3px !important;
+}
+
+.sitemap-wrapper .pages-drawer-text {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+}
+
+.sitemap-wrapper .pages-drawer-chevron {
+    flex-shrink: 0 !important;
+    color: <?php echo $dark_mode_enabled ? '#888888' : '#999999'; ?> !important;
+    transition: transform 0.3s ease, color 0.2s !important;
+}
+.sitemap-wrapper .pages-drawer-divider.collapsed .pages-drawer-chevron {
+    transform: rotate(180deg) !important;
+}
+
 /* Nested Accordion Styles — Width reduction per nesting level */
 /* Each level gets progressively narrower and centered */
 .sitemap-wrapper .sitemap-accordion .sitemap-accordion {
@@ -1616,15 +1966,15 @@ document.addEventListener('DOMContentLoaded', function() {
             this.setAttribute('aria-expanded', !isActive);
 
             if (!isActive) {
-                content.style.maxHeight = content.scrollHeight + 'px';
+                content.style.setProperty('max-height', content.scrollHeight + 'px', 'important');
                 // Update parent accordion maxHeight to account for newly expanded child
                 let parentContent = this.closest('.sitemap-accordion-content');
                 while (parentContent) {
-                    parentContent.style.maxHeight = parentContent.scrollHeight + content.scrollHeight + 'px';
+                    parentContent.style.setProperty('max-height', (parentContent.scrollHeight + content.scrollHeight) + 'px', 'important');
                     parentContent = parentContent.parentElement.closest('.sitemap-accordion-content');
                 }
             } else {
-                content.style.maxHeight = '0';
+                content.style.setProperty('max-height', '0', 'important');
             }
         });
 
@@ -1653,9 +2003,9 @@ document.addEventListener('DOMContentLoaded', function() {
             header.setAttribute('aria-expanded', !isActive);
             
             if (!isActive) {
-                content.style.maxHeight = content.scrollHeight + 'px';
+                content.style.setProperty('max-height', content.scrollHeight + 'px', 'important');
             } else {
-                content.style.maxHeight = '0';
+                content.style.setProperty('max-height', '0', 'important');
             }
         };
         
@@ -1669,6 +2019,55 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 clickHandler();
+            }
+        });
+    });
+
+    // Handle pages drawer dividers (collapsible page lists within accordions)
+    // Pages start OPEN — divider collapses/expands the content ABOVE it
+    const drawerDividers = document.querySelectorAll('.pages-drawer-divider');
+
+    drawerDividers.forEach(divider => {
+        divider.addEventListener('click', function(e) {
+            e.stopPropagation();
+
+            const content = this.nextElementSibling; // content is AFTER the divider
+            const isCollapsed = this.classList.contains('collapsed');
+            const textEl = this.querySelector('.pages-drawer-text');
+            const pageCount = this.getAttribute('data-page-count');
+            const plural = parseInt(pageCount) !== 1 ? 's' : '';
+
+            if (!isCollapsed) {
+                // Collapsing — capture current height, then animate to 0
+                this.classList.add('collapsed');
+                this.setAttribute('aria-expanded', 'false');
+                content.style.setProperty('max-height', content.scrollHeight + 'px', 'important');
+                content.offsetHeight; // force reflow for transition
+                content.style.setProperty('max-height', '0px', 'important');
+                if (textEl) {
+                    textEl.textContent = 'Show ' + pageCount + ' page' + plural;
+                }
+            } else {
+                // Expanding
+                this.classList.remove('collapsed');
+                this.setAttribute('aria-expanded', 'true');
+                content.style.setProperty('max-height', content.scrollHeight + 'px', 'important');
+                if (textEl) {
+                    textEl.textContent = 'Hide ' + pageCount + ' page' + plural;
+                }
+                // Update parent accordion content heights to accommodate expanded content
+                let parentContent = this.closest('.sitemap-accordion-content');
+                while (parentContent) {
+                    parentContent.style.setProperty('max-height', (parentContent.scrollHeight + content.scrollHeight) + 'px', 'important');
+                    parentContent = parentContent.parentElement ? parentContent.parentElement.closest('.sitemap-accordion-content') : null;
+                }
+            }
+        });
+
+        divider.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.click();
             }
         });
     });
