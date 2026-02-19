@@ -113,13 +113,67 @@ function hozio_ajax_clear_plugin_caches() {
 
     global $wpdb;
 
-    // Clear all hozio-related transients
-    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_hozio_%'");
-    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_timeout_hozio_%'");
+    // Clear all hozio-related transients EXCEPT hub transients (license status, rate limit)
+    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_hozio_%' AND option_name NOT LIKE '_transient_hozio_hub_%'");
+    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_timeout_hozio_%' AND option_name NOT LIKE '_transient_timeout_hozio_hub_%'");
 
     wp_send_json_success(['message' => 'Plugin caches cleared successfully']);
 }
 add_action('wp_ajax_hozio_clear_plugin_caches', 'hozio_ajax_clear_plugin_caches');
+
+/**
+ * Handle AJAX action to connect to Hub
+ */
+function hozio_ajax_hub_connect() {
+    check_ajax_referer('hozio_hub_connect_nonce', 'nonce');
+
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Permission denied');
+    }
+
+    $hub_url = sanitize_text_field(trim($_POST['hub_url'] ?? ''));
+    $registration_key = sanitize_text_field(trim($_POST['registration_key'] ?? ''));
+
+    if (empty($hub_url) || empty($registration_key)) {
+        wp_send_json_error('Hub URL and Registration Key are required.');
+    }
+
+    if (!class_exists('Hozio_Hub_Client')) {
+        wp_send_json_error('Hub client module not available. Please update the plugin.');
+    }
+
+    $result = Hozio_Hub_Client::register($hub_url, $registration_key);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error($result->get_error_message());
+    }
+
+    wp_send_json_success([
+        'message'        => 'Successfully connected to Hub!',
+        'license_status' => $result['license_status'] ?? 'active',
+    ]);
+}
+add_action('wp_ajax_hozio_hub_connect', 'hozio_ajax_hub_connect');
+
+/**
+ * Handle AJAX action to disconnect from Hub
+ */
+function hozio_ajax_hub_disconnect() {
+    check_ajax_referer('hozio_hub_disconnect_nonce', 'nonce');
+
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Permission denied');
+    }
+
+    if (!class_exists('Hozio_Hub_Client')) {
+        wp_send_json_error('Hub client module not available.');
+    }
+
+    Hozio_Hub_Client::disconnect();
+
+    wp_send_json_success(['message' => 'Disconnected from Hub. License validation reverted to manual key.']);
+}
+add_action('wp_ajax_hozio_hub_disconnect', 'hozio_ajax_hub_disconnect');
 
 /**
  * Handle AJAX action to check for plugin updates
@@ -499,6 +553,68 @@ function hozio_plugin_settings_page() {
                         Clears all transient caches created by this plugin. Use this after making taxonomy changes or if you're experiencing caching issues.
                     </p>
                 </div>
+            </div>
+
+            <!-- Hub Connection Section -->
+            <div class="hozio-section" style="border-left-color: #8b5cf6;">
+                <h2 class="hozio-section-title">Hub Connection</h2>
+                <p class="hozio-section-description">Connect this site to a Hozio Hub for centralized license management and remote operations.</p>
+
+                <?php
+                $hub_connected = class_exists('Hozio_Hub_Client') && Hozio_Hub_Client::is_connected();
+                $hub_url = get_option('hozio_hub_url', '');
+                $hub_last_heartbeat = get_option('hozio_hub_last_known_status', '');
+                $hub_last_hb_time = get_transient('hozio_hub_rate_limit') ? 'Recently' : 'Unknown';
+                $hub_license = '';
+                if ($hub_connected && class_exists('Hozio_Hub_Client')) {
+                    $hub_license = Hozio_Hub_Client::get_license_status();
+                }
+                ?>
+
+                <?php if ($hub_connected): ?>
+                    <div class="hozio-hub-status" style="padding: 15px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <span class="dashicons dashicons-yes-alt" style="color: #16a34a;"></span>
+                            <strong>Connected to Hub</strong>
+                        </div>
+                        <table style="font-size: 13px;">
+                            <tr><td style="padding: 3px 15px 3px 0; color: #666;">Hub URL:</td><td><?php echo esc_html($hub_url); ?></td></tr>
+                            <tr><td style="padding: 3px 15px 3px 0; color: #666;">License Status:</td><td><strong><?php echo esc_html(ucfirst($hub_license ?: 'unknown')); ?></strong></td></tr>
+                        </table>
+                    </div>
+                    <button type="button" class="button hozio-hub-disconnect-btn"
+                            data-nonce="<?php echo esc_attr(wp_create_nonce('hozio_hub_disconnect_nonce')); ?>"
+                            style="color: #d63638; border-color: #d63638;">
+                        Disconnect from Hub
+                    </button>
+                    <p class="hozio-field-description" style="margin-top: 8px;">
+                        Disconnecting will revert license validation to the manual license key.
+                        <?php if (empty($license_key)): ?>
+                            <strong style="color: #d63638;">Warning: No manual license key is set. Auto-updates will be disabled after disconnecting.</strong>
+                        <?php endif; ?>
+                    </p>
+                <?php else: ?>
+                    <div class="hozio-hub-connect-form">
+                        <div class="hozio-field">
+                            <label for="hozio_hub_url_input" style="display: block; font-weight: 600; margin-bottom: 4px;">Hub URL</label>
+                            <input type="url" id="hozio_hub_url_input" class="regular-text" placeholder="https://yourhubsite.com" style="min-width: 300px;">
+                        </div>
+                        <div class="hozio-field" style="margin-top: 12px;">
+                            <label for="hozio_hub_reg_key_input" style="display: block; font-weight: 600; margin-bottom: 4px;">Registration Key</label>
+                            <input type="text" id="hozio_hub_reg_key_input" class="regular-text" placeholder="Paste your registration key" style="min-width: 300px;">
+                        </div>
+                        <div style="margin-top: 15px; display: flex; align-items: center; gap: 12px;">
+                            <button type="button" class="button button-primary hozio-hub-connect-btn"
+                                    data-nonce="<?php echo esc_attr(wp_create_nonce('hozio_hub_connect_nonce')); ?>">
+                                Connect to Hub
+                            </button>
+                            <span class="hozio-hub-connect-result"></span>
+                        </div>
+                        <p class="hozio-field-description" style="margin-top: 8px;">
+                            Enter the Hub URL and a one-time registration key provided by your Hub administrator.
+                        </p>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <!-- System Information Section -->
@@ -1013,6 +1129,75 @@ function hozio_plugin_settings_page() {
                 error: function() {
                     alert('An error occurred while clearing caches');
                     $btn.text('Clear Plugin Caches').prop('disabled', false);
+                }
+            });
+        });
+
+        // Hub Connect
+        $('.hozio-hub-connect-btn').on('click', function() {
+            var $btn = $(this);
+            var $result = $('.hozio-hub-connect-result');
+            var hubUrl = $('#hozio_hub_url_input').val();
+            var regKey = $('#hozio_hub_reg_key_input').val();
+
+            if (!hubUrl || !regKey) {
+                $result.html('<span style="color: #d63638;">Please fill in both fields.</span>');
+                return;
+            }
+
+            $btn.prop('disabled', true).text('Connecting...');
+            $result.html('<span style="color: #666;">Registering with Hub...</span>');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'hozio_hub_connect',
+                    nonce: $btn.data('nonce'),
+                    hub_url: hubUrl,
+                    registration_key: regKey
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $result.html('<span style="color: #00a32a;"><span class="dashicons dashicons-yes"></span> ' + response.data.message + '</span>');
+                        setTimeout(function() { location.reload(); }, 1500);
+                    } else {
+                        $btn.prop('disabled', false).text('Connect to Hub');
+                        $result.html('<span style="color: #d63638;">' + response.data + '</span>');
+                    }
+                },
+                error: function() {
+                    $btn.prop('disabled', false).text('Connect to Hub');
+                    $result.html('<span style="color: #d63638;">Network error. Check the Hub URL.</span>');
+                }
+            });
+        });
+
+        // Hub Disconnect
+        $('.hozio-hub-disconnect-btn').on('click', function() {
+            if (!confirm('Disconnect from Hub? License validation will revert to manual key mode.')) return;
+            var $btn = $(this);
+            $btn.prop('disabled', true).text('Disconnecting...');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'hozio_hub_disconnect',
+                    nonce: $btn.data('nonce')
+                },
+                success: function(response) {
+                    if (response.success) {
+                        alert(response.data.message);
+                        location.reload();
+                    } else {
+                        alert('Error: ' + response.data);
+                        $btn.prop('disabled', false).text('Disconnect from Hub');
+                    }
+                },
+                error: function() {
+                    alert('Network error');
+                    $btn.prop('disabled', false).text('Disconnect from Hub');
                 }
             });
         });
