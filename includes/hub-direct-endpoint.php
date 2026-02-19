@@ -209,9 +209,9 @@ class Hozio_Hub_Direct_Endpoint {
      */
     private static function get_hozio_features() {
         return [
-            'hozio_dom_parsing_enabled'      => (int) get_option('hozio_dom_parsing_enabled', '0'),
-            'hozio_service_menu_sync_enabled' => (int) get_option('hozio_service_menu_sync_enabled', '0'),
-            'hozio_auto_updates_enabled'      => (int) get_option('hozio_auto_updates_enabled', '0'),
+            'hozio_dom_parsing_enabled'      => (int) get_option('hozio_dom_parsing_enabled', '1'),
+            'hozio_service_menu_sync_enabled' => (int) get_option('hozio_service_menu_sync_enabled', '1'),
+            'hozio_auto_updates_enabled'      => (int) get_option('hozio_auto_updates_enabled', '1'),
             'hozio_debug_enabled'             => (int) get_option('hozio_debug_enabled', '0'),
         ];
     }

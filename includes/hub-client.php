@@ -70,6 +70,9 @@ class Hozio_Hub_Client {
         update_option('hozio_hub_heartbeat_interval', $body['heartbeat_interval'] ?? 3600);
         update_option('hozio_hub_registration_time', time());
 
+        // Clear legacy license key — Hub is now the sole license authority
+        delete_option('hozio_license_key');
+
         // Cache the initial license status
         $license_status = $body['license_status'] ?? 'active';
         set_transient('hozio_hub_license_status', $license_status, DAY_IN_SECONDS);
