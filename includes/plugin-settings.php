@@ -131,11 +131,15 @@ function hozio_ajax_hub_connect() {
         wp_send_json_error('Permission denied');
     }
 
-    $hub_url = sanitize_text_field(trim($_POST['hub_url'] ?? ''));
+    $hub_url = defined('HOZIO_HUB_URL') ? HOZIO_HUB_URL : '';
     $registration_key = sanitize_text_field(trim($_POST['registration_key'] ?? ''));
 
-    if (empty($hub_url) || empty($registration_key)) {
-        wp_send_json_error('Hub URL and Registration Key are required.');
+    if (empty($hub_url)) {
+        wp_send_json_error('Hub URL is not configured.');
+    }
+
+    if (empty($registration_key)) {
+        wp_send_json_error('Registration Key is required.');
     }
 
     if (!class_exists('Hozio_Hub_Client')) {
@@ -596,10 +600,6 @@ function hozio_plugin_settings_page() {
                 <?php else: ?>
                     <div class="hozio-hub-connect-form">
                         <div class="hozio-field">
-                            <label for="hozio_hub_url_input" style="display: block; font-weight: 600; margin-bottom: 4px;">Hub URL</label>
-                            <input type="url" id="hozio_hub_url_input" class="regular-text" placeholder="https://yourhubsite.com" style="min-width: 300px;">
-                        </div>
-                        <div class="hozio-field" style="margin-top: 12px;">
                             <label for="hozio_hub_reg_key_input" style="display: block; font-weight: 600; margin-bottom: 4px;">Registration Key</label>
                             <input type="text" id="hozio_hub_reg_key_input" class="regular-text" placeholder="Paste your registration key" style="min-width: 300px;">
                         </div>
@@ -611,7 +611,7 @@ function hozio_plugin_settings_page() {
                             <span class="hozio-hub-connect-result"></span>
                         </div>
                         <p class="hozio-field-description" style="margin-top: 8px;">
-                            Enter the Hub URL and a one-time registration key provided by your Hub administrator.
+                            Enter the one-time registration key provided by your Hozio administrator.
                         </p>
                     </div>
                 <?php endif; ?>
@@ -1137,11 +1137,10 @@ function hozio_plugin_settings_page() {
         $('.hozio-hub-connect-btn').on('click', function() {
             var $btn = $(this);
             var $result = $('.hozio-hub-connect-result');
-            var hubUrl = $('#hozio_hub_url_input').val();
             var regKey = $('#hozio_hub_reg_key_input').val();
 
-            if (!hubUrl || !regKey) {
-                $result.html('<span style="color: #d63638;">Please fill in both fields.</span>');
+            if (!regKey) {
+                $result.html('<span style="color: #d63638;">Please enter a registration key.</span>');
                 return;
             }
 
@@ -1154,7 +1153,6 @@ function hozio_plugin_settings_page() {
                 data: {
                     action: 'hozio_hub_connect',
                     nonce: $btn.data('nonce'),
-                    hub_url: hubUrl,
                     registration_key: regKey
                 },
                 success: function(response) {

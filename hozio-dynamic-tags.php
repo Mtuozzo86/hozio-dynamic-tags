@@ -16,6 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 define('HOZIO_VERSION', '3.90');
 define('HOZIO_PLUGIN_FILE', __FILE__);
+define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
 // Load custom logger first (enables HOZIO_DEBUG logging without WP_DEBUG)
 require_once plugin_dir_path( __FILE__ ) . 'includes/hozio-logger.php';
