@@ -196,6 +196,21 @@ add_action('wp_ajax_hozio_sitemap_import_auto', function() {
         return isset($children_by_parent[$parent_id]) ? $children_by_parent[$parent_id] : array();
     };
 
+    // Helper to build WP children data recursively (up to 2 levels deep from starting point)
+    $build_wp_children = function($parent_id, &$consumed_ids, $max_depth = 2, $current_depth = 0) use ($get_children, &$build_wp_children) {
+        if ($current_depth >= $max_depth) return array();
+        $wp_kids = $get_children($parent_id);
+        $data = array();
+        $ord = 0;
+        foreach ($wp_kids as $kid) {
+            if (in_array($kid->ID, $consumed_ids)) continue;
+            $consumed_ids[] = $kid->ID;
+            $sub_children = $build_wp_children($kid->ID, $consumed_ids, $max_depth, $current_depth + 1);
+            $data[] = array('page_id' => $kid->ID, 'order' => $ord++, 'children' => $sub_children);
+        }
+        return $data;
+    };
+
     // Build Services accordion
     if ($services_page) {
         $consumed_ids[] = $services_page->ID;
@@ -224,13 +239,16 @@ add_action('wp_ajax_hozio_sitemap_import_auto', function() {
                         $hub_children_data[] = array('page_id' => $hub_child->ID, 'order' => $hub_child_order++, 'children' => $spli_children_data);
                     } else {
                         $consumed_ids[] = $hub_child->ID;
-                        $hub_children_data[] = array('page_id' => $hub_child->ID, 'order' => $hub_child_order++, 'children' => array());
+                        $wp_hub_child_data = $build_wp_children($hub_child->ID, $consumed_ids, 1);
+                        $hub_children_data[] = array('page_id' => $hub_child->ID, 'order' => $hub_child_order++, 'children' => $wp_hub_child_data);
                     }
                 }
                 $services_children_data[] = array('page_id' => $child->ID, 'order' => $child_order++, 'children' => $hub_children_data);
             } else {
                 $consumed_ids[] = $child->ID;
-                $services_children_data[] = array('page_id' => $child->ID, 'order' => $child_order++, 'children' => array());
+                // Check for WP children (sub-accordion even without taxonomy)
+                $wp_child_data = $build_wp_children($child->ID, $consumed_ids);
+                $services_children_data[] = array('page_id' => $child->ID, 'order' => $child_order++, 'children' => $wp_child_data);
             }
         }
         $accordions[] = array('page_id' => $services_page->ID, 'order' => $order++, 'children' => $services_children_data);
@@ -245,7 +263,8 @@ add_action('wp_ajax_hozio_sitemap_import_auto', function() {
         $spli_children = $get_children($spli_id);
         foreach ($spli_children as $child) {
             $consumed_ids[] = $child->ID;
-            $children_data[] = array('page_id' => $child->ID, 'order' => $child_order++, 'children' => array());
+            $wp_spli_child_data = $build_wp_children($child->ID, $consumed_ids, 1);
+            $children_data[] = array('page_id' => $child->ID, 'order' => $child_order++, 'children' => $wp_spli_child_data);
         }
         if (!empty($children_data)) {
             $accordions[] = array('page_id' => $spli_id, 'order' => $order++, 'children' => $children_data);
@@ -272,11 +291,46 @@ add_action('wp_ajax_hozio_sitemap_import_auto', function() {
                 $hub_children_data[] = array('page_id' => $hub_child->ID, 'order' => $child_order++, 'children' => $spli_children_data);
             } else {
                 $consumed_ids[] = $hub_child->ID;
-                $hub_children_data[] = array('page_id' => $hub_child->ID, 'order' => $child_order++, 'children' => array());
+                $wp_hub_child_data = $build_wp_children($hub_child->ID, $consumed_ids, 1);
+                $hub_children_data[] = array('page_id' => $hub_child->ID, 'order' => $child_order++, 'children' => $wp_hub_child_data);
             }
         }
         if (!empty($hub_children_data)) {
             $accordions[] = array('page_id' => $hub_id, 'order' => $order++, 'children' => $hub_children_data);
+        }
+    }
+
+    // Build accordions from WordPress parent-child relationships
+    // (catches pages with children that aren't tagged with Service Hub / SPLI taxonomy)
+    foreach ($all_pages as $page) {
+        if (in_array($page->ID, $consumed_ids)) continue;
+        $page_children = $get_children($page->ID);
+        if (empty($page_children)) continue;
+
+        // This page has WP children — create an accordion
+        $consumed_ids[] = $page->ID;
+        $children_data = array();
+        $child_order = 0;
+
+        foreach ($page_children as $child) {
+            if (in_array($child->ID, $consumed_ids)) continue;
+            $consumed_ids[] = $child->ID;
+
+            // Check if this child also has children (potential sub-accordion)
+            $grandchildren = $get_children($child->ID);
+            $grandchildren_data = array();
+            $gc_order = 0;
+            foreach ($grandchildren as $gc) {
+                if (in_array($gc->ID, $consumed_ids)) continue;
+                $consumed_ids[] = $gc->ID;
+                $grandchildren_data[] = array('page_id' => $gc->ID, 'order' => $gc_order++, 'children' => array());
+            }
+
+            $children_data[] = array('page_id' => $child->ID, 'order' => $child_order++, 'children' => $grandchildren_data);
+        }
+
+        if (!empty($children_data)) {
+            $accordions[] = array('page_id' => $page->ID, 'order' => $order++, 'children' => $children_data);
         }
     }
 

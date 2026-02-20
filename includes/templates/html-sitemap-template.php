@@ -405,8 +405,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     }
 
-                    // Build the Services accordion structure
-                    if ($services_page) {
+                    // Build the Services accordion structure (skip if already handled by manual overrides)
+                    if ($services_page && !in_array($services_page->ID, $consumed_ids)) {
                         $consumed_ids[] = $services_page->ID;
 
                         $services_children = hozio_sitemap_get_children($services_page->ID);
@@ -571,6 +571,34 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     endif; // $run_auto_detection
+
+                    // Pages with WordPress children (not caught by taxonomy detection)
+                    // If a page has child pages that haven't been consumed, treat it as an accordion
+                    foreach ($all_pages as $page) {
+                        if (in_array($page->ID, $consumed_ids)) continue;
+
+                        $wp_children = hozio_sitemap_get_children($page->ID);
+                        if (empty($wp_children)) continue;
+
+                        // Filter out already-consumed children
+                        $available_children = array();
+                        foreach ($wp_children as $child) {
+                            if (!in_array($child->ID, $consumed_ids)) {
+                                $available_children[] = $child;
+                            }
+                        }
+                        if (empty($available_children)) continue;
+
+                        // This page has unconsumed WP children — make it an accordion
+                        $consumed_ids[] = $page->ID;
+                        foreach ($available_children as $child) {
+                            $consumed_ids[] = $child->ID;
+                        }
+                        $standalone_accordions[] = array(
+                            'page'     => $page,
+                            'children' => $available_children
+                        );
+                    }
 
                     // Regular pages: everything not consumed
                     foreach ($all_pages as $page) {
