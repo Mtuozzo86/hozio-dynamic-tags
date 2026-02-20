@@ -102,8 +102,27 @@ class Hozio_Plugin_Updater {
 
     /**
      * Check if the license key is valid
+     * Hub-connected sites: check cached Hub license status
+     * Legacy sites: fall back to local MD5 hash check
      */
     public function is_license_valid() {
+        // If connected to Hub, check Hub license status
+        if (class_exists('Hozio_Hub_Client') && Hozio_Hub_Client::is_connected()) {
+            $hub_status = Hozio_Hub_Client::get_license_status();
+
+            if ($hub_status === 'active') {
+                return true;
+            }
+
+            if ($hub_status === 'revoked' || $hub_status === 'suspended') {
+                return false;
+            }
+
+            // Hub status unavailable (false) — all caches exhausted
+            return false;
+        }
+
+        // Legacy mode: local MD5 license key check
         $entered_key = get_option('hozio_license_key', '');
         return md5(trim($entered_key)) === $this->valid_license_hash;
     }
@@ -114,6 +133,44 @@ class Hozio_Plugin_Updater {
     public function get_license_status() {
         $auto_updates_enabled = get_option('hozio_auto_updates_enabled', '1') === '1';
 
+        // Hub-connected license display
+        if (class_exists('Hozio_Hub_Client') && Hozio_Hub_Client::is_connected()) {
+            $hub_status = Hozio_Hub_Client::get_license_status();
+            $hub_url = get_option('hozio_hub_url', '');
+
+            if ($hub_status === 'active') {
+                return [
+                    'status' => 'valid',
+                    'message' => 'Licensed via Hub (' . $hub_url . ')' . ($auto_updates_enabled ? ' - Auto-updates enabled' : ' - Auto-updates disabled'),
+                    'class' => 'hozio-license-valid'
+                ];
+            }
+
+            if ($hub_status === 'revoked') {
+                return [
+                    'status' => 'invalid',
+                    'message' => 'License revoked by Hub - Updates disabled',
+                    'class' => 'hozio-license-invalid'
+                ];
+            }
+
+            if ($hub_status === 'suspended') {
+                return [
+                    'status' => 'invalid',
+                    'message' => 'License suspended by Hub - Updates disabled',
+                    'class' => 'hozio-license-invalid'
+                ];
+            }
+
+            // Hub status unavailable
+            return [
+                'status' => 'empty',
+                'message' => 'Hub unreachable - License status unknown',
+                'class' => 'hozio-license-empty'
+            ];
+        }
+
+        // Legacy local license display
         if ($this->is_license_valid()) {
             if ($auto_updates_enabled) {
                 return [

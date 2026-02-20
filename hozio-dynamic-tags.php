@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.90
+Version:         3.92
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,6 +13,10 @@ GitHub Branch:   main
 */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
+
+define('HOZIO_VERSION', '3.92');
+define('HOZIO_PLUGIN_FILE', __FILE__);
+define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
 // Load custom logger first (enables HOZIO_DEBUG logging without WP_DEBUG)
 require_once plugin_dir_path( __FILE__ ) . 'includes/hozio-logger.php';
@@ -41,7 +45,38 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/parent-page-filtering.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/support-page.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/sitemap-layout.php';
 
+// Hub integration files (defensive loading — file_exists prevents fatal errors on partial updates)
+$hozio_hub_includes = [
+    'includes/hub-command-executor.php',  // Must load before hub-client.php and hub-direct-endpoint.php
+    'includes/hub-client.php',
+    'includes/hub-direct-endpoint.php',
+];
+foreach ($hozio_hub_includes as $hozio_hub_file) {
+    $hozio_hub_path = plugin_dir_path(__FILE__) . $hozio_hub_file;
+    if (file_exists($hozio_hub_path)) {
+        require_once $hozio_hub_path;
+    }
+}
 
+// Hub heartbeat cron: activation hook MUST be in main plugin file
+register_activation_hook(__FILE__, function() {
+    if (get_option('hozio_hub_url') && !wp_next_scheduled('hozio_hub_heartbeat')) {
+        wp_schedule_event(time() + 3600, 'hourly', 'hozio_hub_heartbeat');
+    }
+});
+
+// Hub heartbeat cron: deactivation hook clears cron events
+register_deactivation_hook(__FILE__, function() {
+    wp_clear_scheduled_hook('hozio_hub_heartbeat');
+    wp_clear_scheduled_hook('hozio_hub_heartbeat_login');
+});
+
+// Fallback cron check: if hub is configured but cron event is missing, reschedule
+add_action('init', function() {
+    if (get_option('hozio_hub_url') && !wp_next_scheduled('hozio_hub_heartbeat')) {
+        wp_schedule_event(time() + 3600, 'hourly', 'hozio_hub_heartbeat');
+    }
+});
 
 
 add_action( 'init', function() {
