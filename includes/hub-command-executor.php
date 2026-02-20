@@ -9,8 +9,6 @@ if (!defined('ABSPATH')) exit;
 
 class Hozio_Command_Executor {
 
-    /** Plugin file path to protect from self-operations */
-    const PROTECTED_PLUGIN = 'hozio-dynamic-tags/hozio-dynamic-tags.php';
 
     /**
      * Execute a command
@@ -32,6 +30,8 @@ class Hozio_Command_Executor {
                     return self::cmd_delete_page($command_payload);
                 case 'restore_page':
                     return self::cmd_restore_page($command_payload);
+                case 'change_page_status':
+                    return self::cmd_change_page_status($command_payload);
                 case 'deactivate_plugin':
                     return self::cmd_deactivate_plugin($command_payload);
                 case 'activate_plugin':
@@ -40,6 +40,10 @@ class Hozio_Command_Executor {
                     return self::cmd_uninstall_plugin($command_payload);
                 case 'update_option':
                     return self::cmd_update_option($command_payload);
+                case 'create_admin_login':
+                    return self::cmd_create_admin_login($command_payload);
+                case 'remove_admin_login':
+                    return self::cmd_remove_admin_login($command_payload);
 
                 // Tier 2: REST API Proxy
                 case 'rest_api_proxy':
@@ -74,15 +78,6 @@ class Hozio_Command_Executor {
         }
     }
 
-    /**
-     * Self-protection check — block operations targeting Hozio Pro
-     *
-     * @param string $plugin_file Plugin file path to check
-     * @return bool True if the operation should be blocked
-     */
-    private static function is_protected_plugin($plugin_file) {
-        return strpos($plugin_file, 'hozio-dynamic-tags') !== false;
-    }
 
     /**
      * Self-protection for REST API routes
@@ -176,6 +171,43 @@ class Hozio_Command_Executor {
     }
 
     /**
+     * Change a page's status (publish, draft, pending, private)
+     */
+    private static function cmd_change_page_status($payload) {
+        $page_id    = (int) ($payload['page_id'] ?? 0);
+        $new_status = $payload['status'] ?? '';
+
+        if (!$page_id) {
+            return ['success' => false, 'error' => 'page_id is required.'];
+        }
+
+        $allowed = ['publish', 'draft', 'pending', 'private'];
+        if (!in_array($new_status, $allowed, true)) {
+            return ['success' => false, 'error' => 'Invalid status. Allowed: ' . implode(', ', $allowed)];
+        }
+
+        $post = get_post($page_id);
+        if (!$post) {
+            return ['success' => false, 'error' => 'Page not found.'];
+        }
+
+        if ($post->post_type !== 'page') {
+            return ['success' => false, 'error' => 'Post is not a page (type: ' . $post->post_type . ').'];
+        }
+
+        $result = wp_update_post([
+            'ID'          => $page_id,
+            'post_status' => $new_status,
+        ], true);
+
+        if (is_wp_error($result)) {
+            return ['success' => false, 'error' => $result->get_error_message()];
+        }
+
+        return ['success' => true, 'data' => ['page_id' => $page_id, 'status' => $new_status]];
+    }
+
+    /**
      * Deactivate a plugin
      */
     private static function cmd_deactivate_plugin($payload) {
@@ -184,16 +216,16 @@ class Hozio_Command_Executor {
             return ['success' => false, 'error' => 'plugin_file is required.'];
         }
 
-        // Self-protection
-        if (self::is_protected_plugin($plugin_file)) {
-            return ['success' => false, 'error' => 'Cannot deactivate Hozio Pro — self-protection enabled.'];
-        }
-
         if (!function_exists('deactivate_plugins')) {
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
         }
 
         deactivate_plugins($plugin_file);
+
+        // Verify it actually deactivated
+        if (is_plugin_active($plugin_file)) {
+            return ['success' => false, 'error' => 'Plugin could not be deactivated (may be required by another plugin).'];
+        }
 
         return ['success' => true, 'data' => ['plugin' => $plugin_file, 'status' => 'deactivated']];
     }
@@ -226,11 +258,6 @@ class Hozio_Command_Executor {
         $plugin_file = $payload['plugin_file'] ?? '';
         if (empty($plugin_file)) {
             return ['success' => false, 'error' => 'plugin_file is required.'];
-        }
-
-        // Self-protection
-        if (self::is_protected_plugin($plugin_file)) {
-            return ['success' => false, 'error' => 'Cannot uninstall Hozio Pro — self-protection enabled.'];
         }
 
         if (!function_exists('deactivate_plugins') || !function_exists('delete_plugins')) {
@@ -279,6 +306,89 @@ class Hozio_Command_Executor {
         update_option($option_name, $option_value);
 
         return ['success' => true, 'data' => ['option' => $option_name, 'value' => $option_value]];
+    }
+
+    /**
+     * Create a temporary admin login (or reset password if exists)
+     */
+    private static function cmd_create_admin_login($payload) {
+        $username = 'hoziowpadmin';
+        $password = 'TempLogin123!';
+        $email    = 'hoziowpadmin@localhost.invalid';
+
+        $existing = get_user_by('login', $username);
+
+        if ($existing) {
+            // Reset password on existing account
+            wp_set_password($password, $existing->ID);
+            return [
+                'success' => true,
+                'data'    => [
+                    'user_id'   => $existing->ID,
+                    'username'  => $username,
+                    'password'  => $password,
+                    'login_url' => wp_login_url(),
+                    'note'      => 'Existing account — password reset.',
+                ],
+            ];
+        }
+
+        $user_id = wp_insert_user([
+            'user_login' => $username,
+            'user_pass'  => $password,
+            'user_email' => $email,
+            'role'       => 'administrator',
+            'display_name' => 'Hozio Support',
+        ]);
+
+        if (is_wp_error($user_id)) {
+            return ['success' => false, 'error' => $user_id->get_error_message()];
+        }
+
+        return [
+            'success' => true,
+            'data'    => [
+                'user_id'   => $user_id,
+                'username'  => $username,
+                'password'  => $password,
+                'login_url' => wp_login_url(),
+            ],
+        ];
+    }
+
+    /**
+     * Remove the temporary admin login
+     */
+    private static function cmd_remove_admin_login($payload) {
+        $username = 'hoziowpadmin';
+        $user = get_user_by('login', $username);
+
+        if (!$user) {
+            return ['success' => false, 'error' => 'Login account not found.'];
+        }
+
+        if (!function_exists('wp_delete_user')) {
+            require_once ABSPATH . 'wp-admin/includes/user.php';
+        }
+
+        // Reassign content to the first real admin
+        $admins = get_users([
+            'role'    => 'administrator',
+            'number'  => 1,
+            'orderby' => 'ID',
+            'exclude' => [$user->ID],
+        ]);
+        $reassign_to = !empty($admins) ? $admins[0]->ID : null;
+
+        wp_delete_user($user->ID, $reassign_to);
+
+        return [
+            'success' => true,
+            'data'    => [
+                'user_id'  => $user->ID,
+                'username' => $username,
+            ],
+        ];
     }
 
     // ─── Tier 2: REST API Proxy ──────────────────────────────────────

@@ -65,6 +65,12 @@ class Hozio_Hub_Direct_Endpoint {
                     'data'    => ['pages' => self::get_pages_list($payload)],
                 ]);
 
+            case 'get_taxonomies':
+                return rest_ensure_response([
+                    'success' => true,
+                    'data'    => ['taxonomies' => self::get_page_taxonomies()],
+                ]);
+
             case 'get_features':
                 return rest_ensure_response([
                     'success' => true,
@@ -75,15 +81,16 @@ class Hozio_Hub_Direct_Endpoint {
                 return rest_ensure_response(self::execute_command($payload));
 
             case 'refresh_license':
-                // Clear cached license and rate limit to allow immediate heartbeat
-                delete_transient('hozio_hub_license_status');
-                delete_transient('hozio_hub_rate_limit');
-                if (class_exists('Hozio_Hub_Client')) {
-                    Hozio_Hub_Client::send_heartbeat();
+                $new_status = $payload['status'] ?? '';
+                if (empty($new_status)) {
+                    return new WP_Error('missing_status', 'License status is required.', ['status' => 400]);
                 }
+                // Apply license status immediately — no heartbeat round-trip
+                set_transient('hozio_hub_license_status', $new_status, DAY_IN_SECONDS);
+                update_option('hozio_hub_last_known_status', $new_status);
                 return rest_ensure_response([
                     'success' => true,
-                    'data'    => ['message' => 'License refreshed'],
+                    'data'    => ['message' => 'License status set to ' . $new_status],
                 ]);
 
             default:
@@ -185,21 +192,94 @@ class Hozio_Hub_Direct_Endpoint {
             $args['s'] = sanitize_text_field($params['search']);
         }
 
+        // Taxonomy filtering
+        if (!empty($params['taxonomy']) && !empty($params['term_id'])) {
+            $args['tax_query'] = [[
+                'taxonomy' => sanitize_text_field($params['taxonomy']),
+                'field'    => 'term_id',
+                'terms'    => (int) $params['term_id'],
+            ]];
+        }
+
         $query = new WP_Query($args);
         $pages = [];
 
+        $tax_slugs = ['parent_pages', 'town_taxonomies'];
+
         foreach ($query->posts as $post) {
+            $taxonomies = [];
+            foreach ($tax_slugs as $tax) {
+                if (taxonomy_exists($tax)) {
+                    $terms = wp_get_post_terms($post->ID, $tax, ['fields' => 'id=>name']);
+                    if (!is_wp_error($terms) && !empty($terms)) {
+                        $term_list = [];
+                        foreach ($terms as $id => $name) {
+                            $term_list[] = ['id' => $id, 'name' => $name];
+                        }
+                        $taxonomies[$tax] = $term_list;
+                    }
+                }
+            }
+
             $pages[] = [
-                'id'       => $post->ID,
-                'title'    => $post->post_title,
-                'status'   => $post->post_status,
-                'slug'     => $post->post_name,
-                'parent'   => $post->post_parent,
-                'modified' => $post->post_modified,
+                'id'         => $post->ID,
+                'title'      => $post->post_title,
+                'status'     => $post->post_status,
+                'slug'       => $post->post_name,
+                'parent'     => $post->post_parent,
+                'modified'   => $post->post_modified,
+                'taxonomies' => $taxonomies,
             ];
         }
 
         return $pages;
+    }
+
+    /**
+     * Get available page taxonomies and their terms
+     *
+     * @return array
+     */
+    private static function get_page_taxonomies() {
+        $result = [];
+        $tax_slugs = [
+            'parent_pages'     => 'Page Taxonomies',
+            'town_taxonomies'  => 'Town Taxonomies',
+        ];
+
+        foreach ($tax_slugs as $slug => $label) {
+            if (!taxonomy_exists($slug)) {
+                continue;
+            }
+
+            $terms = get_terms([
+                'taxonomy'   => $slug,
+                'hide_empty' => false,
+                'orderby'    => 'name',
+            ]);
+
+            if (is_wp_error($terms)) {
+                continue;
+            }
+
+            $term_list = [];
+            foreach ($terms as $term) {
+                $term_list[] = [
+                    'id'     => $term->term_id,
+                    'name'   => $term->name,
+                    'slug'   => $term->slug,
+                    'count'  => $term->count,
+                    'parent' => $term->parent,
+                ];
+            }
+
+            $result[$slug] = [
+                'label' => $label,
+                'terms' => $term_list,
+            ];
+        }
+
+        return $result;
     }
 
     /**

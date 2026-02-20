@@ -93,7 +93,7 @@ class Hozio_Hub_Client {
     public static function disconnect() {
         delete_option('hozio_hub_url');
         delete_option('hozio_hub_site_token');
-        delete_option('hozio_hub_token_hash');
+        // Keep hozio_hub_token_hash — preserves Hub direct query access after disconnect
         delete_option('hozio_hub_heartbeat_interval');
         delete_option('hozio_hub_last_known_status');
         delete_option('hozio_hub_registration_time');
@@ -101,7 +101,6 @@ class Hozio_Hub_Client {
         delete_option('hozio_hub_executed_commands');
 
         delete_transient('hozio_hub_license_status');
-        delete_transient('hozio_hub_rate_limit');
 
         wp_clear_scheduled_hook('hozio_hub_heartbeat');
     }
@@ -111,11 +110,6 @@ class Hozio_Hub_Client {
      */
     public static function send_heartbeat() {
         if (!self::is_connected()) {
-            return;
-        }
-
-        // Client-side rate limit (5 min)
-        if (get_transient('hozio_hub_rate_limit')) {
             return;
         }
 
@@ -142,9 +136,6 @@ class Hozio_Hub_Client {
                 'pending_results' => $pending_results,
             ]),
         ]);
-
-        // Set rate limit transient regardless of response
-        set_transient('hozio_hub_rate_limit', 1, 300); // 5 minutes
 
         if (is_wp_error($response)) {
             return;
