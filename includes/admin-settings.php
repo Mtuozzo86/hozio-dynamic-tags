@@ -33,6 +33,27 @@ function hozio_color_picker_init() {
     <script>
     jQuery(document).ready(function($) {
         $('.hozio-color-picker').wpColorPicker();
+
+        // Copy shortcode to clipboard
+        $(document).on('click', '.hozio-copy-shortcode', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var shortcode = $btn.data('shortcode');
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(shortcode).then(function() {
+                    $btn.addClass('copied');
+                    setTimeout(function() { $btn.removeClass('copied'); }, 1600);
+                });
+            } else {
+                // Fallback for older browsers
+                var $temp = $('<textarea>').val(shortcode).appendTo('body').select();
+                document.execCommand('copy');
+                $temp.remove();
+                $btn.addClass('copied');
+                setTimeout(function() { $btn.removeClass('copied'); }, 1600);
+            }
+        });
     });
     </script>
     <?php
@@ -421,6 +442,58 @@ function hozio_dynamic_tags_inline_styles() {
             margin-top: 0;
         }
         
+        /* Copy Shortcode Button */
+        .hozio-copy-shortcode {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+            padding: 1px 6px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #9ca3af;
+            transition: all 0.15s ease;
+        }
+
+        .hozio-copy-shortcode:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+            color: #6b7280;
+        }
+
+        .hozio-copy-shortcode code {
+            background: none;
+            padding: 0;
+            font-size: 10.5px;
+            color: inherit;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
+        .hozio-copy-shortcode .hozio-copy-icon,
+        .hozio-copy-shortcode .hozio-check-icon {
+            width: 11px;
+            height: 11px;
+            flex-shrink: 0;
+        }
+
+        .hozio-copy-shortcode .hozio-check-icon {
+            display: none;
+        }
+
+        .hozio-copy-shortcode.copied {
+            color: #059669;
+        }
+
+        .hozio-copy-shortcode.copied .hozio-copy-icon {
+            display: none;
+        }
+
+        .hozio-copy-shortcode.copied .hozio-check-icon {
+            display: block;
+        }
+
         @media (max-width: 782px) {
             .hozio-grid,
             .hozio-grid-3 {
@@ -480,11 +553,53 @@ function hozio_dynamic_tags_register_settings() {
 }
 add_action('admin_init', 'hozio_dynamic_tags_register_settings');
 
+// Map option keys to [hozio] shortcode tag slugs
+function hozio_get_shortcode_tag_slug( $field_id ) {
+    $map = array(
+        'hozio_company_phone_1'        => 'company-phone-1',
+        'hozio_company_phone_2'        => 'company-phone-2',
+        'hozio_google_ads_phone'       => 'google-ads-phone',
+        'hozio_sms_phone'              => 'sms-phone',
+        'hozio_company_email'          => 'company-email',
+        'hozio_to_email_contact_form'  => 'to-email-contact-form',
+        'hozio_company_address'        => 'company-address',
+        'hozio_business_hours'         => 'business-hours',
+        'hozio_start_year'             => 'years-of-experience',
+        'hozio_gmb_link'               => 'gmb-link',
+        'hozio_facebook_url'           => 'facebook',
+        'hozio_instagram_url'          => 'instagram',
+        'hozio_twitter_url'            => 'twitter',
+        'hozio_tiktok_url'             => 'tiktok',
+        'hozio_linkedin_url'           => 'linkedin',
+        'hozio_youtube_url'            => 'youtube',
+        'hozio_yelp_url'               => 'yelp',
+        'hozio_angies_list_url'        => 'angies-list',
+        'hozio_home_advisor_url'       => 'home-advisor',
+        'hozio_bbb_url'                => 'bbb',
+    );
+
+    if ( isset( $map[ $field_id ] ) ) {
+        return $map[ $field_id ];
+    }
+
+    // Custom tags: option key is hozio_{value}, tag slug is the {value}
+    $custom_tags = get_option( 'hozio_custom_tags', array() );
+    if ( is_array( $custom_tags ) ) {
+        foreach ( $custom_tags as $tag ) {
+            if ( 'hozio_' . $tag['value'] === $field_id ) {
+                return $tag['value'];
+            }
+        }
+    }
+
+    return '';
+}
+
 // Render input fields with enhanced styling
 function hozio_dynamic_tags_render_input($args) {
     $option = get_option($args['label_for'], '');
     $field_id = $args['label_for'];
-    
+
     // Check if this is a custom tag
     $is_custom_tag = false;
     if (strpos($field_id, 'hozio_') === 0) {
@@ -498,7 +613,7 @@ function hozio_dynamic_tags_render_input($args) {
             }
         }
     }
-    
+
     echo '<div class="hozio-field-wrapper">';
     
     if ($field_id === 'hozio_start_year') {
@@ -549,7 +664,21 @@ function hozio_dynamic_tags_render_input($args) {
             esc_attr($placeholder)
         );
     }
-    
+
+    // Copy shortcode button
+    $tag_slug = hozio_get_shortcode_tag_slug( $field_id );
+    if ( $tag_slug !== '' ) {
+        printf(
+            '<button type="button" class="hozio-copy-shortcode" data-shortcode="%s" title="Copy shortcode">
+                <code>%s</code>
+                <svg class="hozio-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M11 2H5.5A1.5 1.5 0 004 3.5v9A1.5 1.5 0 005.5 14h5a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0011 2z"/><path d="M4.5 0A1.5 1.5 0 003 1.5V11a.5.5 0 001 0V1.5a.5.5 0 01.5-.5H9a.5.5 0 000-1H4.5z"/></svg>
+                <svg class="hozio-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+            </button>',
+            esc_attr( '[hozio tag="' . $tag_slug . '"]' ),
+            esc_html( $tag_slug )
+        );
+    }
+
     echo '</div>';
 }
 

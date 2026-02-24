@@ -1,7 +1,7 @@
 <?php
 /**
  * Hozio Pro - Support & Help Page
- * Searchable FAQ-style documentation for all plugin features
+ * Tabbed category layout with card grid and expandable documentation
  */
 
 if (!defined('ABSPATH')) exit;
@@ -50,24 +50,183 @@ function hozio_support_page() {
                     <input type="text" id="hozio-support-search" class="hozio-support-search-input" placeholder="Search documentation... (e.g., taxonomy, county pages, loop, RSS)" autocomplete="off" />
                     <span id="hozio-support-search-clear" class="hozio-support-search-clear" style="display:none;">&times;</span>
                 </div>
-                <p class="hozio-support-search-hint">Click any section to expand it. Use the search bar to filter by keyword.</p>
             </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 1: Dynamic Tags -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="dynamic-tags">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-tag"></span>
-                    <h2>Dynamic Tags</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
+            <!-- Category Tabs -->
+            <div class="hozio-tabs" id="hozio-tabs">
+                <button class="hozio-tab is-active" data-tab="getting-started">
+                    <span class="dashicons dashicons-welcome-learn-more"></span> Getting Started
+                </button>
+                <button class="hozio-tab" data-tab="pages">
+                    <span class="dashicons dashicons-admin-page"></span> Page Management
+                </button>
+                <button class="hozio-tab" data-tab="elementor">
+                    <span class="dashicons dashicons-editor-expand"></span> Elementor Tools
+                </button>
+                <button class="hozio-tab" data-tab="sitemap">
+                    <span class="dashicons dashicons-networking"></span> Sitemap &amp; Content
+                </button>
+                <button class="hozio-tab" data-tab="settings">
+                    <span class="dashicons dashicons-admin-generic"></span> Settings &amp; Admin
+                </button>
+            </div>
+
+            <!-- Card Grid -->
+            <div class="hozio-card-grid" id="hozio-card-grid">
+
+                <!-- ======== GETTING STARTED ======== -->
+
+                <div class="hozio-card" data-section="dynamic-tags" data-category="getting-started" data-description="Use dynamic content in Elementor widgets">
+                    <span class="dashicons dashicons-tag hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Dynamic Tags</h3>
+                    <p class="hozio-card-desc">Use dynamic content in Elementor widgets</p>
                 </div>
-                <div class="hozio-support-section-content">
+
+                <div class="hozio-card" data-section="taxonomies" data-category="getting-started" data-description="Organize pages with parent &amp; town taxonomies">
+                    <span class="dashicons dashicons-category hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Page &amp; Town Taxonomies</h3>
+                    <p class="hozio-card-desc">Organize pages with parent &amp; town taxonomies</p>
+                </div>
+
+                <div class="hozio-card" data-section="shortcodes" data-category="getting-started" data-description="Use [hozio] tags in HTML widgets &amp; posts">
+                    <span class="dashicons dashicons-editor-code hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Shortcodes</h3>
+                    <p class="hozio-card-desc">Use [hozio] tags in HTML widgets &amp; posts</p>
+                </div>
+
+                <!-- ======== PAGE MANAGEMENT ======== -->
+
+                <div class="hozio-card" data-section="parent-pages-query" data-category="pages" data-description="Filter Elementor queries by parent page">
+                    <span class="dashicons dashicons-admin-page hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Parent Pages Query</h3>
+                    <p class="hozio-card-desc">Filter Elementor queries by parent page</p>
+                </div>
+
+                <div class="hozio-card" data-section="parent-page-filtering" data-category="pages" data-description="Handle same-slug pages across locations">
+                    <span class="dashicons dashicons-filter hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Parent Page Filtering</h3>
+                    <p class="hozio-card-desc">Handle same-slug pages across locations</p>
+                </div>
+
+                <div class="hozio-card" data-section="county-pages" data-category="pages" data-description="Manage county-level location pages">
+                    <span class="dashicons dashicons-location-alt hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">County Pages</h3>
+                    <p class="hozio-card-desc">Manage county-level location pages</p>
+                </div>
+
+                <div class="hozio-card" data-section="connect-town-taxonomies" data-category="pages" data-description="Bulk-assign town terms to pages">
+                    <span class="dashicons dashicons-randomize hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Connect Town Taxonomies</h3>
+                    <p class="hozio-card-desc">Bulk-assign town terms to pages</p>
+                </div>
+
+                <div class="hozio-card" data-section="taxonomy-archive-settings" data-category="pages" data-description="Enable/disable taxonomy archive pages">
+                    <span class="dashicons dashicons-archive hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Taxonomy Archive Settings</h3>
+                    <p class="hozio-card-desc">Enable/disable taxonomy archive pages</p>
+                </div>
+
+                <!-- ======== ELEMENTOR TOOLS ======== -->
+
+                <div class="hozio-card" data-section="loop-configurations" data-category="elementor" data-description="Configure Elementor loop widget queries">
+                    <span class="dashicons dashicons-grid-view hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Loop Configurations</h3>
+                    <p class="hozio-card-desc">Configure Elementor loop widget queries</p>
+                </div>
+
+                <div class="hozio-card" data-section="query-post-types" data-category="elementor" data-description="Add custom post types to Elementor queries">
+                    <span class="dashicons dashicons-database hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Query Post Types</h3>
+                    <p class="hozio-card-desc">Add custom post types to Elementor queries</p>
+                </div>
+
+                <div class="hozio-card" data-section="services-children-query" data-category="elementor" data-description="Query child pages of Services page">
+                    <span class="dashicons dashicons-networking hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Services Children Query</h3>
+                    <p class="hozio-card-desc">Query child pages of Services page</p>
+                </div>
+
+                <div class="hozio-card" data-section="dom-parsing" data-category="elementor" data-description="Auto-hide empty ACF content on frontend">
+                    <span class="dashicons dashicons-hidden hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">DOM Parsing</h3>
+                    <p class="hozio-card-desc">Auto-hide empty ACF content on frontend</p>
+                </div>
+
+                <div class="hozio-card" data-section="nav-text-color" data-category="elementor" data-description="Set CTA button color in toggle menu">
+                    <span class="dashicons dashicons-art hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Nav Menu Text Color</h3>
+                    <p class="hozio-card-desc">Set CTA button color in toggle menu</p>
+                </div>
+
+                <!-- ======== SITEMAP & CONTENT ======== -->
+
+                <div class="hozio-card" data-section="html-sitemap" data-category="sitemap" data-description="Auto-generated sitemap with accordions">
+                    <span class="dashicons dashicons-networking hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">HTML Sitemap</h3>
+                    <p class="hozio-card-desc">Auto-generated sitemap with accordions</p>
+                </div>
+
+                <div class="hozio-card" data-section="sitemap-layout-editor" data-category="sitemap" data-description="Manually arrange sitemap layout">
+                    <span class="dashicons dashicons-layout hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Sitemap Layout Editor</h3>
+                    <p class="hozio-card-desc">Manually arrange sitemap layout</p>
+                </div>
+
+                <div class="hozio-card" data-section="blog-permalink" data-category="sitemap" data-description="Customize the blog page URL slug">
+                    <span class="dashicons dashicons-admin-links hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Blog Permalink Settings</h3>
+                    <p class="hozio-card-desc">Customize the blog page URL slug</p>
+                </div>
+
+                <div class="hozio-card" data-section="rss-feed" data-category="sitemap" data-description="Redirect RSS feeds to a custom URL">
+                    <span class="dashicons dashicons-rss hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">RSS Feed Override</h3>
+                    <p class="hozio-card-desc">Redirect RSS feeds to a custom URL</p>
+                </div>
+
+                <div class="hozio-card" data-section="service-menu-sync" data-category="sitemap" data-description="Sync service pages to nav menu">
+                    <span class="dashicons dashicons-menu-alt3 hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Service Menu Sync</h3>
+                    <p class="hozio-card-desc">Sync service pages to nav menu</p>
+                </div>
+
+                <!-- ======== SETTINGS & ADMIN ======== -->
+
+                <div class="hozio-card" data-section="lead-management" data-category="settings" data-description="View and manage form submissions">
+                    <span class="dashicons dashicons-email-alt hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Lead Management</h3>
+                    <p class="hozio-card-desc">View and manage form submissions</p>
+                </div>
+
+                <div class="hozio-card" data-section="plugin-settings" data-category="settings" data-description="Configure features &amp; debug logging">
+                    <span class="dashicons dashicons-admin-generic hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Plugin Settings &amp; Debug</h3>
+                    <p class="hozio-card-desc">Configure features &amp; debug logging</p>
+                </div>
+
+                <div class="hozio-card" data-section="hub-connectivity" data-category="settings" data-description="Connect to Hozio Hub for remote management">
+                    <span class="dashicons dashicons-cloud hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Hub Connectivity</h3>
+                    <p class="hozio-card-desc">Connect to Hozio Hub for remote management</p>
+                </div>
+
+            </div><!-- .hozio-card-grid -->
+
+            <!-- Expanded Detail Panel -->
+            <div class="hozio-detail-panel" id="hozio-detail-panel" style="display:none;">
+                <button type="button" class="hozio-detail-close" id="hozio-detail-close" title="Close">&times;</button>
+                <div class="hozio-detail-body" id="hozio-detail-body"></div>
+            </div>
+
+            <!-- Hidden section content blocks (loaded into detail panel on card click) -->
+            <div style="display:none;" id="hozio-section-data">
+
+                <!-- Section: dynamic-tags -->
+                <div data-content="dynamic-tags">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
                         <p>Dynamic Tags let you store business information (phone numbers, emails, social media links, etc.) in one place and use them across your entire site via Elementor. When you update a value in Hozio Pro settings, it updates everywhere that tag is used.</p>
                     </div>
-
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
                         <ol>
@@ -79,7 +238,6 @@ function hozio_support_page() {
                             <li><strong>Select the tag</strong> you want. The widget will now pull its value from your Hozio Pro settings automatically.</li>
                         </ol>
                     </div>
-
                     <div class="hozio-support-notes">
                         <h3>Important notes</h3>
                         <ul>
@@ -91,61 +249,94 @@ function hozio_support_page() {
                         </ul>
                     </div>
                 </div>
-            </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 2: Page Taxonomies & Town Taxonomies -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="taxonomies">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-category"></span>
-                    <h2>Page Taxonomies & Town Taxonomies</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
-                </div>
-                <div class="hozio-support-section-content">
+                <!-- Section: taxonomies -->
+                <div data-content="taxonomies">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
                         <p>Hozio Pro adds two custom taxonomies to WordPress pages: <strong>Page Taxonomies</strong> (parent_pages) and <strong>Town Taxonomies</strong> (town_taxonomies). These allow you to group and filter pages by service type, location, or any custom classification &mdash; which powers the dynamic query features.</p>
                     </div>
-
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
                         <ol>
                             <li><strong>Go to Pages</strong> in the WordPress admin. You'll see two new columns: "Page Taxonomies" and "Town Taxonomies".</li>
-                            <li><strong>Edit any page</strong> and look for the "Page Taxonomies" and "Town Taxonomies" meta boxes in the sidebar (or below the editor, depending on your layout).</li>
+                            <li><strong>Edit any page</strong> and look for the "Page Taxonomies" and "Town Taxonomies" meta boxes in the sidebar.</li>
                             <li><strong>Assign taxonomy terms</strong> to pages. For example, assign the term "plumbing" to all plumbing service town pages.</li>
-                            <li><strong>To bulk-create Town Taxonomy terms</strong>, click the "Connect Town Taxonomies" button on the Pages list. This tool automatically creates town terms based on page slugs and assigns them.</li>
+                            <li><strong>To bulk-create Town Taxonomy terms</strong>, click the "Connect Town Taxonomies" button on the Pages list.</li>
                         </ol>
                     </div>
-
                     <div class="hozio-support-notes">
                         <h3>Important notes</h3>
                         <ul>
                             <li>Both taxonomies are <strong>hierarchical</strong> (like categories), so you can create parent/child term structures.</li>
-                            <li>The <strong>Connect Town Taxonomies</strong> tool skips parent pages (pages with children) &mdash; it only processes leaf/town pages.</li>
-                            <li>Use the <strong>search bars</strong> on the Pages list to filter by taxonomy terms.</li>
+                            <li>The <strong>Connect Town Taxonomies</strong> tool skips parent pages &mdash; it only processes leaf/town pages.</li>
                             <li>To enable/disable taxonomy archive pages, go to <strong>Hozio Pro &rarr; Archive Settings</strong>.</li>
-                            <li>WordPress does not allow two terms with the same slug in the same taxonomy. If you need separate "repair" terms, see the <strong>Parent Page Filtering</strong> section below.</li>
+                            <li>WordPress does not allow two terms with the same slug in the same taxonomy. See the <strong>Parent Page Filtering</strong> section for handling duplicate slugs.</li>
                         </ul>
                     </div>
                 </div>
-            </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 3: Parent Pages Query -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="parent-pages-query">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-admin-page"></span>
-                    <h2>Parent Pages Query (dynamic_parent_pages_query)</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
+                <!-- Section: shortcodes -->
+                <div data-content="shortcodes">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Hozio Pro provides shortcodes you can use in pages, posts, Elementor text widgets, and <strong>HTML widgets</strong>:</p>
+                        <h4 style="margin-top: 16px;"><code>[hozio tag="..."]</code> &mdash; Universal Dynamic Tag Shortcode</h4>
+                        <p>Use <strong>any</strong> Hozio dynamic tag value inside HTML widgets or anywhere shortcodes are supported. Just pass the tag slug as the <code>tag</code> attribute:</p>
+                        <ul>
+                            <li><code>[hozio tag="company-phone-1-name"]</code> &mdash; Display phone number</li>
+                            <li><code>[hozio tag="company-address"]</code> &mdash; Company address (HTML supported)</li>
+                            <li><code>[hozio tag="business-hours"]</code> &mdash; Business hours (HTML supported)</li>
+                            <li><code>[hozio tag="years-of-experience"]</code> &mdash; Calculated years</li>
+                            <li><code>[hozio tag="facebook"]</code> &mdash; Facebook URL</li>
+                            <li><code>[hozio tag="my-custom-tag"]</code> &mdash; Any custom tag you&rsquo;ve created</li>
+                        </ul>
+                        <p>For phone, SMS, and email tags, add <code>format="url"</code> to get the prefixed URL version:</p>
+                        <ul>
+                            <li><code>[hozio tag="company-phone-1" format="url"]</code> &rarr; <code>tel:5551234567</code></li>
+                            <li><code>[hozio tag="company-email" format="url"]</code> &rarr; <code>mailto:info@example.com</code></li>
+                            <li><code>[hozio tag="sms-phone" format="url"]</code> &rarr; <code>sms:5551234567</code></li>
+                        </ul>
+                        <p><strong>Example HTML widget code:</strong></p>
+                        <pre style="background: #f3f4f6; padding: 12px; border-radius: 6px; font-size: 13px; overflow-x: auto; margin: 8px 0;">&lt;a href="[hozio tag='company-phone-1' format='url']"&gt;
+  Call us: [hozio tag='company-phone-1-name']
+&lt;/a&gt;
+&lt;p&gt;[hozio tag='company-address']&lt;/p&gt;
+&lt;p&gt;[hozio tag='years-of-experience'] years of experience&lt;/p&gt;</pre>
+                        <h4 style="margin-top: 20px;"><code>[hozio_current_year]</code></h4>
+                        <p>Outputs the current 4-digit year (e.g., <strong><?php echo date('Y'); ?></strong>). No parameters needed. Useful for copyright notices.</p>
+                        <h4 style="margin-top: 16px;"><code>[gmb_map]</code></h4>
+                        <p>Embeds a Google My Business map from an ACF field. Parameters: <code>field</code> (default: <code>gmb_map</code>), <code>post_id</code> (default: current post).</p>
+                        <h4 style="margin-top: 16px;"><code>[final_cta]</code></h4>
+                        <p>Displays an ACF field value from a specific page. Both <code>field</code> and <code>page_id</code> are <strong>required</strong>.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to use</h3>
+                        <ol>
+                            <li>Place any shortcode in a page, post, Elementor Text Editor widget, or <strong>Elementor HTML widget</strong>.</li>
+                            <li>To quickly copy a shortcode, go to <strong>Hozio Pro &rarr; Dynamic Tags Settings</strong>. Each field has a small <strong>copy button</strong> beneath it &mdash; click it to copy the shortcode to your clipboard.</li>
+                            <li>Paste the shortcode into your HTML widget or text editor. For phone/email/SMS links, add <code>format="url"</code> inside the <code>href</code> attribute.</li>
+                            <li>For <code>[gmb_map]</code>, ensure the ACF field exists and contains the Google Map embed code.</li>
+                            <li>For <code>[final_cta]</code>, find the page ID in the WordPress admin URL when editing a page (e.g., <code>post=42</code>).</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>The <code>[hozio]</code> shortcode works with <strong>all built-in and custom dynamic tags</strong>.</li>
+                            <li>Each field on the Dynamic Tags Settings page has a <strong>copy shortcode</strong> button &mdash; no need to remember tag slugs.</li>
+                            <li><code>[gmb_map]</code> and <code>[final_cta]</code> require the <strong>ACF</strong> plugin to be active.</li>
+                            <li>All shortcode output is properly escaped. Script tags in custom tag values are blocked for security.</li>
+                        </ul>
+                    </div>
                 </div>
-                <div class="hozio-support-section-content">
+
+                <!-- Section: parent-pages-query -->
+                <div data-content="parent-pages-query">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
                         <p>This is a custom Elementor query that dynamically fetches related pages based on the current page's taxonomy. When a visitor lands on a town page, this query finds all other pages that share the same Page Taxonomy term &mdash; typically used to show "other locations for this service" or "related service pages".</p>
                     </div>
-
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
                         <ol>
@@ -154,10 +345,9 @@ function hozio_support_page() {
                             <li><strong>Assign this term</strong> to all the town pages under that service.</li>
                             <li><strong>In Elementor</strong>, add a Loop Grid or Loop Carousel widget to your page template.</li>
                             <li><strong>In the widget's Query settings</strong>, set the Query ID to: <code>dynamic_parent_pages_query</code></li>
-                            <li>The widget will now automatically display pages that share the same Page Taxonomy term as the current page, excluding the current page itself.</li>
+                            <li>The widget will now automatically display pages that share the same Page Taxonomy term as the current page.</li>
                         </ol>
                     </div>
-
                     <div class="hozio-support-notes">
                         <h3>How the matching works</h3>
                         <ul>
@@ -168,335 +358,266 @@ function hozio_support_page() {
                         </ul>
                     </div>
                 </div>
-            </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 4: Parent Page Filtering (NEW) -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="parent-page-filtering">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-filter"></span>
-                    <h2>Parent Page Filtering (Same-Slug Pages)</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
-                </div>
-                <div class="hozio-support-section-content">
+                <!-- Section: parent-page-filtering -->
+                <div data-content="parent-page-filtering">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
-                        <p>When multiple page hierarchies share the same slug (e.g., <code>/gutter/installation/</code> and <code>/roofing/installation/</code>), their child town pages would normally mix together in query results because they share the same Page Taxonomy term ("installation"). <strong>Parent Page Filtering</strong> solves this by restricting the <code>dynamic_parent_pages_query</code> and <code>dynamic_county_pages_query</code> to only return pages that are direct children of the page where the checkbox is enabled.</p>
+                        <p>When multiple page hierarchies share the same slug (e.g., <code>/gutter/installation/</code> and <code>/roofing/installation/</code>), their child town pages would normally mix together in query results. <strong>Parent Page Filtering</strong> solves this by restricting queries to only return pages that are direct children of the page where the checkbox is enabled.</p>
                     </div>
-
                     <div class="hozio-support-notes">
                         <h3>The problem this solves</h3>
                         <ul>
-                            <li>You have a site with multiple service categories, each with a similar sub-service. For example:
-                                <ul>
-                                    <li><code>/services/gutter/installation/</code> &mdash; with town pages like <code>/services/gutter/installation/west-newbury-ma/</code></li>
-                                    <li><code>/services/roofing/installation/</code> &mdash; with town pages like <code>/services/roofing/installation/nahant-ma/</code></li>
-                                </ul>
-                            </li>
-                            <li>Both sets of town pages are tagged with the same <strong>"installation"</strong> Page Taxonomy term (since WordPress doesn't allow duplicate term slugs in the same taxonomy).</li>
-                            <li><strong>Without this feature:</strong> When a visitor is on <code>/services/gutter/installation/</code>, the query shows ALL pages with the "installation" taxonomy &mdash; including roofing town pages that don't belong there.</li>
-                            <li><strong>With this feature:</strong> The query is restricted to only return direct children of the page where the checkbox is enabled, so <code>/services/gutter/installation/</code> only shows its own town pages.</li>
+                            <li>You have multiple service categories each with a similar sub-service (e.g., "installation" under both gutter and roofing).</li>
+                            <li>Both sets of town pages share the same <strong>"installation"</strong> Page Taxonomy term.</li>
+                            <li><strong>Without this feature:</strong> The query shows ALL "installation" pages &mdash; including ones from the wrong service category.</li>
+                            <li><strong>With this feature:</strong> The query only returns direct children of the page where the checkbox is enabled.</li>
                         </ul>
                     </div>
-
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
                         <ol>
-                            <li><strong>Identify the service pages</strong> that share the same slug across different hierarchies. For example, you might have an "installation" page under <code>/gutter/</code> and another "installation" page under <code>/roofing/</code>.</li>
-                            <li><strong>Edit the service page</strong> in WordPress &mdash; this is the page where the Elementor loop widget lives and where the query runs. For example, edit the <code>/services/gutter/installation/</code> page.</li>
+                            <li><strong>Identify the service pages</strong> that share the same slug across different hierarchies.</li>
+                            <li><strong>Edit the service page</strong> in WordPress (the page where the Elementor loop widget lives).</li>
                             <li><strong>In the sidebar</strong>, find the <strong>"Parent Pages Query Options"</strong> meta box.</li>
                             <li><strong>Check the box</strong> labeled <strong>"Filter by parent page"</strong>.</li>
-                            <li><strong>Save/update</strong> the page.</li>
-                            <li><strong>Repeat</strong> for every other service page that shares the same slug. In our example, you would also enable the checkbox on <code>/services/roofing/installation/</code>.</li>
+                            <li><strong>Save/update</strong> the page. Repeat for every other page that shares the same slug.</li>
                         </ol>
                     </div>
-
-                    <div class="hozio-support-notes">
-                        <h3>Where to enable the checkbox</h3>
-                        <ul>
-                            <li><strong>Enable it on the service page itself</strong> &mdash; the page where your Elementor Loop Grid or Loop Carousel widget is placed (e.g., <code>/services/gutter/installation/</code>). This is the most common and recommended approach.</li>
-                            <li>The checkbox tells the query: <strong>"Only show pages that are direct children of this page."</strong></li>
-                            <li>You do <strong>NOT</strong> need to enable the checkbox on each individual town page. Just the service/parent page is enough.</li>
-                            <li><strong>Ancestor walk-up:</strong> If the checkbox is not found on the current page, the system will automatically check parent pages going up the hierarchy (e.g., <code>/gutter/</code>, then <code>/services/</code>). If any ancestor has the checkbox enabled, filtering will activate using that ancestor as the boundary. This means you can also enable the checkbox on a higher-level parent if you want all its descendants to be filtered.</li>
-                        </ul>
-                    </div>
-
-                    <div class="hozio-support-notes">
-                        <h3>Detailed example</h3>
-                        <ul>
-                            <li><strong>Site structure:</strong>
-                                <ul>
-                                    <li><code>/services/gutter/installation/</code> (service page &mdash; checkbox enabled here)</li>
-                                    <li><code>/services/gutter/installation/west-newbury-ma/</code> (town page)</li>
-                                    <li><code>/services/gutter/installation/nahant-ma/</code> (town page)</li>
-                                    <li><code>/services/roofing/installation/</code> (service page &mdash; checkbox enabled here too)</li>
-                                    <li><code>/services/roofing/installation/nahant-ma/</code> (town page)</li>
-                                </ul>
-                            </li>
-                            <li>All town pages are tagged with the <strong>"installation"</strong> Page Taxonomy term.</li>
-                            <li><strong>Result:</strong> When a visitor is on <code>/services/gutter/installation/</code>, the loop widget only shows <code>west-newbury-ma</code> and <code>nahant-ma</code> under gutter. The roofing <code>nahant-ma</code> page does NOT appear because it is not a direct child of <code>/services/gutter/installation/</code>.</li>
-                        </ul>
-                    </div>
-
-                    <div class="hozio-support-notes">
-                        <h3>Which queries are affected</h3>
-                        <ul>
-                            <li><strong><code>dynamic_parent_pages_query</code></strong> &mdash; YES, affected. When the checkbox is enabled, results are restricted to children of the page with the checkbox.</li>
-                            <li><strong><code>dynamic_county_pages_query</code></strong> &mdash; YES, affected. Same filtering logic applies to county pages.</li>
-                            <li><strong><code>dynamic_town_pages_query</code></strong> &mdash; NO, not affected. The town query is designed to show all services available in a given town across all hierarchies. For example, if a visitor is on <code>/gutter/installation/nahant-ma/</code>, the town query shows ALL services in Nahant (gutter, roofing, etc.). This cross-hierarchy behavior is intentional and preserved regardless of the checkbox setting.</li>
-                        </ul>
-                    </div>
-
-                    <div class="hozio-support-notes">
-                        <h3>HTML Sitemap behavior</h3>
-                        <ul>
-                            <li>The <strong>HTML Sitemap</strong> also respects this checkbox.</li>
-                            <li>When enabled, accordion dropdown labels will be <strong>prefixed with the parent page's name</strong> to distinguish same-named sections.</li>
-                            <li>For example: instead of two accordion dropdowns both labeled "Installation", you'll see <strong>"Gutter Installation"</strong> and <strong>"Roofing Installation"</strong>.</li>
-                        </ul>
-                    </div>
-
                     <div class="hozio-support-notes">
                         <h3>Important notes</h3>
                         <ul>
-                            <li><strong>Only needed for duplicate slugs.</strong> If your service page slugs are already unique across different hierarchies (e.g., "gutter-installation" vs "roofing-repair"), you do not need this feature.</li>
-                            <li>This feature works with both the <strong>standard query logic</strong> and the <strong>County Pages logic</strong> (when <code>use_county_pages</code> is enabled).</li>
-                            <li>The checkbox is saved as a <strong>per-page setting</strong>. It only needs to be enabled on the specific pages that have slug conflicts.</li>
-                            <li>The filtering uses WordPress's built-in <code>post_parent</code> constraint, so it is performant and does not add extra database queries beyond the standard meta check.</li>
+                            <li><strong>Only needed for duplicate slugs.</strong> If your service page slugs are already unique, you don't need this feature.</li>
+                            <li><strong>Ancestor walk-up:</strong> If the checkbox isn't found on the current page, the system checks parent pages going up the hierarchy.</li>
+                            <li>Affects <code>dynamic_parent_pages_query</code> and <code>dynamic_county_pages_query</code>. Does NOT affect <code>dynamic_town_pages_query</code> (which intentionally shows cross-hierarchy results).</li>
+                            <li>The HTML Sitemap also respects this checkbox &mdash; accordion labels are prefixed with the parent page's name to distinguish same-named sections.</li>
                         </ul>
                     </div>
                 </div>
-            </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 5: County Pages -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="county-pages">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-location-alt"></span>
-                    <h2>County Pages</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
-                </div>
-                <div class="hozio-support-section-content">
+                <!-- Section: county-pages -->
+                <div data-content="county-pages">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
                         <p>County Pages is an advanced query mode that extends the parent pages system. When enabled, it uses a <strong>composite slug</strong> (parent term + page slug) to match taxonomy terms, and adds support for a special "county" term to distinguish county-level pages from regular town pages.</p>
                     </div>
-
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
                         <ol>
-                            <li><strong>Create your page hierarchy</strong> with county pages as children of service pages. For example: <code>/sprinter-service/travis-county/</code>.</li>
-                            <li><strong>Create Page Taxonomy terms</strong> using the composite slug pattern: <code>parentterm-pageslug</code>. For example, if the parent term is "sprinter-service" and the page slug is "travis-county", create a term with slug <code>sprinter-service-travis-county</code>.</li>
-                            <li><strong>Create a "county" term</strong> in the Page Taxonomies. This is a special marker term.</li>
+                            <li><strong>Create your page hierarchy</strong> with county pages as children of service pages.</li>
+                            <li><strong>Create Page Taxonomy terms</strong> using the composite slug pattern: <code>parentterm-pageslug</code>.</li>
+                            <li><strong>Create a "county" term</strong> in the Page Taxonomies as a special marker.</li>
                             <li><strong>Assign both terms</strong> to your county pages: the composite term AND the "county" term.</li>
-                            <li><strong>Enable the county pages flag</strong> on the page by setting the <code>use_county_pages</code> custom field to <code>true</code> (via ACF or custom fields).</li>
-                            <li><strong>Use the query IDs</strong> in Elementor:
-                                <ul>
-                                    <li><code>dynamic_parent_pages_query</code> &mdash; shows related pages EXCLUDING county pages</li>
-                                    <li><code>dynamic_county_pages_query</code> &mdash; shows ONLY county pages</li>
-                                </ul>
-                            </li>
+                            <li><strong>Enable the county pages flag</strong> by setting the <code>use_county_pages</code> custom field to <code>true</code>.</li>
+                            <li><strong>Use the query IDs</strong>: <code>dynamic_parent_pages_query</code> (excludes county) or <code>dynamic_county_pages_query</code> (only county).</li>
                         </ol>
                     </div>
-
                     <div class="hozio-support-notes">
-                        <h3>How the composite slug matching works</h3>
+                        <h3>How composite slug matching works</h3>
                         <ul>
-                            <li>When <code>use_county_pages</code> is enabled, the query looks at the current page's assigned terms.</li>
-                            <li>For each term, it checks if the term's slug equals <code>parent-term-slug + "-" + page-slug</code>.</li>
-                            <li>Example: Page slug is "austin", parent term slug is "texas" &rarr; looks for a term with slug "texas-austin".</li>
-                            <li>The <code>dynamic_parent_pages_query</code> excludes any pages that have the "county" marker term.</li>
-                            <li>The <code>dynamic_county_pages_query</code> only includes pages that have BOTH the matching term AND the "county" term.</li>
+                            <li>When <code>use_county_pages</code> is enabled, the query checks if term slugs equal <code>parent-term-slug + "-" + page-slug</code>.</li>
+                            <li>The <code>dynamic_parent_pages_query</code> excludes pages with the "county" marker term.</li>
+                            <li>The <code>dynamic_county_pages_query</code> only includes pages with BOTH the matching term AND the "county" term.</li>
                         </ul>
                     </div>
                 </div>
-            </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 6: Loop Configurations -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="loop-configurations">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-grid-view"></span>
-                    <h2>Loop Configurations</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
+                <!-- Section: connect-town-taxonomies -->
+                <div data-content="connect-town-taxonomies">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>A bulk tool that automatically creates Town Taxonomy terms from your page slugs and assigns them to the corresponding pages. This saves you from manually creating and assigning hundreds of town taxonomy terms one by one.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Go to the <strong>Pages</strong> list in your WordPress admin.</li>
+                            <li>Click the <strong>"Connect Town Taxonomies"</strong> button at the top of the page list.</li>
+                            <li>Select which <strong>Page Taxonomies</strong> to process.</li>
+                            <li>Click <strong>Connect</strong> to run the bulk assignment.</li>
+                            <li>Review the results summary.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>Only <strong>leaf/town-level pages</strong> are processed &mdash; parent pages are automatically skipped.</li>
+                            <li>If a Town Taxonomy term already exists, it will be assigned without creating a duplicate.</li>
+                            <li>Designed for initial setup or when adding many new location pages at once.</li>
+                        </ul>
+                    </div>
                 </div>
-                <div class="hozio-support-section-content">
+
+                <!-- Section: taxonomy-archive-settings -->
+                <div data-content="taxonomy-archive-settings">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Controls whether public archive pages are enabled for the <strong>Parent Pages</strong> and <strong>Town Taxonomies</strong> custom taxonomies.</p>
+                        <ul>
+                            <li><strong>Parent Pages archives:</strong> <code>/parent-pages/{term-slug}/</code></li>
+                            <li><strong>Town Taxonomies archives:</strong> <code>/town/{term-slug}/</code></li>
+                        </ul>
+                        <p>When disabled, visiting an archive URL will <strong>301 redirect</strong> to the homepage.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Navigate to <strong>Hozio Pro &rarr; Archive Settings</strong>.</li>
+                            <li>Toggle <strong>Archive Pages</strong> on or off for each taxonomy.</li>
+                            <li>Click <strong>Save</strong>. Rewrite rules flush automatically.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>Archives are <strong>disabled by default</strong>.</li>
+                            <li>If you see 404 errors after enabling, visit <strong>Settings &rarr; Permalinks</strong> and click Save to force a rewrite flush.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: loop-configurations -->
+                <div data-content="loop-configurations">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
                         <p>Loop Configurations let you create reusable filter presets for Elementor Loop Grid and Loop Carousel widgets. Instead of manually setting up query filters on every page, you create a configuration once and assign it to pages.</p>
                     </div>
-
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
                         <ol>
                             <li><strong>Go to Hozio Pro &rarr; Loop Configurations</strong> in the admin menu.</li>
-                            <li><strong>Create a new configuration</strong> by giving it a unique name (e.g., "Plumbing Services Loop").</li>
-                            <li><strong>Select the taxonomy</strong> to filter by (Page Taxonomies or Town Taxonomies).</li>
-                            <li><strong>Choose the terms</strong> to include in the results.</li>
-                            <li><strong>Optionally exclude</strong> specific pages from results.</li>
+                            <li><strong>Create a new configuration</strong> by giving it a unique name.</li>
+                            <li><strong>Select the taxonomy</strong> to filter by and <strong>choose the terms</strong> to include.</li>
                             <li><strong>Save the configuration.</strong></li>
-                            <li><strong>Edit a page</strong> in WordPress. In the sidebar, find the <strong>"Loop Configuration"</strong> meta box.</li>
-                            <li><strong>Select your configuration</strong> from the dropdown.</li>
+                            <li><strong>Edit a page</strong> and select your configuration from the <strong>"Loop Configuration"</strong> meta box in the sidebar.</li>
                             <li>All Loop Grid and Loop Carousel widgets on that page will now use this configuration's filters automatically.</li>
                         </ol>
                     </div>
-
                     <div class="hozio-support-notes">
                         <h3>Important notes</h3>
                         <ul>
                             <li>Configurations apply to <strong>all loop widgets on the page</strong> (excluding header, footer, and popup contexts).</li>
                             <li>If no configuration is assigned, loop widgets use their default Elementor query settings.</li>
-                            <li>You can create as many configurations as you need and reuse them across pages.</li>
                         </ul>
                     </div>
                 </div>
-            </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 7: Blog Permalink Settings -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="blog-permalink">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-admin-links"></span>
-                    <h2>Blog Permalink Settings</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
-                </div>
-                <div class="hozio-support-section-content">
+                <!-- Section: query-post-types -->
+                <div data-content="query-post-types">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
-                        <p>Customizes your blog post URL structure independently from WordPress's default permalink settings. You can add a <code>/blog/</code> prefix and/or include the post's category in the URL.</p>
+                        <p>Configures which custom post types are available in Elementor&rsquo;s dynamic queries and loop widgets. This setting lets you toggle on any registered custom post type so it appears as a query source option in Elementor.</p>
                     </div>
-
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
                         <ol>
-                            <li><strong>Go to Hozio Pro &rarr; Blog Permalink Settings</strong>.</li>
-                            <li><strong>Toggle "Blog Prefix"</strong> to add <code>/blog/</code> before all post URLs.</li>
-                            <li><strong>Toggle "Category Prefix"</strong> to include the post's first category in the URL.</li>
-                            <li><strong>Check the preview</strong> at the bottom of the page to see the resulting URL structure.</li>
-                            <li><strong>Save the settings.</strong> Rewrite rules are flushed automatically.</li>
+                            <li>Navigate to <strong>Hozio Pro &rarr; Query Post Types</strong>.</li>
+                            <li>Toggle <strong>on</strong> the post types you want available in Elementor queries.</li>
+                            <li>Click <strong>Save</strong>.</li>
+                            <li>In Elementor, the selected post types will now appear in Loop/Posts widget query settings.</li>
                         </ol>
                     </div>
-
-                    <div class="hozio-support-notes">
-                        <h3>URL structure examples</h3>
-                        <ul>
-                            <li>Both enabled: <code>/blog/category-name/post-name/</code></li>
-                            <li>Blog prefix only: <code>/blog/post-name/</code></li>
-                            <li>Category prefix only: <code>/category-name/post-name/</code></li>
-                            <li>Both disabled: <code>/post-name/</code> (WordPress default)</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ============================================ -->
-            <!-- SECTION 8: RSS Feed Override -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="rss-feed">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-rss"></span>
-                    <h2>RSS Feed Override</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
-                </div>
-                <div class="hozio-support-section-content">
-                    <div class="hozio-support-what">
-                        <h3>What it does</h3>
-                        <p>Replaces the default WordPress RSS feed content with structured content pulled from ACF fields. This is useful when your post content is built with Elementor (which doesn't export cleanly to RSS) but your actual text lives in ACF fields.</p>
-                    </div>
-
-                    <div class="hozio-support-steps">
-                        <h3>How to set it up</h3>
-                        <ol>
-                            <li><strong>Go to Hozio Pro &rarr; Blog Permalink Settings</strong>.</li>
-                            <li><strong>Toggle "ACF RSS Feed Override"</strong> to enable.</li>
-                            <li><strong>Save settings.</strong></li>
-                            <li>Your RSS feed will now pull content from ACF fields: Introduction, Section 1-7 (with H2/H3 headings and body text).</li>
-                            <li>Posts without ACF fields will fall back to the default WordPress content.</li>
-                        </ol>
-                    </div>
-
                     <div class="hozio-support-notes">
                         <h3>Important notes</h3>
                         <ul>
-                            <li>The feed also includes the <strong>featured image as an enclosure</strong> tag, which is compatible with Zapier and other RSS automation tools.</li>
-                            <li>ACF field names must match the expected structure: <code>introduction</code>, <code>section_1_heading</code>, <code>section_1_body</code>, etc.</li>
+                            <li>Core WordPress types and Elementor internal types are <strong>excluded from the list</strong>.</li>
+                            <li>Only <strong>public</strong> custom post types are shown.</li>
+                            <li>You may need to refresh the Elementor editor after saving.</li>
                         </ul>
                     </div>
                 </div>
-            </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 9: Service Menu Sync -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="service-menu-sync">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-menu-alt3"></span>
-                    <h2>Service Menu Sync</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
-                </div>
-                <div class="hozio-support-section-content">
+                <!-- Section: services-children-query -->
+                <div data-content="services-children-query">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
-                        <p>Automatically adds and removes pages from navigation menus when they are tagged with the <strong>"service-pages-loop-item"</strong> Page Taxonomy term. This keeps your service menus in sync without manual menu management.</p>
+                        <p>Provides a custom Elementor Query ID called <code>services_children</code> that automatically fetches all child pages of the page with the slug <strong>&ldquo;services&rdquo;</strong>.</p>
                     </div>
-
                     <div class="hozio-support-steps">
-                        <h3>How to set it up</h3>
+                        <h3>How to use</h3>
                         <ol>
-                            <li><strong>Ensure the feature is enabled</strong> in Hozio Pro &rarr; Hozio Pro Settings (the "Service Menu Sync" toggle).</li>
-                            <li><strong>Create your navigation menus</strong> in Appearance &rarr; Menus. The sync works with three menus:
-                                <ul>
-                                    <li><strong>Main Menu</strong> &mdash; pages added as children of a "Services" menu item</li>
-                                    <li><strong>Main Menu Toggle</strong> &mdash; same structure</li>
-                                    <li><strong>Services Menu</strong> &mdash; pages added at top level</li>
-                                </ul>
-                            </li>
-                            <li><strong>Create a Page Taxonomy term</strong> called "service-pages-loop-item".</li>
-                            <li><strong>Assign this term</strong> to any page you want to appear in the service menus.</li>
-                            <li>The page will automatically appear in the menus. Remove the term to remove it from menus.</li>
+                            <li>In Elementor, add a <strong>Posts</strong> or <strong>Loop Grid</strong> widget.</li>
+                            <li>In <strong>Query</strong> settings, set the <strong>Query ID</strong> to: <code>services_children</code></li>
+                            <li>The widget will automatically display all child pages of your "Services" page.</li>
                         </ol>
                     </div>
-
                     <div class="hozio-support-notes">
                         <h3>Important notes</h3>
                         <ul>
-                            <li>Only <strong>auto-added items</strong> are removed when the term is removed. Manually created menu items are never touched.</li>
-                            <li>Compatible with <strong>WP All Import</strong> &mdash; uses delayed sync with retry logic for bulk imports.</li>
-                            <li>Can be <strong>disabled globally</strong> via Hozio Pro Settings.</li>
+                            <li>Your site must have a page with the slug <strong>"services"</strong>.</li>
+                            <li>Only <strong>direct children</strong> are returned (not grandchildren).</li>
+                            <li>Also available as a <strong>Dynamic Tag</strong> in Elementor.</li>
                         </ul>
                     </div>
                 </div>
-            </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 10: HTML Sitemap -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="html-sitemap">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-networking"></span>
-                    <h2>HTML Sitemap</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
+                <!-- Section: dom-parsing -->
+                <div data-content="dom-parsing">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Automatically removes empty ACF-powered content from the frontend using two special CSS classes:</p>
+                        <h4 style="margin-top: 16px;"><code>hide-if-empty-acf</code></h4>
+                        <p>Add to an Elementor <strong>Icon List</strong> widget. Empty or fallback items are removed. If all items are empty, the entire widget is hidden.</p>
+                        <h4 style="margin-top: 16px;"><code>hide-if-no-wiki</code></h4>
+                        <p>Add to a <strong>container div</strong> wrapping a Text Editor widget. If the content is empty or matches fallback text, the container is hidden.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Ensure <strong>DOM Parsing</strong> is enabled in <strong>Hozio Pro &rarr; Settings</strong> (enabled by default).</li>
+                            <li>In Elementor, go to the widget's <strong>Advanced &rarr; CSS Classes</strong>.</li>
+                            <li>Add <code>hide-if-empty-acf</code> or <code>hide-if-no-wiki</code> as needed.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>Uses server-side HTML parsing (DOMDocument) &mdash; no flash of empty content.</li>
+                            <li>Recognized fallback values: empty strings, "Google Map Link", "USPS Link", "Pharmacy Link", "Weather Link", "County &amp; State Wiki Link".</li>
+                        </ul>
+                    </div>
                 </div>
-                <div class="hozio-support-section-content">
+
+                <!-- Section: nav-text-color -->
+                <div data-content="nav-text-color">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Sets a custom text color for the last item in your toggle navigation menu (typically a CTA button). Applied via inline CSS targeting <code>#toggle-menu li:last-of-type</code>.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Go to <strong>Hozio Pro &rarr; Settings</strong>.</li>
+                            <li>Find <strong>Navigation Text Color</strong> under Business Details.</li>
+                            <li>Use the color picker to select your color.</li>
+                            <li>Click <strong>Save</strong>.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>Targets only the <strong>last menu item</strong> in <code>#toggle-menu</code>.</li>
+                            <li>Default color is <strong>black</strong> if not set.</li>
+                            <li>Uses <code>!important</code> to override theme styles.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: html-sitemap -->
+                <div data-content="html-sitemap">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
                         <p>Provides an HTML sitemap page template that displays a hierarchical list of all your site's content, styled with customizable colors.</p>
                     </div>
-
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
                         <ol>
                             <li><strong>Create a new page</strong> in WordPress (e.g., title it "Sitemap").</li>
-                            <li><strong>In the Page Attributes</strong> section, select <strong>"HTML Sitemap"</strong> as the page template.</li>
+                            <li><strong>In Page Attributes</strong>, select <strong>"HTML Sitemap"</strong> as the page template.</li>
                             <li><strong>Publish the page.</strong></li>
-                            <li><strong>Customize colors</strong> by going to Hozio Pro &rarr; Sitemap Settings &rarr; Appearance tab.</li>
+                            <li><strong>Customize colors</strong> via Hozio Pro &rarr; Sitemap Settings &rarr; Appearance tab.</li>
                         </ol>
                     </div>
-
                     <div class="hozio-support-notes">
                         <h3>Important notes</h3>
                         <ul>
@@ -505,333 +626,465 @@ function hozio_support_page() {
                         </ul>
                     </div>
                 </div>
-            </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 11: Lead Management -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="lead-management">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-email-alt"></span>
-                    <h2>Lead Management (CRM Dashboard)</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
-                </div>
-                <div class="hozio-support-section-content">
+                <!-- Section: sitemap-layout-editor -->
+                <div data-content="sitemap-layout-editor">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
-                        <p>A built-in CRM dashboard for managing Elementor form submissions. Displays all leads with search, filtering, pagination, and detailed views. Non-admin users are automatically restricted to only see the Lead Submissions page.</p>
+                        <p>The Layout Editor gives you full control over how your HTML sitemap is organized with a drag-and-drop interface. Two modes:</p>
+                        <ul>
+                            <li><strong>Override + Auto-fill:</strong> Manual accordions render first, remaining pages auto-detected.</li>
+                            <li><strong>Manual Only:</strong> Only your manually defined accordions appear.</li>
+                        </ul>
                     </div>
-
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
                         <ol>
-                            <li><strong>Lead Submissions</strong> appears as its own menu item in the WordPress admin (separate from Hozio Pro).</li>
-                            <li><strong>Elementor form submissions</strong> are automatically captured and displayed in the dashboard.</li>
-                            <li><strong>Click any lead</strong> to view full submission details.</li>
-                            <li><strong>To customize colors</strong>, go to Lead Submissions &rarr; Display Settings (admin only).</li>
-                            <li><strong>Non-admin users</strong> are automatically redirected to the Lead Submissions page after login. They only see this page and their profile.</li>
+                            <li>Navigate to <strong>Hozio Pro &rarr; Sitemap Settings &rarr; Layout Editor</strong> tab.</li>
+                            <li>Enable <strong>"Enable layout overrides"</strong>.</li>
+                            <li>Select your mode: <strong>Override + Auto-fill</strong> or <strong>Manual Only</strong>.</li>
+                            <li>Use <strong>"Import Current Auto-Detection"</strong> to import the current layout as a starting point.</li>
+                            <li>Use <strong>"Add Accordion"</strong> to create new sections. Drag and drop to reorder.</li>
+                            <li>Click <strong>Save Layout</strong> when finished.</li>
                         </ol>
                     </div>
-
                     <div class="hozio-support-notes">
                         <h3>Important notes</h3>
                         <ul>
-                            <li>You can also use the <code>[leads_digest]</code> shortcode to display leads on a frontend page.</li>
-                            <li>Display Settings let you customize all colors: backgrounds, text, links, buttons, search bar, and borders.</li>
-                            <li>Non-admin access restrictions can be managed by adjusting user roles.</li>
+                            <li>The <strong>Exclude Pages</strong> section lets you hide specific pages from the sitemap entirely.</li>
+                            <li>Importing auto-detection <strong>replaces</strong> your current manual layout.</li>
+                            <li>Child pages can have nested children (sub-accordions) for multi-level structures.</li>
                         </ul>
                     </div>
                 </div>
-            </div>
 
-            <!-- ============================================ -->
-            <!-- SECTION 12: Plugin Settings -->
-            <!-- ============================================ -->
-            <div class="hozio-support-section" data-section="plugin-settings">
-                <div class="hozio-support-section-header">
-                    <span class="dashicons dashicons-admin-generic"></span>
-                    <h2>Plugin Settings & Debug Tools</h2>
-                    <span class="hozio-support-toggle dashicons dashicons-arrow-down-alt2"></span>
+                <!-- Section: blog-permalink -->
+                <div data-content="blog-permalink">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Customizes your blog post URL structure independently from WordPress's default permalink settings. Add a <code>/blog/</code> prefix and/or include the post's category in the URL.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Go to <strong>Hozio Pro &rarr; Blog Permalink Settings</strong>.</li>
+                            <li>Toggle <strong>"Blog Prefix"</strong> and/or <strong>"Category Prefix"</strong>.</li>
+                            <li>Check the preview at the bottom of the page.</li>
+                            <li><strong>Save.</strong> Rewrite rules are flushed automatically.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>URL structure examples</h3>
+                        <ul>
+                            <li>Both enabled: <code>/blog/category-name/post-name/</code></li>
+                            <li>Blog prefix only: <code>/blog/post-name/</code></li>
+                            <li>Category prefix only: <code>/category-name/post-name/</code></li>
+                            <li>Both disabled: <code>/post-name/</code></li>
+                        </ul>
+                    </div>
                 </div>
-                <div class="hozio-support-section-content">
+
+                <!-- Section: rss-feed -->
+                <div data-content="rss-feed">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Replaces the default WordPress RSS feed content with structured content pulled from ACF fields. Useful when your post content is built with Elementor but your actual text lives in ACF fields.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Go to <strong>Hozio Pro &rarr; Blog Permalink Settings</strong>.</li>
+                            <li>Toggle <strong>"ACF RSS Feed Override"</strong> to enable.</li>
+                            <li><strong>Save settings.</strong></li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>The feed includes the <strong>featured image as an enclosure</strong> tag (compatible with Zapier).</li>
+                            <li>ACF field names must match the expected structure: <code>introduction</code>, <code>section_1_heading</code>, <code>section_1_body</code>, etc.</li>
+                            <li>Posts without ACF fields fall back to default WordPress content.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: service-menu-sync -->
+                <div data-content="service-menu-sync">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Automatically adds and removes pages from navigation menus when tagged with the <strong>"service-pages-loop-item"</strong> Page Taxonomy term.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Ensure <strong>Service Menu Sync</strong> is enabled in Hozio Pro Settings.</li>
+                            <li>Create your navigation menus in <strong>Appearance &rarr; Menus</strong>. The sync works with: Main Menu, Main Menu Toggle, and Services Menu.</li>
+                            <li>Create a Page Taxonomy term called <strong>"service-pages-loop-item"</strong>.</li>
+                            <li>Assign this term to any page you want to appear in the service menus.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>Only <strong>auto-added items</strong> are removed when the term is removed. Manual menu items are never touched.</li>
+                            <li>Compatible with <strong>WP All Import</strong> &mdash; uses delayed sync with retry logic.</li>
+                            <li>Can be <strong>disabled globally</strong> via Hozio Pro Settings.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: lead-management -->
+                <div data-content="lead-management">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>A built-in CRM dashboard for managing Elementor form submissions. Displays all leads with search, filtering, pagination, and detailed views.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li><strong>Lead Submissions</strong> appears as its own menu item in the WordPress admin.</li>
+                            <li>Elementor form submissions are automatically captured and displayed.</li>
+                            <li>Click any lead to view full submission details.</li>
+                            <li>To customize colors, go to <strong>Lead Submissions &rarr; Display Settings</strong> (admin only).</li>
+                            <li>Non-admin users are automatically redirected to the Lead Submissions page after login.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li><strong>Required Form Field IDs:</strong> Submissions will appear blank without these:
+                                <ul style="margin-top: 6px; margin-bottom: 6px;">
+                                    <li>First Name: <code>fname</code></li>
+                                    <li>Last Name: <code>lname</code></li>
+                                    <li>Email: <code>email</code></li>
+                                    <li>Telephone: <code>tel</code></li>
+                                </ul>
+                                Set these in Elementor under each form field's <strong>Advanced</strong> tab &rarr; <strong>ID</strong> field.
+                            </li>
+                            <li>You can also use the <code>[leads_digest]</code> shortcode to display leads on a frontend page.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: plugin-settings -->
+                <div data-content="plugin-settings">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
                         <p>Centralized settings page for controlling plugin-wide options, enabling debug logging for troubleshooting, and managing feature toggles.</p>
                     </div>
-
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
                         <ol>
-                            <li><strong>Go to Hozio Pro &rarr; Hozio Pro Settings</strong>.</li>
-                            <li><strong>Feature toggles available:</strong>
-                                <ul>
-                                    <li><strong>DOM Parsing</strong> &mdash; auto-hides empty ACF sections in page content</li>
-                                    <li><strong>Service Menu Sync</strong> &mdash; automatic menu management (see Service Menu Sync section)</li>
-                                    <li><strong>Auto-Updates</strong> &mdash; checks GitHub for new plugin releases</li>
-                                </ul>
-                            </li>
+                            <li>Go to <strong>Hozio Pro &rarr; Hozio Pro Settings</strong>.</li>
+                            <li><strong>Feature toggles:</strong> DOM Parsing, Service Menu Sync, Auto-Updates.</li>
                             <li><strong>Enable HOZIO_DEBUG</strong> to start logging. Logs are written to <code>wp-content/hozio-debug.log</code>.</li>
-                            <li>Use the <strong>"Test Log Entry"</strong> button to verify logging is working.</li>
-                            <li>Use the <strong>"Clear Log"</strong> button to reset the log file.</li>
+                            <li>Use <strong>"Test Log Entry"</strong> to verify logging and <strong>"Clear Log"</strong> to reset.</li>
                         </ol>
                     </div>
-
                     <div class="hozio-support-notes">
                         <h3>Important notes</h3>
                         <ul>
-                            <li>Debug logging works <strong>independently from WP_DEBUG</strong> &mdash; you don't need to enable WP_DEBUG.</li>
+                            <li>Debug logging works <strong>independently from WP_DEBUG</strong>.</li>
                             <li>Logs are categorized by component: ParentPagesQuery, CountyQuery, TownQuery, LoopConfig, MenuSync, etc.</li>
-                            <li>Remember to <strong>disable debug logging</strong> on production sites to avoid unnecessary disk usage.</li>
+                            <li>Remember to <strong>disable debug logging</strong> on production sites.</li>
                         </ul>
                     </div>
                 </div>
+
+                <!-- Section: hub-connectivity -->
+                <div data-content="hub-connectivity">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Hub Connectivity allows your site to register with the Hozio Hub &mdash; a central management dashboard. Once connected, the Hub manages your license and can send remote commands.</p>
+                        <p>Supported remote operations: page management, plugin management, admin access, option updates, and REST API proxy.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Go to <strong>Hozio Pro &rarr; Settings</strong>.</li>
+                            <li>In the Hub Connection section, the Hub URL defaults to <code>https://www.hozio.com</code>.</li>
+                            <li>Enter your <strong>Registration Key</strong>.</li>
+                            <li>Click <strong>Connect</strong>. The site will register and receive its license.</li>
+                            <li>A heartbeat runs hourly to keep the Hub in sync.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>When connected, the <strong>license is managed remotely</strong> &mdash; no manual key entry needed.</li>
+                            <li>To disconnect, click <strong>Disconnect</strong> in the Hub Connection section.</li>
+                            <li>Remote commands include self-protection: the Hub cannot deactivate Hozio Pro itself.</li>
+                        </ul>
+                    </div>
+                </div>
+
+            </div><!-- #hozio-section-data -->
+
+            <!-- No Results Message -->
+            <div class="hozio-support-no-results" style="display:none;">
+                <span class="dashicons dashicons-search"></span>
+                <p>No matching documentation found. Try a different search term.</p>
             </div>
 
         </div><!-- .hozio-content -->
     </div><!-- .hozio-settings-wrapper -->
 
     <style>
-        /* Support page specific styles */
+        /* ============================== */
+        /* Search Bar                      */
+        /* ============================== */
         .hozio-support-search-wrapper {
             position: sticky;
             top: 32px;
             z-index: 100;
             background: var(--hozio-bg, #f9fafb);
             padding: 20px 0 10px;
-            margin-bottom: 10px;
+            margin-bottom: 0;
         }
 
-        .hozio-support-search-inner {
-            position: relative;
-        }
+        .hozio-support-search-inner { position: relative; }
 
         .hozio-support-search-icon {
-            position: absolute;
-            left: 18px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #00A0E3;
-            font-size: 20px !important;
-            width: 20px !important;
-            height: 20px !important;
-            pointer-events: none;
-            z-index: 2;
+            position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
+            color: #00A0E3; font-size: 20px !important; width: 20px !important; height: 20px !important;
+            pointer-events: none; z-index: 2;
         }
 
         .hozio-settings-wrapper .hozio-support-search-input,
         .hozio-settings-wrapper .hozio-support-search-input[type="text"] {
-            width: 100% !important;
-            max-width: 100% !important;
-            padding: 16px 44px 16px 50px !important;
-            border: 2px solid #e5e7eb !important;
-            border-radius: 12px !important;
-            font-size: 16px !important;
+            width: 100% !important; max-width: 100% !important;
+            padding: 14px 44px 14px 50px !important;
+            border: 2px solid #e5e7eb !important; border-radius: 12px !important;
+            font-size: 15px !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-            background: #ffffff !important;
-            color: #1f2937 !important;
+            background: #ffffff !important; color: #1f2937 !important;
             transition: all 0.2s ease !important;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06) !important;
-            box-sizing: border-box !important;
-            height: auto !important;
-            line-height: 1.4 !important;
-            margin: 0 !important;
+            box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1) !important;
+            box-sizing: border-box !important; height: auto !important;
+            line-height: 1.4 !important; margin: 0 !important;
         }
 
         .hozio-settings-wrapper .hozio-support-search-input:focus {
-            outline: none !important;
-            border-color: #00A0E3 !important;
-            box-shadow: 0 0 0 3px rgba(0, 160, 227, 0.15) !important;
+            outline: none !important; border-color: #00A0E3 !important;
+            box-shadow: 0 0 0 3px rgba(0,160,227,0.15) !important;
         }
 
         .hozio-settings-wrapper .hozio-support-search-input::placeholder {
-            color: #9ca3af !important;
-            opacity: 1 !important;
+            color: #9ca3af !important; opacity: 1 !important;
         }
 
         .hozio-support-search-clear {
-            position: absolute;
-            right: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 22px;
-            color: #999;
-            cursor: pointer;
-            line-height: 1;
-            padding: 4px;
-            z-index: 2;
+            position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+            font-size: 22px; color: #999; cursor: pointer; padding: 4px; z-index: 2;
         }
+        .hozio-support-search-clear:hover { color: #333; }
 
-        .hozio-support-search-clear:hover {
-            color: #333;
-        }
-
-        .hozio-support-search-hint {
-            margin: 8px 0 0;
-            font-size: 13px;
-            color: #6b7280;
-        }
-
-        /* Section styles */
-        .hozio-support-section {
-            background: var(--hozio-card-bg, #fff);
-            border-radius: 12px;
-            margin-bottom: 16px;
-            box-shadow: var(--hozio-shadow, 0 1px 3px rgba(0,0,0,0.1));
-            border: 1px solid var(--hozio-border, #e5e7eb);
-            border-left: 4px solid var(--hozio-blue, #00A0E3);
-            overflow: hidden;
-            transition: box-shadow 0.2s ease;
-        }
-
-        .hozio-support-section:nth-child(odd) {
-            border-left-color: var(--hozio-green, #8DC63F);
-        }
-
-        .hozio-support-section:nth-child(3n) {
-            border-left-color: var(--hozio-orange, #F7941D);
-        }
-
-        .hozio-support-section:hover {
-            box-shadow: var(--hozio-shadow-lg, 0 10px 15px rgba(0,0,0,0.1));
-        }
-
-        .hozio-support-section-header {
+        /* ============================== */
+        /* Category Tabs                   */
+        /* ============================== */
+        .hozio-tabs {
             display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 16px 0 20px;
+        }
+
+        .hozio-tab {
+            display: inline-flex;
             align-items: center;
-            gap: 12px;
-            padding: 20px 24px;
-            cursor: pointer;
-            user-select: none;
-            transition: background 0.15s ease;
-        }
-
-        .hozio-support-section-header:hover {
-            background: rgba(0, 160, 227, 0.03);
-        }
-
-        .hozio-support-section-header .dashicons:first-child {
-            color: var(--hozio-blue, #00A0E3);
-            font-size: 22px;
-            width: 22px;
-            height: 22px;
-        }
-
-        .hozio-support-section:nth-child(odd) .hozio-support-section-header .dashicons:first-child {
-            color: var(--hozio-green, #8DC63F);
-        }
-
-        .hozio-support-section:nth-child(3n) .hozio-support-section-header .dashicons:first-child {
-            color: var(--hozio-orange, #F7941D);
-        }
-
-        .hozio-support-section-header h2 {
-            margin: 0;
-            font-size: 17px;
+            gap: 6px;
+            padding: 8px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            background: #fff;
+            color: #6b7280;
+            font-size: 13px;
             font-weight: 600;
-            color: var(--hozio-text, #1f2937);
-            flex: 1;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
         }
 
-        .hozio-support-toggle {
-            color: #999;
-            transition: transform 0.3s ease;
+        .hozio-tab .dashicons {
+            font-size: 16px; width: 16px; height: 16px;
         }
 
-        .hozio-support-section.is-open .hozio-support-toggle {
-            transform: rotate(180deg);
+        .hozio-tab:hover {
+            border-color: #00A0E3;
+            color: #00A0E3;
+            background: rgba(0,160,227,0.04);
         }
 
-        /* Content area - collapsed by default */
-        .hozio-support-section-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.4s ease, padding 0.3s ease;
-            padding: 0 24px;
+        .hozio-tab.is-active {
+            border-color: #00A0E3;
+            background: #00A0E3;
+            color: #fff;
         }
 
-        .hozio-support-section.is-open .hozio-support-section-content {
-            max-height: 3000px;
-            padding: 0 24px 24px;
+        .hozio-tab.is-active .dashicons { color: #fff; }
+
+        /* ============================== */
+        /* Card Grid                       */
+        /* ============================== */
+        .hozio-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 16px;
         }
 
-        /* Inner content styling */
-        .hozio-support-what,
-        .hozio-support-steps,
-        .hozio-support-notes {
-            margin-bottom: 20px;
+        .hozio-card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
         }
 
-        .hozio-support-section-content h3 {
+        .hozio-card:hover {
+            border-color: #00A0E3;
+            box-shadow: 0 4px 12px rgba(0,160,227,0.12);
+            transform: translateY(-2px);
+        }
+
+        .hozio-card.is-active {
+            border-color: #00A0E3;
+            background: #f0f9ff;
+            box-shadow: 0 0 0 2px rgba(0,160,227,0.2);
+        }
+
+        .hozio-card.is-hidden { display: none; }
+
+        .hozio-card-icon {
+            font-size: 28px !important;
+            width: 28px !important;
+            height: 28px !important;
+            color: #00A0E3;
+            margin-bottom: 10px;
+        }
+
+        /* Alternate icon colors by category */
+        .hozio-card[data-category="pages"] .hozio-card-icon { color: #8DC63F; }
+        .hozio-card[data-category="elementor"] .hozio-card-icon { color: #F7941D; }
+        .hozio-card[data-category="sitemap"] .hozio-card-icon { color: #00A0E3; }
+        .hozio-card[data-category="settings"] .hozio-card-icon { color: #6D6E71; }
+
+        .hozio-card-title {
+            margin: 0 0 4px;
             font-size: 14px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .hozio-card-desc {
+            margin: 0;
+            font-size: 12.5px;
+            color: #9ca3af;
+            line-height: 1.4;
+        }
+
+        /* ============================== */
+        /* Detail Panel                    */
+        /* ============================== */
+        .hozio-detail-panel {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-top: 3px solid #00A0E3;
+            border-radius: 0 0 12px 12px;
+            margin-top: 20px;
+            padding: 28px 32px 32px;
+            position: relative;
+            animation: hozio-slide-down 0.25s ease;
+        }
+
+        @keyframes hozio-slide-down {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .hozio-detail-close {
+            position: absolute;
+            top: 12px;
+            right: 16px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #9ca3af;
+            cursor: pointer;
+            padding: 4px 8px;
+            line-height: 1;
+            border-radius: 4px;
+        }
+
+        .hozio-detail-close:hover {
+            color: #1f2937;
+            background: #f3f4f6;
+        }
+
+        /* Detail panel content styling */
+        .hozio-detail-body h3 {
+            font-size: 13px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            color: var(--hozio-gray, #6D6E71);
+            color: #6D6E71;
             margin: 0 0 10px;
             padding-bottom: 6px;
-            border-bottom: 1px solid var(--hozio-border, #e5e7eb);
+            border-bottom: 1px solid #e5e7eb;
         }
 
-        .hozio-support-section-content p {
+        .hozio-detail-body .hozio-support-what,
+        .hozio-detail-body .hozio-support-steps,
+        .hozio-detail-body .hozio-support-notes {
+            margin-bottom: 20px;
+        }
+
+        .hozio-detail-body p {
             font-size: 14px;
             line-height: 1.7;
-            color: var(--hozio-text, #1f2937);
+            color: #1f2937;
             margin: 0 0 8px;
         }
 
-        .hozio-support-section-content ol {
+        .hozio-detail-body ol {
             counter-reset: step-counter;
             list-style: none;
             padding-left: 0;
             margin: 0;
         }
 
-        .hozio-support-section-content ol > li {
+        .hozio-detail-body ol > li {
             counter-increment: step-counter;
             position: relative;
             padding-left: 40px;
             margin-bottom: 12px;
             font-size: 14px;
             line-height: 1.7;
-            color: var(--hozio-text, #1f2937);
+            color: #1f2937;
         }
 
-        .hozio-support-section-content ol > li::before {
+        .hozio-detail-body ol > li::before {
             content: counter(step-counter);
-            position: absolute;
-            left: 0;
-            top: 1px;
-            width: 26px;
-            height: 26px;
-            background: linear-gradient(135deg, var(--hozio-blue, #00A0E3), var(--hozio-green, #8DC63F));
-            color: white;
-            border-radius: 50%;
-            font-size: 13px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            line-height: 1;
+            position: absolute; left: 0; top: 1px;
+            width: 26px; height: 26px;
+            background: linear-gradient(135deg, #00A0E3, #8DC63F);
+            color: white; border-radius: 50%;
+            font-size: 13px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
         }
 
-        .hozio-support-section-content ol > li ul {
-            margin-top: 8px;
-            margin-bottom: 0;
+        .hozio-detail-body ol > li ul { margin-top: 8px; margin-bottom: 0; }
+
+        .hozio-detail-body ul { padding-left: 20px; margin: 0; }
+
+        .hozio-detail-body ul li {
+            font-size: 14px; line-height: 1.7; color: #1f2937; margin-bottom: 6px;
         }
 
-        .hozio-support-section-content ul {
-            padding-left: 20px;
-            margin: 0;
-        }
-
-        .hozio-support-section-content ul li {
-            font-size: 14px;
-            line-height: 1.7;
-            color: var(--hozio-text, #1f2937);
-            margin-bottom: 6px;
-        }
-
-        .hozio-support-section-content code {
+        .hozio-detail-body code {
             background: #f1f5f9;
             padding: 2px 8px;
             border-radius: 4px;
@@ -840,49 +1093,34 @@ function hozio_support_page() {
             font-family: 'Consolas', 'Monaco', monospace;
         }
 
-        /* No results */
+        /* ============================== */
+        /* No Results                      */
+        /* ============================== */
         .hozio-support-no-results {
             text-align: center;
             padding: 60px 20px;
-            color: var(--hozio-text-light, #6b7280);
+            color: #6b7280;
             font-size: 16px;
-            display: none;
         }
 
         .hozio-support-no-results .dashicons {
-            font-size: 48px;
-            width: 48px;
-            height: 48px;
-            color: #ddd;
-            display: block;
-            margin: 0 auto 12px;
+            font-size: 48px; width: 48px; height: 48px;
+            color: #ddd; display: block; margin: 0 auto 12px;
         }
 
-        /* Highlight matched text during search */
-        .hozio-support-section.is-match {
-            border-left-width: 6px;
-        }
-
+        /* ============================== */
+        /* Responsive                      */
+        /* ============================== */
         @media (max-width: 782px) {
-            .hozio-support-search-wrapper {
-                top: 46px;
-            }
+            .hozio-support-search-wrapper { top: 46px; }
+            .hozio-tabs { gap: 6px; }
+            .hozio-tab { padding: 6px 12px; font-size: 12px; }
+            .hozio-card-grid { grid-template-columns: 1fr; }
+            .hozio-detail-panel { padding: 20px 18px 24px; }
+        }
 
-            .hozio-support-section-header {
-                padding: 16px 18px;
-            }
-
-            .hozio-support-section-header h2 {
-                font-size: 15px;
-            }
-
-            .hozio-support-section-content {
-                padding: 0 18px;
-            }
-
-            .hozio-support-section.is-open .hozio-support-section-content {
-                padding: 0 18px 18px;
-            }
+        @media (min-width: 783px) and (max-width: 1100px) {
+            .hozio-card-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 
@@ -890,28 +1128,137 @@ function hozio_support_page() {
     (function() {
         'use strict';
 
-        // Toggle sections
-        document.querySelectorAll('.hozio-support-section-header').forEach(function(header) {
-            header.addEventListener('click', function() {
-                var section = this.closest('.hozio-support-section');
-                section.classList.toggle('is-open');
+        var tabs = document.querySelectorAll('.hozio-tab');
+        var cards = document.querySelectorAll('.hozio-card');
+        var searchInput = document.getElementById('hozio-support-search');
+        var clearBtn = document.getElementById('hozio-support-search-clear');
+        var tabsContainer = document.getElementById('hozio-tabs');
+        var detailPanel = document.getElementById('hozio-detail-panel');
+        var detailBody = document.getElementById('hozio-detail-body');
+        var detailClose = document.getElementById('hozio-detail-close');
+        var noResults = document.querySelector('.hozio-support-no-results');
+        var activeTab = 'getting-started';
+        var activeCard = null;
+        var debounceTimer;
+
+        // --- Tab switching ---
+        function switchTab(tabName) {
+            activeTab = tabName;
+            tabs.forEach(function(t) {
+                t.classList.toggle('is-active', t.getAttribute('data-tab') === tabName);
+            });
+            filterCards();
+            closeDetail();
+        }
+
+        tabs.forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                switchTab(this.getAttribute('data-tab'));
             });
         });
 
-        // Search functionality
-        var searchInput = document.getElementById('hozio-support-search');
-        var clearBtn = document.getElementById('hozio-support-search-clear');
-        var sections = document.querySelectorAll('.hozio-support-section');
-        var debounceTimer;
+        // --- Filter cards by active tab ---
+        function filterCards() {
+            cards.forEach(function(card) {
+                var show = card.getAttribute('data-category') === activeTab;
+                card.classList.toggle('is-hidden', !show);
+            });
+        }
+
+        // --- Card click → open detail panel ---
+        function openDetail(sectionId) {
+            var contentEl = document.querySelector('#hozio-section-data [data-content="' + sectionId + '"]');
+            if (!contentEl) return;
+
+            // Toggle same card
+            if (activeCard === sectionId) {
+                closeDetail();
+                return;
+            }
+
+            // Deactivate previous card
+            cards.forEach(function(c) { c.classList.remove('is-active'); });
+
+            // Activate clicked card
+            var clickedCard = document.querySelector('.hozio-card[data-section="' + sectionId + '"]');
+            if (clickedCard) clickedCard.classList.add('is-active');
+
+            activeCard = sectionId;
+            detailBody.innerHTML = contentEl.innerHTML;
+            detailPanel.style.display = 'block';
+
+            // Scroll panel into view
+            setTimeout(function() {
+                detailPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 50);
+        }
+
+        function closeDetail() {
+            detailPanel.style.display = 'none';
+            detailBody.innerHTML = '';
+            activeCard = null;
+            cards.forEach(function(c) { c.classList.remove('is-active'); });
+        }
+
+        cards.forEach(function(card) {
+            card.addEventListener('click', function() {
+                openDetail(this.getAttribute('data-section'));
+            });
+        });
+
+        if (detailClose) {
+            detailClose.addEventListener('click', closeDetail);
+        }
+
+        // --- Search ---
+        function doSearch(query) {
+            if (!query) {
+                // Clear search: show tabs, restore tab filter
+                tabsContainer.style.display = '';
+                filterCards();
+                closeDetail();
+                if (noResults) noResults.style.display = 'none';
+                return;
+            }
+
+            // Hide tabs during search
+            tabsContainer.style.display = 'none';
+            var visibleCount = 0;
+
+            cards.forEach(function(card) {
+                var title = card.querySelector('.hozio-card-title').textContent.toLowerCase();
+                var desc = card.getAttribute('data-description').toLowerCase();
+
+                // Also search section content
+                var sectionId = card.getAttribute('data-section');
+                var contentEl = document.querySelector('#hozio-section-data [data-content="' + sectionId + '"]');
+                var contentText = contentEl ? contentEl.textContent.toLowerCase() : '';
+
+                var matches = title.indexOf(query) !== -1 || desc.indexOf(query) !== -1 || contentText.indexOf(query) !== -1;
+
+                card.classList.toggle('is-hidden', !matches);
+                if (matches) visibleCount++;
+            });
+
+            if (noResults) {
+                noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+            }
+
+            // Close detail if the active card was hidden
+            if (activeCard) {
+                var activeEl = document.querySelector('.hozio-card[data-section="' + activeCard + '"]');
+                if (activeEl && activeEl.classList.contains('is-hidden')) {
+                    closeDetail();
+                }
+            }
+        }
 
         if (searchInput) {
             searchInput.addEventListener('input', function() {
                 clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(function() {
-                    filterSections(searchInput.value.trim().toLowerCase());
-                }, 200);
-
-                clearBtn.style.display = searchInput.value ? 'block' : 'none';
+                var val = searchInput.value.trim().toLowerCase();
+                debounceTimer = setTimeout(function() { doSearch(val); }, 200);
+                if (clearBtn) clearBtn.style.display = searchInput.value ? 'block' : 'none';
             });
         }
 
@@ -919,51 +1266,15 @@ function hozio_support_page() {
             clearBtn.addEventListener('click', function() {
                 searchInput.value = '';
                 clearBtn.style.display = 'none';
-                filterSections('');
+                doSearch('');
                 searchInput.focus();
             });
         }
 
-        function filterSections(query) {
-            var visibleCount = 0;
-
-            sections.forEach(function(section) {
-                if (!query) {
-                    // No search - show all, collapse all
-                    section.style.display = '';
-                    section.classList.remove('is-open', 'is-match');
-                    visibleCount++;
-                    return;
-                }
-
-                var headerText = section.querySelector('h2').textContent.toLowerCase();
-                var contentText = section.querySelector('.hozio-support-section-content').textContent.toLowerCase();
-                var matches = headerText.indexOf(query) !== -1 || contentText.indexOf(query) !== -1;
-
-                if (matches) {
-                    section.style.display = '';
-                    section.classList.add('is-open', 'is-match');
-                    visibleCount++;
-                } else {
-                    section.style.display = 'none';
-                    section.classList.remove('is-open', 'is-match');
-                }
-            });
-
-            // Show/hide no results message
-            var noResults = document.querySelector('.hozio-support-no-results');
-            if (noResults) {
-                noResults.style.display = (visibleCount === 0 && query) ? 'block' : 'none';
-            }
-        }
+        // --- Initial state ---
+        filterCards();
     })();
     </script>
 
-    <!-- No results message -->
-    <div class="hozio-support-no-results">
-        <span class="dashicons dashicons-search"></span>
-        No matching documentation found. Try a different search term.
-    </div>
-
-    <?php
+<?php
 }

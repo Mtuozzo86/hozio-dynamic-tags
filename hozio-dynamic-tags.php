@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.92
+Version:         3.93
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -14,7 +14,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '3.92');
+define('HOZIO_VERSION', '3.93');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -113,6 +113,132 @@ function hozio_current_year() {
   return date('Y');
 }
 add_shortcode('hozio_current_year','hozio_current_year');
+
+/**
+ * Universal [hozio] shortcode — use any dynamic tag value in HTML widgets.
+ *
+ * Usage:
+ *   [hozio tag="company-phone-1-name"]           → display phone number
+ *   [hozio tag="company-phone-1" format="url"]    → tel:5551234567
+ *   [hozio tag="company-email" format="url"]      → mailto:info@example.com
+ *   [hozio tag="company-address"]                 → HTML address
+ *   [hozio tag="years-of-experience"]             → calculated years
+ *   [hozio tag="facebook"]                        → URL
+ *   [hozio tag="my-custom-tag"]                   → custom tag value
+ */
+function hozio_shortcode_handler( $atts ) {
+    $atts   = shortcode_atts( array( 'tag' => '', 'format' => '' ), $atts, 'hozio' );
+    $tag    = sanitize_text_field( $atts['tag'] );
+    $format = sanitize_text_field( $atts['format'] );
+
+    if ( empty( $tag ) ) {
+        return '';
+    }
+
+    // --- Calculated: years-of-experience ---
+    if ( $tag === 'years-of-experience' ) {
+        $start = (int) get_option( 'hozio_start_year', 0 );
+        return $start > 0 ? (string) ( (int) date( 'Y' ) - $start ) : '0';
+    }
+
+    // --- Sitemap XML ---
+    if ( $tag === 'sitemap-xml' ) {
+        return esc_url( get_option( 'sitemap_url', home_url( '/sitemap.xml' ) ) );
+    }
+
+    // --- Icon-box tags (return full <a> element) ---
+    $icon_box_tags = array(
+        'phone-number-icon-box' => array( 'option' => 'hozio_company_phone_1', 'prefix' => 'tel:' ),
+        'sms-icon-box'          => array( 'option' => 'hozio_sms_phone',       'prefix' => 'sms:' ),
+        'email-icon-box'        => array( 'option' => 'hozio_company_email',   'prefix' => 'mailto:' ),
+    );
+    if ( isset( $icon_box_tags[ $tag ] ) ) {
+        $val = esc_attr( get_option( $icon_box_tags[ $tag ]['option'], '' ) );
+        return '<a href="' . esc_url( $icon_box_tags[ $tag ]['prefix'] . $val ) . '">' . esc_html( $val ) . '</a>';
+    }
+
+    // --- Phone tags ---
+    $phone_tags = array(
+        'company-phone-1' => 'hozio_company_phone_1',
+        'company-phone-2' => 'hozio_company_phone_2',
+        'google-ads-phone' => 'hozio_google_ads_phone',
+    );
+    if ( isset( $phone_tags[ $tag ] ) ) {
+        $val = get_option( $phone_tags[ $tag ], '' );
+        return $format === 'url' ? esc_url( 'tel:' . esc_attr( $val ) ) : esc_html( $val );
+    }
+
+    // --- SMS tags ---
+    if ( $tag === 'sms-phone' ) {
+        $val = get_option( 'hozio_sms_phone', '' );
+        return $format === 'url' ? esc_url( 'sms:' . esc_attr( $val ) ) : esc_html( $val );
+    }
+
+    // --- Email tag ---
+    if ( $tag === 'company-email' ) {
+        $val = get_option( 'hozio_company_email', '' );
+        return $format === 'url' ? esc_url( 'mailto:' . esc_attr( $val ) ) : esc_html( $val );
+    }
+
+    // --- Name display tags (return formatted display value) ---
+    $name_tags = array(
+        'company-phone-1-name' => 'hozio_company_phone_1',
+        'company-phone-2-name' => 'hozio_company_phone_2',
+        'sms-phone-name'       => 'hozio_sms_phone',
+    );
+    if ( isset( $name_tags[ $tag ] ) ) {
+        return esc_html( get_option( $name_tags[ $tag ], '' ) );
+    }
+
+    // --- HTML-allowed tags ---
+    if ( $tag === 'company-address' || $tag === 'business-hours' ) {
+        $allowed = array(
+            'br' => array(), 'a' => array( 'href' => array(), 'title' => array() ),
+            'b' => array(), 'i' => array(), 'p' => array(),
+            'ul' => array(), 'ol' => array(), 'li' => array(),
+        );
+        return wp_kses( get_option( 'hozio_' . str_replace( '-', '_', $tag ), '' ), $allowed );
+    }
+
+    // --- URL / social link tags ---
+    $url_map = array(
+        'gmb-link'     => 'hozio_gmb_link',
+        'facebook'     => 'hozio_facebook_url',
+        'instagram'    => 'hozio_instagram_url',
+        'twitter'      => 'hozio_twitter_url',
+        'tiktok'       => 'hozio_tiktok_url',
+        'linkedin'     => 'hozio_linkedin_url',
+        'bbb'          => 'hozio_bbb_url',
+        'yelp'         => 'hozio_yelp_url',
+        'youtube'      => 'hozio_youtube_url',
+        'angies-list'  => 'hozio_angies_list_url',
+        'home-advisor' => 'hozio_home_advisor_url',
+    );
+    if ( isset( $url_map[ $tag ] ) ) {
+        return esc_url( get_option( $url_map[ $tag ], '' ) );
+    }
+
+    // --- Text tags ---
+    if ( $tag === 'to-email-contact-form' ) {
+        return esc_html( get_option( 'hozio_to_email_contact_form', '' ) );
+    }
+
+    // --- Fallback: custom tags (hozio_{tag-slug} option) ---
+    $option_key = 'hozio_' . str_replace( '-', '_', $tag );
+    $value = get_option( $option_key, '' );
+
+    if ( $value === '' ) {
+        // Also try with hyphens (some custom tags use hyphens in the option key)
+        $value = get_option( 'hozio_' . $tag, '' );
+    }
+
+    if ( strpos( $value, '<script' ) !== false ) {
+        return ''; // Never output scripts via shortcode
+    }
+
+    return esc_html( $value );
+}
+add_shortcode( 'hozio', 'hozio_shortcode_handler' );
 
 
 // Hide all third-party admin notices on Hozio plugin pages
