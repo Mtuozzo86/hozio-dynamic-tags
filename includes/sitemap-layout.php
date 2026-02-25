@@ -87,8 +87,9 @@ add_action('wp_ajax_hozio_sitemap_get_page_children', function() {
     $results = array();
     foreach ($children as $c) {
         $results[] = array(
-            'id'    => $c->ID,
-            'title' => $c->post_title ? $c->post_title : '(Untitled)',
+            'id'        => $c->ID,
+            'title'     => $c->post_title ? $c->post_title : '(Untitled)',
+            'permalink' => get_permalink($c->ID),
         );
     }
     wp_send_json_success($results);
@@ -127,6 +128,7 @@ add_action('wp_ajax_hozio_sitemap_get_all_pages', function() {
             'title'        => $p->post_title ? $p->post_title : '(Untitled)',
             'parent_id'    => $p->post_parent,
             'parent_title' => $parent_title,
+            'permalink'    => get_permalink($p->ID),
         );
     }
 
@@ -429,6 +431,7 @@ function hozio_sitemap_layout_page() {
                 'title'        => $p->post_title ? $p->post_title : '(Untitled)',
                 'parent_title' => $parent_title,
                 'status'       => $p->post_status,
+                'permalink'    => get_permalink($p->ID),
             );
         }
     }
@@ -459,6 +462,7 @@ function hozio_sitemap_layout_page() {
             'id'           => $p->ID,
             'title'        => $p->post_title ? $p->post_title : '(Untitled)',
             'parent_title' => $parent_title,
+            'permalink'    => get_permalink($p->ID),
         );
     }
     ?>
@@ -679,6 +683,12 @@ function hozio_sitemap_layout_page() {
             return 'Page #' + pageId;
         }
 
+        function getPagePermalink(pageId) {
+            pageId = parseInt(pageId);
+            if (pageTitles[pageId] && pageTitles[pageId].permalink) return pageTitles[pageId].permalink;
+            return '';
+        }
+
         function getAllAssignedIds() {
             var ids = [];
             function collect(items) {
@@ -773,7 +783,27 @@ function hozio_sitemap_layout_page() {
             html += '<span class="accordion-card-drag dashicons dashicons-move" title="Drag to reorder"></span>';
             html += '<span class="accordion-card-level-badge" style="background: ' + levelColor + ';">' + levelLabel + '</span>';
             html += '<span class="accordion-card-title">' + escHtml(title) + '</span>';
+            var accLink = getPagePermalink(acc.page_id);
+            if (accLink) {
+                html += '<a href="' + escHtml(accLink) + '" target="_blank" class="accordion-page-link" title="Open page in new tab">';
+                html += '<span class="dashicons dashicons-external"></span></a>';
+            }
             html += '<span class="accordion-card-count">' + childCount + ' page' + (childCount !== 1 ? 's' : '') + '</span>';
+            // "Move Into" button — only for top-level accordions when there are 2+
+            if (level === 1 && accordions.length > 1) {
+                html += '<div class="move-to-wrapper">';
+                html += '<button type="button" class="move-to-btn" data-path="' + path + '" title="Nest this accordion inside another">';
+                html += '<span class="dashicons dashicons-migrate"></span> Move Into</button>';
+                html += '<div class="move-to-dropdown" data-source-path="' + path + '" style="display:none;">';
+                for (var m = 0; m < accordions.length; m++) {
+                    if (String(m) === path) continue;
+                    var mTitle = getPageTitleShort(accordions[m].page_id);
+                    html += '<div class="move-to-option" data-source-path="' + path + '" data-target-index="' + m + '">';
+                    html += '<span class="dashicons dashicons-arrow-right-alt"></span> ' + escHtml(mTitle);
+                    html += '</div>';
+                }
+                html += '</div></div>';
+            }
             html += '<button type="button" class="accordion-card-toggle" title="' + (isCollapsed ? 'Expand' : 'Collapse') + '">';
             html += '<span class="dashicons dashicons-arrow-' + (isCollapsed ? 'down' : 'up') + '-alt2"></span></button>';
             html += '<button type="button" class="accordion-card-delete" data-path="' + path + '" title="Remove">';
@@ -822,6 +852,11 @@ function hozio_sitemap_layout_page() {
                     html += '<div class="child-item ' + (isChildAccordion ? 'is-accordion' : '') + '" data-child-path="' + childPath + '">';
                     html += '<span class="child-drag dashicons dashicons-move" title="Drag to reorder"></span>';
                     html += '<span class="child-title">' + escHtml(getPageTitleShort(child.page_id)) + '</span>';
+                    var childLink = getPagePermalink(child.page_id);
+                    if (childLink) {
+                        html += '<a href="' + escHtml(childLink) + '" target="_blank" class="child-page-link" title="Open page in new tab">';
+                        html += '<span class="dashicons dashicons-external"></span></a>';
+                    }
 
                     if (level < 3) {
                         if (isChildAccordion) {
@@ -938,6 +973,57 @@ function hozio_sitemap_layout_page() {
             renderAccordions();
         });
 
+        // ========================================
+        // MOVE INTO (nest accordion inside another)
+        // ========================================
+        $(document).on('click', '.move-to-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var $dropdown = $(this).siblings('.move-to-dropdown');
+            $('.move-to-dropdown').not($dropdown).hide();
+            $dropdown.toggle();
+        });
+
+        // Close dropdowns on outside click
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('.move-to-wrapper').length) {
+                $('.move-to-dropdown').hide();
+            }
+        });
+
+        // Execute the move
+        $(document).on('click', '.move-to-option', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var sourceIdx = parseInt($(this).data('source-path'));
+            var targetIdx = parseInt($(this).data('target-index'));
+
+            var sourceAcc = accordions[sourceIdx];
+            var targetAcc = accordions[targetIdx];
+            if (!sourceAcc || !targetAcc) return;
+
+            var sourceTitle = getPageTitleShort(sourceAcc.page_id);
+            var targetTitle = getPageTitleShort(targetAcc.page_id);
+
+            if (!confirm('Move "' + sourceTitle + '" into "' + targetTitle + '" as a nested accordion?')) return;
+
+            if (!targetAcc.children) targetAcc.children = [];
+
+            // Add source as a child of target, preserving its entire subtree
+            targetAcc.children.push({
+                page_id: sourceAcc.page_id,
+                order: targetAcc.children.length,
+                children: sourceAcc.children || [],
+                _is_accordion: true,
+                _collapsed: false
+            });
+
+            // Remove source from top-level
+            accordions.splice(sourceIdx, 1);
+
+            renderAccordions();
+        });
+
         // Change parent page (works at any level)
         $(document).on('click', '.change-parent', function(e) {
             e.preventDefault();
@@ -979,7 +1065,7 @@ function hozio_sitemap_layout_page() {
                         $results.html(html).show();
                         for (var i = 0; i < response.data.length; i++) {
                             var p = response.data[i];
-                            pageTitles[p.id] = { title: p.title, parent_title: p.parent_title, status: 'publish' };
+                            pageTitles[p.id] = { title: p.title, parent_title: p.parent_title, status: 'publish', permalink: p.permalink || '' };
                         }
                     } else {
                         $results.html('<div class="search-no-results">No pages found</div>').show();
@@ -1073,7 +1159,7 @@ function hozio_sitemap_layout_page() {
                         $results.html(html).show();
                         for (var i = 0; i < response.data.length; i++) {
                             var p = response.data[i];
-                            pageTitles[p.id] = { title: p.title, parent_title: p.parent_title, status: 'publish' };
+                            pageTitles[p.id] = { title: p.title, parent_title: p.parent_title, status: 'publish', permalink: p.permalink || '' };
                         }
                     } else {
                         $results.html('<div class="search-no-results">No pages found</div>').show();
@@ -1128,7 +1214,7 @@ function hozio_sitemap_layout_page() {
                     for (var i = 0; i < response.data.length; i++) {
                         var child = response.data[i];
                         if (assigned.indexOf(child.id) === -1) {
-                            pageTitles[child.id] = { title: child.title, parent_title: '', status: 'publish' };
+                            pageTitles[child.id] = { title: child.title, parent_title: '', status: 'publish', permalink: child.permalink || '' };
                             target.children.push({
                                 page_id: child.id,
                                 order: target.children.length,
@@ -1280,7 +1366,7 @@ function hozio_sitemap_layout_page() {
                         }
                         $results.html(html).show();
                         for (var i = 0; i < response.data.length; i++) {
-                            pageTitles[response.data[i].id] = { title: response.data[i].title, parent_title: response.data[i].parent_title, status: 'publish' };
+                            pageTitles[response.data[i].id] = { title: response.data[i].title, parent_title: response.data[i].parent_title, status: 'publish', permalink: response.data[i].permalink || '' };
                         }
                     } else {
                         $results.html('<div class="search-no-results">No pages found</div>').show();
@@ -1475,6 +1561,7 @@ add_action('wp_ajax_hozio_sitemap_load_titles', function() {
             'title'        => $p->post_title ? $p->post_title : '(Untitled)',
             'parent_title' => $parent_title,
             'status'       => $p->post_status,
+            'permalink'    => get_permalink($p->ID),
         );
     }
 
@@ -1859,6 +1946,94 @@ function hozio_sitemap_layout_inline_styles() {
             border-color: #dc2626;
         }
         .acc-toggle-btn svg { flex-shrink: 0; }
+
+        /* Page link icons */
+        .child-page-link,
+        .accordion-page-link {
+            display: inline-flex;
+            align-items: center;
+            color: #9ca3af;
+            text-decoration: none;
+            padding: 2px;
+            border-radius: 3px;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .child-page-link .dashicons,
+        .accordion-page-link .dashicons {
+            font-size: 14px; width: 14px; height: 14px;
+        }
+        .child-page-link:hover,
+        .accordion-page-link:hover {
+            color: var(--hozio-blue);
+            background: rgba(0, 160, 227, 0.08);
+        }
+        .accordion-page-link { margin-left: 4px; }
+
+        /* Move Into button & dropdown */
+        .move-to-wrapper {
+            position: relative;
+            display: inline-flex;
+            margin-left: 6px;
+        }
+        .move-to-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #6b7280;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+            line-height: 1.4;
+        }
+        .move-to-btn .dashicons {
+            font-size: 14px; width: 14px; height: 14px;
+        }
+        .move-to-btn:hover {
+            color: var(--hozio-blue);
+            border-color: var(--hozio-blue);
+            background: #eff6ff;
+        }
+        .move-to-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 200;
+            min-width: 240px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            margin-top: 4px;
+        }
+        .move-to-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #374151;
+            border-bottom: 1px solid #f3f4f6;
+            transition: background 0.15s;
+        }
+        .move-to-option:last-child { border-bottom: none; }
+        .move-to-option:hover {
+            background: #f0f9ff;
+            color: var(--hozio-blue);
+        }
+        .move-to-option .dashicons {
+            font-size: 14px; width: 14px; height: 14px; color: #9ca3af;
+        }
+        .move-to-option:hover .dashicons { color: var(--hozio-blue); }
 
         .child-remove {
             background: none;

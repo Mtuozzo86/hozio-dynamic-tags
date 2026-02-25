@@ -928,7 +928,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 <?php endforeach; ?>
                                                 <?php // Then other children (town pages) ?>
                                                 <?php if (isset($accordion['other_children'])): ?>
-                                                    <?php foreach ($accordion['other_children'] as $child): ?>
+                                                    <?php foreach (($accordion['other_children'] ?? []) as $child): ?>
                                                         <li class="sitemap-item">
                                                             <a href="<?php echo get_permalink($child->ID); ?>" class="sitemap-link">
                                                                 <?php echo esc_html($child->post_title ? $child->post_title : 'Untitled'); ?>
@@ -978,7 +978,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </div>
                                 <?php else: ?>
                                     <!-- Standalone SPLI accordion (backward compat) -->
-                                    <?php $sa_simple_count = 1 + count($accordion['children']); ?>
+                                    <?php $sa_simple_count = 1 + count($accordion['other_children'] ?? []); ?>
                                     <div class="sitemap-accordion">
                                         <div class="sitemap-accordion-header" role="button" tabindex="0" aria-expanded="false">
                                             <span class="accordion-title">
@@ -996,7 +996,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                                         <?php echo esc_html($accordion['page']->post_title ? $accordion['page']->post_title : 'Untitled'); ?>
                                                     </a>
                                                 </li>
-                                                <?php foreach ($accordion['children'] as $child): ?>
+                                                <?php foreach (($accordion['children'] ?? []) as $child): ?>
                                                     <li class="sitemap-item">
                                                         <a href="<?php echo get_permalink($child->ID); ?>" class="sitemap-link">
                                                             <?php echo esc_html($child->post_title ? $child->post_title : 'Untitled'); ?>
