@@ -196,7 +196,13 @@ function hozio_replace_media_in_place_or_rename(WP_REST_Request $request) {
 
                 $convert = function ($coord, $ref) {
                     $parts = array_map(function ($v) {
-                        return eval('return ' . $v . ';');
+                        // Safely parse EXIF fraction strings (e.g., "45/1") without eval()
+                        $v = trim($v);
+                        if (strpos($v, '/') !== false) {
+                            list($num, $den) = explode('/', $v, 2);
+                            return (float) $den != 0 ? (float) $num / (float) $den : 0;
+                        }
+                        return (float) $v;
                     }, explode(',', $coord));
                     if (count($parts) === 3) {
                         list($deg, $min, $sec) = $parts;

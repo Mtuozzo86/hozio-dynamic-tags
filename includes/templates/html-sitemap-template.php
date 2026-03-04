@@ -978,7 +978,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     </div>
                                 <?php else: ?>
                                     <!-- Standalone SPLI accordion (backward compat) -->
-                                    <?php $sa_simple_count = 1 + count($accordion['other_children'] ?? []); ?>
+                                    <?php $sa_simple_count = 1 + count($accordion['children'] ?? []); ?>
                                     <div class="sitemap-accordion">
                                         <div class="sitemap-accordion-header" role="button" tabindex="0" aria-expanded="false">
                                             <span class="accordion-title">

@@ -59,6 +59,7 @@ class Hozio_Plugin_Updater {
         // Hook into WordPress update system
         add_filter('pre_set_site_transient_update_plugins', [$this, 'check_for_update']);
         add_filter('plugins_api', [$this, 'plugin_info'], 20, 3);
+        add_filter('upgrader_source_selection', [$this, 'fix_source_directory'], 10, 4);
         add_filter('upgrader_post_install', [$this, 'after_install'], 10, 3);
 
         // Enable auto-updates for this plugin (when license valid and setting enabled)
@@ -406,6 +407,35 @@ class Hozio_Plugin_Updater {
     /**
      * Handle post-installation tasks (fix folder name if needed)
      */
+    /**
+     * Fix the extracted directory name before WordPress installs it.
+     * GitHub zipballs extract to "Mtuozzo86-hozio-dynamic-tags-{hash}/"
+     * which must be renamed to "hozio-dynamic-tags/" before installation.
+     */
+    public function fix_source_directory($source, $remote_source, $upgrader, $hook_extra) {
+        global $wp_filesystem;
+
+        // Only process our plugin updates
+        if (!isset($hook_extra['plugin']) || $hook_extra['plugin'] !== $this->plugin_file) {
+            return $source;
+        }
+
+        $source_basename = untrailingslashit(basename($source));
+        $correct_slug = $this->plugin_slug;
+
+        // If the extracted folder doesn't match our slug, rename it
+        if ($source_basename !== $correct_slug) {
+            $corrected_source = trailingslashit($remote_source) . trailingslashit($correct_slug);
+
+            if ($wp_filesystem->move($source, $corrected_source)) {
+                hozio_log('Renamed source directory from "' . $source_basename . '" to "' . $correct_slug . '"', 'Updater');
+                return $corrected_source;
+            }
+        }
+
+        return $source;
+    }
+
     public function after_install($response, $hook_extra, $result) {
         global $wp_filesystem;
 
@@ -414,17 +444,19 @@ class Hozio_Plugin_Updater {
             return $response;
         }
 
-        // Get the installed folder name
+        // Double-check: if the folder is still wrong, rename it
         $install_directory = $result['destination'];
         $plugin_directory = WP_PLUGIN_DIR . '/' . $this->plugin_slug;
 
-        // If GitHub's zipball was used, folder will have a weird name like "Mtuozzo86-hozio-dynamic-tags-abc123"
-        // We need to rename it to "hozio-dynamic-tags"
-        if ($install_directory !== $plugin_directory) {
+        if ($install_directory !== $plugin_directory && $wp_filesystem->is_dir($install_directory)) {
+            // Remove old directory if it exists to prevent move failure
+            if ($wp_filesystem->is_dir($plugin_directory)) {
+                $wp_filesystem->delete($plugin_directory, true);
+            }
             $wp_filesystem->move($install_directory, $plugin_directory);
             $result['destination'] = $plugin_directory;
 
-            hozio_log('Renamed plugin folder after update', 'Updater');
+            hozio_log('Renamed plugin folder after install', 'Updater');
         }
 
         // Reactivate the plugin
