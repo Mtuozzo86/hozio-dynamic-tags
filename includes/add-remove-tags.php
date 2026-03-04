@@ -480,7 +480,7 @@
                                 </span>
                             </div>
                         </div>
-                        <a href="<?php echo esc_url(admin_url('admin-post.php?action=hozio_remove_tag&tag=' . esc_attr($tag['value']))); ?>" 
+                        <a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=hozio_remove_tag&tag=' . urlencode($tag['value'])), 'hozio_remove_tag_' . $tag['value'])); ?>"
                            class="button hozio-remove-btn"
                            onclick="return confirm('Are you sure you want to remove the tag \"<?php echo esc_js($tag['title']); ?>\"? This action cannot be undone.');">
                             <span class="dashicons dashicons-trash"></span>

@@ -203,7 +203,7 @@ function hozio_replace_media_in_place_or_rename(WP_REST_Request $request) {
                             return (float) $den != 0 ? (float) $num / (float) $den : 0;
                         }
                         return (float) $v;
-                    }, explode(',', $coord));
+                    }, $coord);
                     if (count($parts) === 3) {
                         list($deg, $min, $sec) = $parts;
                         $decimal = $deg + ($min / 60) + ($sec / 3600);

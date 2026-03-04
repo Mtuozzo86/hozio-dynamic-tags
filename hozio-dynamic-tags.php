@@ -411,12 +411,11 @@ function hozio_add_dynamic_tag() {
 // Handle tag removal
 add_action('admin_post_hozio_remove_tag', 'hozio_remove_dynamic_tag');
 function hozio_remove_dynamic_tag() {
-    if (!current_user_can('manage_options')) {
+    $tag_value = isset($_GET['tag']) ? sanitize_text_field($_GET['tag']) : '';
+
+    if (!current_user_can('manage_options') || !wp_verify_nonce($_GET['_wpnonce'] ?? '', 'hozio_remove_tag_' . $tag_value)) {
         wp_die('Unauthorized request');
     }
-
-    // Get the tag value to be removed
-    $tag_value = sanitize_text_field($_GET['tag']);
     $custom_tags = get_option('hozio_custom_tags', []);
 
     // Loop through tags and remove the one that matches
@@ -435,177 +434,9 @@ function hozio_remove_dynamic_tag() {
     exit;
 }
 
-// ========================================
-// DYNAMIC TAG BASE CLASSES (replaces eval() for security)
-// ========================================
-
-/**
- * Base class for URL-type dynamic tags.
- * Each instance stores its own config (tag name, title, option key, URL scheme).
- */
-class Hozio_URL_Dynamic_Tag extends \Elementor\Core\DynamicTags\Tag {
-    protected $_tag_name    = '';
-    protected $_tag_title   = '';
-    protected $_option_key  = '';
-    protected $_url_scheme  = 'url';
-
-    public function __construct( array $data = [], $args = null, $config = [] ) {
-        if ( ! empty( $config['tag_name'] ) )   $this->_tag_name   = $config['tag_name'];
-        if ( ! empty( $config['tag_title'] ) )  $this->_tag_title  = $config['tag_title'];
-        if ( ! empty( $config['option_key'] ) ) $this->_option_key = $config['option_key'];
-        if ( ! empty( $config['url_scheme'] ) ) $this->_url_scheme = $config['url_scheme'];
-        parent::__construct( $data, $args );
-    }
-
-    public function get_name()       { return $this->_tag_name; }
-    public function get_title()      { return __( $this->_tag_title, 'plugin-name' ); }
-    public function get_group()      { return 'site'; }
-    public function get_categories() { return [ \Elementor\Modules\DynamicTags\Module::URL_CATEGORY ]; }
-    protected function register_controls() {}
-
-    public function render() {
-        $value = get_option( $this->_option_key, '' );
-        switch ( $this->_url_scheme ) {
-            case 'tel':
-                echo esc_url( 'tel:' . esc_attr( $value ) );
-                break;
-            case 'sms':
-                echo esc_url( 'sms:' . esc_attr( $value ) );
-                break;
-            case 'mailto':
-                echo esc_url( 'mailto:' . esc_attr( $value ) );
-                break;
-            case 'url':
-            default:
-                echo esc_url( $value ?: home_url( '/sitemap.xml' ) );
-                break;
-        }
-    }
-
-    /**
-     * Factory: create a uniquely-named subclass without eval().
-     */
-    public static function create( $tag_name, $tag_title, $option_key, $url_scheme ) {
-        $config = [
-            'tag_name'   => $tag_name,
-            'tag_title'  => $tag_title,
-            'option_key' => $option_key,
-            'url_scheme' => $url_scheme,
-        ];
-        // Create instance with config passed through constructor
-        $instance = new self( [], null, $config );
-        return $instance;
-    }
-}
-
-/**
- * Base class for Text-type dynamic tags.
- */
-class Hozio_Text_Dynamic_Tag extends \Elementor\Core\DynamicTags\Tag {
-    protected $_tag_name   = '';
-    protected $_tag_title  = '';
-    protected $_option_key = '';
-
-    public function __construct( array $data = [], $args = null, $config = [] ) {
-        if ( ! empty( $config['tag_name'] ) )   $this->_tag_name   = $config['tag_name'];
-        if ( ! empty( $config['tag_title'] ) )  $this->_tag_title  = $config['tag_title'];
-        if ( ! empty( $config['option_key'] ) ) $this->_option_key = $config['option_key'];
-        parent::__construct( $data, $args );
-    }
-
-    public function get_name()       { return $this->_tag_name; }
-    public function get_title()      { return __( $this->_tag_title, 'plugin-name' ); }
-    public function get_group()      { return 'site'; }
-    public function get_categories() { return [ \Elementor\Modules\DynamicTags\Module::TEXT_CATEGORY ]; }
-    protected function register_controls() {}
-
-    public function render() {
-        if ( $this->_tag_name === 'years-of-experience' ) {
-            $start_year = (int) get_option( 'hozio_start_year', 0 );
-            $current_year = (int) date( 'Y' );
-            echo esc_html( $start_year > 0 ? $current_year - $start_year : 0 );
-        } elseif ( in_array( $this->_tag_name, [ 'company-address', 'business-hours' ], true ) ) {
-            echo wp_kses_post( get_option( $this->_option_key, '' ) );
-        } else {
-            echo esc_html( get_option( $this->_option_key, '' ) );
-        }
-    }
-
-    public static function create( $tag_name, $tag_title, $option_key ) {
-        return new self( [], null, [
-            'tag_name'   => $tag_name,
-            'tag_title'  => $tag_title,
-            'option_key' => $option_key,
-        ] );
-    }
-}
-
-/**
- * Fixed-value tag for services_children query ID.
- */
-class Hozio_Services_Children_Tag extends \Elementor\Core\DynamicTags\Tag {
-    public function get_name()       { return 'services_children'; }
-    public function get_title()      { return __( 'Query ID Service Child Pages', 'plugin-name' ); }
-    public function get_group()      { return 'site'; }
-    public function get_categories() { return [ \Elementor\Modules\DynamicTags\Module::TEXT_CATEGORY ]; }
-    protected function register_controls() {}
-    public function render()         { echo 'services_children'; }
-}
-
-// Register all dynamic tags with Elementor
-add_action('elementor/dynamic_tags/register', function($dynamic_tags) {
-
-    // --- URL Tags ---
-    $url_tags = [
-        ['company-phone-1', 'Company Phone Number 1', 'hozio_company_phone_1', 'tel'],
-        ['company-phone-2', 'Company Phone Number 2', 'hozio_company_phone_2', 'tel'],
-        ['google-ads-phone', 'Google Ads Phone Number', 'URL'],
-        ['sms-phone', 'SMS Phone Number', 'hozio_sms_phone', 'sms'],
-        ['company-email', 'Company Email', 'hozio_company_email', 'mailto'],
-        ['gmb-link', 'GMB Link', 'hozio_gmb_link', 'url'],
-        ['facebook', 'Facebook', 'hozio_facebook_url', 'url'],
-        ['instagram', 'Instagram', 'hozio_instagram_url', 'url'],
-        ['twitter', 'Twitter', 'hozio_twitter_url', 'url'],
-        ['tiktok', 'TikTok', 'hozio_tiktok_url', 'url'],
-        ['linkedin', 'LinkedIn', 'hozio_linkedin_url', 'url'],
-        ['bbb', 'BBB', 'hozio_bbb_url', 'url'],
-        ['sitemap-xml', 'Sitemap', 'sitemap_url', 'url'],
-        ['yelp', 'Yelp', 'hozio_yelp_url', 'url'],
-        ['youtube', 'YouTube', 'hozio_youtube_url', 'url'],
-        ['angies-list', "Angi's List", 'hozio_angies_list_url', 'url'],
-        ['home-advisor', 'Home Advisor', 'hozio_home_advisor_url', 'url'],
-    ];
-
-    foreach ($url_tags as $tag) {
-        if (isset($tag[3])) {
-            $dynamic_tags->register(
-                Hozio_URL_Dynamic_Tag::create($tag[0], $tag[1], $tag[2], $tag[3])
-            );
-        }
-    }
-
-    // --- Text Tags ---
-    $text_tags = [
-        ['company-phone-1-name', 'Company Phone #1 Name', 'hozio_company_phone_1'],
-        ['company-phone-2-name', 'Company Phone #2 Name', 'hozio_company_phone_2'],
-        ['sms-phone-name', 'SMS Phone # Name', 'hozio_sms_phone'],
-        ['company-address', 'Company Address', 'hozio_company_address'],
-        ['business-hours', 'Business Hours', 'hozio_business_hours'],
-        ['to-email-contact-form', 'To Email(s) Contact Form', 'hozio_to_email_contact_form'],
-        ['years-of-experience', 'Years of Experience', 'hozio_start_year'],
-    ];
-
-    foreach ($text_tags as $tag) {
-        if (isset($tag[2])) {
-            $dynamic_tags->register(
-                Hozio_Text_Dynamic_Tag::create($tag[0], $tag[1], $tag[2])
-            );
-        }
-    }
-
-    // --- Services Children (fixed value) ---
-    $dynamic_tags->register(new Hozio_Services_Children_Tag());
-});
+// Dynamic tag classes and registration are handled entirely by includes/dynamic-tags.php
+// (loaded on line 31) — classes are defined inside the Elementor callback where the
+// parent class is guaranteed to exist.
 
 add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_styles');
 function hozio_dynamic_nav_menu_inline_styles() {
