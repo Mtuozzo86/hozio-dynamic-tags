@@ -26,23 +26,54 @@ add_action('admin_enqueue_scripts', 'hozio_sitemap_layout_admin_assets', 999);
 // AJAX ENDPOINTS
 // ========================================
 
-// 1. Search pages by title
+// 1. Search pages by title or ID (paginated)
 add_action('wp_ajax_hozio_sitemap_search_pages', function() {
     check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
     if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
 
     $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
     $exclude_ids = isset($_POST['exclude_ids']) && is_array($_POST['exclude_ids']) ? array_map('intval', $_POST['exclude_ids']) : array();
+    $paged = isset($_POST['paged']) ? max(1, intval($_POST['paged'])) : 1;
+    $per_page = 50;
+
+    if (strlen($search) < 1) {
+        wp_send_json_success(array('pages' => array(), 'has_more' => false));
+    }
+
+    // Check if search is a numeric ID
+    if (is_numeric($search)) {
+        $page_obj = get_post(intval($search));
+        if ($page_obj && $page_obj->post_type === 'page' && $page_obj->post_status === 'publish') {
+            $parent_title = $page_obj->post_parent ? get_the_title($page_obj->post_parent) : '';
+            wp_send_json_success(array(
+                'pages' => array(array(
+                    'id'           => $page_obj->ID,
+                    'title'        => $page_obj->post_title ? $page_obj->post_title : '(Untitled)',
+                    'parent_title' => $parent_title,
+                    'permalink'    => get_permalink($page_obj->ID),
+                )),
+                'has_more' => false,
+            ));
+        }
+        wp_send_json_success(array('pages' => array(), 'has_more' => false));
+    }
 
     if (strlen($search) < 2) {
-        wp_send_json_success(array());
+        wp_send_json_success(array('pages' => array(), 'has_more' => false));
     }
+
+    // Order by shortest title first, then alphabetical
+    $length_orderby = function($orderby, $query) {
+        global $wpdb;
+        return "CHAR_LENGTH({$wpdb->posts}.post_title) ASC, {$wpdb->posts}.post_title ASC";
+    };
 
     $args = array(
         'post_type'      => 'page',
         'post_status'    => 'publish',
         's'              => $search,
-        'posts_per_page' => 20,
+        'posts_per_page' => $per_page,
+        'paged'          => $paged,
         'orderby'        => 'title',
         'order'          => 'ASC',
     );
@@ -50,9 +81,11 @@ add_action('wp_ajax_hozio_sitemap_search_pages', function() {
         $args['post__not_in'] = $exclude_ids;
     }
 
-    $pages = get_posts($args);
+    add_filter('posts_orderby', $length_orderby, 10, 2);
+    $query = new WP_Query($args);
+    remove_filter('posts_orderby', $length_orderby, 10);
     $results = array();
-    foreach ($pages as $p) {
+    foreach ($query->posts as $p) {
         $parent_title = '';
         if ($p->post_parent) {
             $parent_title = get_the_title($p->post_parent);
@@ -64,7 +97,11 @@ add_action('wp_ajax_hozio_sitemap_search_pages', function() {
             'permalink'    => get_permalink($p->ID),
         );
     }
-    wp_send_json_success($results);
+    wp_send_json_success(array(
+        'pages'    => $results,
+        'has_more' => $paged < $query->max_num_pages,
+        'total'    => $query->found_posts,
+    ));
 });
 
 // 2. Get WordPress children of a page
@@ -139,7 +176,87 @@ add_action('wp_ajax_hozio_sitemap_get_all_pages', function() {
     ));
 });
 
-// 4. Import current auto-detection as overrides
+// 4a. Get all taxonomy terms for page taxonomies
+add_action('wp_ajax_hozio_sitemap_get_taxonomy_terms', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $taxonomies = get_object_taxonomies('page', 'objects');
+    $results = array();
+
+    foreach ($taxonomies as $tax_slug => $tax_obj) {
+        // Skip built-in taxonomies that aren't useful for page grouping
+        if (in_array($tax_slug, array('post_tag', 'post_format'), true)) continue;
+
+        $terms = get_terms(array(
+            'taxonomy'   => $tax_slug,
+            'hide_empty' => true,
+            'orderby'    => 'name',
+            'order'      => 'ASC',
+        ));
+
+        if (is_wp_error($terms) || empty($terms)) continue;
+
+        $term_data = array();
+        foreach ($terms as $term) {
+            $term_data[] = array(
+                'id'    => $term->term_id,
+                'name'  => $term->name,
+                'slug'  => $term->slug,
+                'count' => $term->count,
+            );
+        }
+
+        $results[] = array(
+            'taxonomy' => $tax_slug,
+            'label'    => $tax_obj->labels->name,
+            'terms'    => $term_data,
+        );
+    }
+
+    wp_send_json_success($results);
+});
+
+// 4b. Get all pages with a specific taxonomy term
+add_action('wp_ajax_hozio_sitemap_get_pages_by_taxonomy', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $taxonomy = isset($_POST['taxonomy']) ? sanitize_key($_POST['taxonomy']) : '';
+    $term_id  = isset($_POST['term_id']) ? intval($_POST['term_id']) : 0;
+
+    if (!$taxonomy || !$term_id) wp_send_json_error('Missing taxonomy or term');
+    if (!taxonomy_exists($taxonomy)) wp_send_json_error('Invalid taxonomy');
+
+    $pages = get_posts(array(
+        'post_type'      => 'page',
+        'post_status'    => 'publish',
+        'posts_per_page' => -1,
+        'orderby'        => 'title',
+        'order'          => 'ASC',
+        'tax_query'      => array(
+            array(
+                'taxonomy' => $taxonomy,
+                'field'    => 'term_id',
+                'terms'    => $term_id,
+            ),
+        ),
+    ));
+
+    $results = array();
+    foreach ($pages as $p) {
+        $parent_title = $p->post_parent ? get_the_title($p->post_parent) : '';
+        $results[] = array(
+            'id'           => $p->ID,
+            'title'        => $p->post_title ? $p->post_title : '(Untitled)',
+            'parent_title' => $parent_title,
+            'permalink'    => get_permalink($p->ID),
+        );
+    }
+    wp_send_json_success($results);
+});
+
+// 5. Import current auto-detection as overrides
 add_action('wp_ajax_hozio_sitemap_import_auto', function() {
     check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
     if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
@@ -340,6 +457,199 @@ add_action('wp_ajax_hozio_sitemap_import_auto', function() {
 });
 
 // ========================================
+// AUTO-PLACE / AUTO-REMOVE PAGES ON PUBLISH/TRASH
+// ========================================
+
+/**
+ * Recursively collect all page IDs from an accordion tree.
+ */
+function hozio_sitemap_collect_ids_from_tree($items) {
+    $ids = array();
+    if (!is_array($items)) return $ids;
+    foreach ($items as $item) {
+        if (isset($item['page_id'])) $ids[] = intval($item['page_id']);
+        if (!empty($item['children'])) {
+            $ids = array_merge($ids, hozio_sitemap_collect_ids_from_tree($item['children']));
+        }
+    }
+    return $ids;
+}
+
+/**
+ * Recursively search the accordion tree for a node with a given page_id.
+ * Returns a reference to the node, or null if not found.
+ */
+function &hozio_sitemap_find_node_by_page_id(&$items, $page_id) {
+    $null = null;
+    if (!is_array($items)) return $null;
+    for ($i = 0; $i < count($items); $i++) {
+        if (intval($items[$i]['page_id']) === intval($page_id)) {
+            return $items[$i];
+        }
+        if (!empty($items[$i]['children'])) {
+            $found = &hozio_sitemap_find_node_by_page_id($items[$i]['children'], $page_id);
+            if ($found !== null) return $found;
+        }
+    }
+    return $null;
+}
+
+/**
+ * Recursively remove a page_id from the accordion tree.
+ * Returns true if removed.
+ */
+function hozio_sitemap_remove_from_tree(&$items, $page_id) {
+    if (!is_array($items)) return false;
+    for ($i = 0; $i < count($items); $i++) {
+        if (intval($items[$i]['page_id']) === intval($page_id)) {
+            array_splice($items, $i, 1);
+            // Re-index order values
+            for ($j = 0; $j < count($items); $j++) {
+                $items[$j]['order'] = $j;
+            }
+            return true;
+        }
+        if (!empty($items[$i]['children'])) {
+            if (hozio_sitemap_remove_from_tree($items[$i]['children'], $page_id)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Auto-place newly published pages into manual sitemap accordions.
+ * Auto-remove trashed pages from manual sitemap accordions.
+ */
+function hozio_sitemap_auto_place_page($new_status, $old_status, $post) {
+    // Only act on pages
+    if ($post->post_type !== 'page') return;
+
+    $overrides = get_option('hozio_sitemap_layout_overrides', array());
+
+    // Only act if manual overrides are enabled
+    if (empty($overrides['enabled'])) return;
+
+    $accordions = isset($overrides['accordions']) ? $overrides['accordions'] : array();
+    if (empty($accordions)) return;
+
+    $changed = false;
+
+    // --- HANDLE TRASH: Remove page from accordion tree ---
+    if ($new_status === 'trash' && $old_status === 'publish') {
+        if (hozio_sitemap_remove_from_tree($accordions, $post->ID)) {
+            $overrides['accordions'] = $accordions;
+            update_option('hozio_sitemap_layout_overrides', $overrides);
+        }
+        return;
+    }
+
+    // --- HANDLE PUBLISH: Auto-place new page ---
+    if ($new_status !== 'publish') return;
+    if ($old_status === 'publish') return; // Only on initial publish, not updates
+
+    // Check if page is already in the tree or excluded
+    $existing_ids = hozio_sitemap_collect_ids_from_tree($accordions);
+    $exclude_ids = isset($overrides['exclude_ids']) ? $overrides['exclude_ids'] : array();
+    if (in_array($post->ID, $existing_ids) || in_array($post->ID, $exclude_ids)) return;
+
+    // Strategy 1: Match by WordPress parent
+    if ($post->post_parent) {
+        $parent_node = &hozio_sitemap_find_node_by_page_id($accordions, $post->post_parent);
+        if ($parent_node !== null) {
+            if (!isset($parent_node['children']) || !is_array($parent_node['children'])) {
+                $parent_node['children'] = array();
+            }
+            $parent_node['children'][] = array(
+                'page_id'  => $post->ID,
+                'order'    => count($parent_node['children']),
+                'children' => array(),
+            );
+            $changed = true;
+        }
+    }
+
+    // Strategy 2: Match by taxonomy terms (if no parent match)
+    if (!$changed) {
+        $page_taxonomies = get_object_taxonomies('page', 'names');
+        $page_terms = array();
+        foreach ($page_taxonomies as $tax) {
+            $terms = wp_get_post_terms($post->ID, $tax, array('fields' => 'ids'));
+            if (!is_wp_error($terms) && !empty($terms)) {
+                $page_terms[$tax] = $terms;
+            }
+        }
+
+        if (!empty($page_terms)) {
+            // Search each accordion's parent page for matching taxonomy terms
+            foreach ($accordions as &$acc) {
+                $acc_page_id = intval($acc['page_id']);
+                if (!$acc_page_id) continue;
+
+                foreach ($page_terms as $tax => $term_ids) {
+                    $acc_terms = wp_get_post_terms($acc_page_id, $tax, array('fields' => 'ids'));
+                    if (is_wp_error($acc_terms) || empty($acc_terms)) continue;
+
+                    if (array_intersect($term_ids, $acc_terms)) {
+                        if (!isset($acc['children']) || !is_array($acc['children'])) {
+                            $acc['children'] = array();
+                        }
+                        $acc['children'][] = array(
+                            'page_id'  => $post->ID,
+                            'order'    => count($acc['children']),
+                            'children' => array(),
+                        );
+                        $changed = true;
+                        break 2; // Stop after first match
+                    }
+                }
+
+                // Also check children (sub-accordions) for taxonomy matches
+                if (!$changed && !empty($acc['children'])) {
+                    foreach ($acc['children'] as &$child) {
+                        $child_page_id = intval($child['page_id']);
+                        if (!$child_page_id) continue;
+
+                        foreach ($page_terms as $tax => $term_ids) {
+                            $child_terms = wp_get_post_terms($child_page_id, $tax, array('fields' => 'ids'));
+                            if (is_wp_error($child_terms) || empty($child_terms)) continue;
+
+                            if (array_intersect($term_ids, $child_terms)) {
+                                if (!isset($child['children']) || !is_array($child['children'])) {
+                                    $child['children'] = array();
+                                }
+                                $child['children'][] = array(
+                                    'page_id'  => $post->ID,
+                                    'order'    => count($child['children']),
+                                    'children' => array(),
+                                );
+                                $changed = true;
+                                break 3;
+                            }
+                        }
+                    }
+                    unset($child);
+                }
+            }
+            unset($acc);
+        }
+    }
+
+    if ($changed) {
+        $overrides['accordions'] = $accordions;
+        update_option('hozio_sitemap_layout_overrides', $overrides);
+
+        // Log the auto-placed page for admin notification
+        $auto_placed = get_transient('hozio_sitemap_auto_placed_pages');
+        if (!is_array($auto_placed)) $auto_placed = array();
+        $auto_placed[] = $post->ID;
+        set_transient('hozio_sitemap_auto_placed_pages', $auto_placed, 30 * DAY_IN_SECONDS);
+    }
+}
+add_action('transition_post_status', 'hozio_sitemap_auto_place_page', 10, 3);
+
+// ========================================
 // SAVE HANDLER
 // ========================================
 function hozio_save_sitemap_layout() {
@@ -376,10 +686,27 @@ function hozio_save_sitemap_layout() {
 
     update_option('hozio_sitemap_layout_overrides', $data);
 
+    // Clear auto-placed notification on save
+    delete_transient('hozio_sitemap_auto_placed_pages');
+
     wp_redirect(add_query_arg('settings-updated', 'true', admin_url('admin.php?page=hozio-sitemap-settings&tab=layout')));
     exit;
 }
 add_action('admin_post_hozio_save_sitemap_layout', 'hozio_save_sitemap_layout');
+
+// Dismiss auto-placed pages notification
+function hozio_dismiss_auto_placed() {
+    if (!wp_verify_nonce($_GET['_wpnonce'], 'hozio_dismiss_auto_placed')) {
+        wp_die('Security check failed');
+    }
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized');
+    }
+    delete_transient('hozio_sitemap_auto_placed_pages');
+    wp_redirect(admin_url('admin.php?page=hozio-sitemap-settings&tab=layout'));
+    exit;
+}
+add_action('admin_post_hozio_dismiss_auto_placed', 'hozio_dismiss_auto_placed');
 
 function hozio_sanitize_accordion_array($items) {
     $sanitized = array();
@@ -495,6 +822,32 @@ function hozio_sitemap_layout_page() {
                     </div>
                 <?php endif; ?>
 
+                <?php
+                // Show notification for auto-placed pages
+                $auto_placed_ids = get_transient('hozio_sitemap_auto_placed_pages');
+                if (!empty($auto_placed_ids) && is_array($auto_placed_ids)) :
+                    // Filter to only pages that still exist and are published
+                    $valid_titles = array();
+                    foreach ($auto_placed_ids as $ap_id) {
+                        $ap_page = get_post(intval($ap_id));
+                        if ($ap_page && $ap_page->post_status === 'publish') {
+                            $valid_titles[] = $ap_page->post_title ? $ap_page->post_title : '(Untitled)';
+                        }
+                    }
+                    if (!empty($valid_titles)) :
+                ?>
+                    <div class="notice notice-info" style="margin: 0 0 20px 0; border-radius: 6px; border-left-color: var(--hozio-blue);">
+                        <p>
+                            <span class="dashicons dashicons-info" style="color: var(--hozio-blue);"></span>
+                            <strong><?php echo count($valid_titles); ?> page(s) were automatically added</strong> to your sitemap layout since your last edit:
+                            <em><?php echo esc_html(implode(', ', $valid_titles)); ?></em>
+                        </p>
+                        <p>
+                            <a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=hozio_dismiss_auto_placed'), 'hozio_dismiss_auto_placed')); ?>" class="button button-small">Dismiss</a>
+                        </p>
+                    </div>
+                <?php endif; endif; ?>
+
                 <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" id="hozio-layout-form">
                     <?php wp_nonce_field('hozio_sitemap_layout_nonce', 'hozio_sitemap_layout_nonce_field'); ?>
                     <input type="hidden" name="action" value="hozio_save_sitemap_layout">
@@ -549,6 +902,19 @@ function hozio_sitemap_layout_page() {
                             <h2>Accordion Builder</h2>
                         </div>
 
+                        <div id="hozio-override-off-banner" class="hozio-override-off-banner" style="<?php echo $enabled ? 'display:none;' : ''; ?>">
+                            <div class="hozio-override-off-icon">
+                                <span class="dashicons dashicons-warning"></span>
+                            </div>
+                            <div class="hozio-override-off-content">
+                                <strong>Manual overrides are currently disabled</strong>
+                                <p>Your sitemap is using automatic detection only. The accordions below won't appear on your sitemap until you enable manual overrides.</p>
+                            </div>
+                            <button type="button" class="button button-primary" id="hozio-enable-overrides-btn">
+                                <span class="dashicons dashicons-yes" style="margin-top: 3px;"></span> Enable Now
+                            </button>
+                        </div>
+
                         <div class="hozio-builder-actions">
                             <button type="button" class="button button-primary" id="hozio-add-accordion">
                                 <span class="dashicons dashicons-plus-alt2" style="margin-top: 3px;"></span> Add Accordion
@@ -556,6 +922,9 @@ function hozio_sitemap_layout_page() {
                             <button type="button" class="button" id="hozio-import-auto">
                                 <span class="dashicons dashicons-download" style="margin-top: 3px;"></span> Import Current Auto-Detection
                             </button>
+                            <a href="<?php echo esc_url(home_url('/sitemap')); ?>" target="_blank" class="button" style="margin-left: auto;">
+                                <span class="dashicons dashicons-external" style="margin-top: 3px;"></span> View Sitemap
+                            </a>
                         </div>
 
                         <div id="hozio-accordions-container">
@@ -590,6 +959,19 @@ function hozio_sitemap_layout_page() {
                         <div id="hozio-exclude-results" class="hozio-search-results" style="display: none;">
                             <!-- Search results rendered by JS -->
                         </div>
+                    </div>
+
+                    <!-- Section 3.5: Duplicate Entries -->
+                    <div class="hozio-section" id="hozio-duplicates-section" style="border-left-color: #ef4444; display: none;">
+                        <div class="hozio-section-header">
+                            <span class="dashicons dashicons-warning" style="color: #ef4444;"></span>
+                            <h2>Duplicate Entries</h2>
+                            <span id="hozio-duplicate-count" class="duplicate-count-badge">0</span>
+                        </div>
+                        <p class="hozio-field-description" style="margin-bottom: 16px;">
+                            These pages appear in multiple accordions. Use "Go to" to navigate or "Remove" to fix.
+                        </p>
+                        <div id="hozio-duplicates-list"></div>
                     </div>
 
                     <!-- Section 4: Unassigned Pages -->
@@ -638,6 +1020,7 @@ function hozio_sitemap_layout_page() {
         var searchTimeout = null;
         var unassignedExpanded = false;
         var unassignedFilter = '';
+        var formDirty = false;
 
         // ========================================
         // PATH-BASED TREE NAVIGATION
@@ -702,6 +1085,58 @@ function hozio_sitemap_layout_page() {
             return ids;
         }
 
+        // Find all locations where a page appears in the accordion tree
+        function findPageLocations(pageId) {
+            pageId = parseInt(pageId);
+            var locations = [];
+            function walk(items, currentPath, topTitle) {
+                for (var i = 0; i < items.length; i++) {
+                    var p = currentPath ? currentPath + '.' + i : String(i);
+                    var pid = parseInt(items[i].page_id);
+                    var title = topTitle || getPageTitleShort(pid);
+                    if (pid === pageId) {
+                        locations.push({path: p, accordionTitle: title});
+                    }
+                    if (items[i].children) walk(items[i].children, p, title);
+                }
+            }
+            walk(accordions, '', '');
+            return locations;
+        }
+
+        // Get all pages that appear more than once in the accordion tree
+        function getDuplicatePages() {
+            var counts = {};
+            function walk(items, path, topTitle) {
+                for (var i = 0; i < items.length; i++) {
+                    var p = path ? path + '.' + i : String(i);
+                    var pid = parseInt(items[i].page_id);
+                    var title = topTitle || getPageTitleShort(pid);
+                    if (!counts[pid]) counts[pid] = [];
+                    counts[pid].push({path: p, accordionTitle: title});
+                    if (items[i].children) walk(items[i].children, p, title);
+                }
+            }
+            walk(accordions, '', '');
+            var dupes = {};
+            for (var id in counts) {
+                if (counts[id].length > 1) dupes[id] = counts[id];
+            }
+            return dupes;
+        }
+
+        // Get IDs only within a specific accordion path (local check)
+        function getChildIdsAtPath(path) {
+            var node = getNodeByPath(path);
+            var ids = [];
+            if (node && node.children) {
+                for (var i = 0; i < node.children.length; i++) {
+                    ids.push(parseInt(node.children[i].page_id));
+                }
+            }
+            return ids;
+        }
+
         function countChildren(acc) {
             var count = 0;
             if (acc.children) {
@@ -714,14 +1149,18 @@ function hozio_sitemap_layout_page() {
         }
 
         function syncFormData() {
+            formDirty = true;
             for (var i = 0; i < accordions.length; i++) {
                 accordions[i].order = i;
             }
             $('#hozio-layout-accordions-data').val(JSON.stringify(accordions));
             $('#hozio-layout-exclude-data').val(JSON.stringify(excludeIds));
-            // Update unassigned pages whenever data changes
+            // Update unassigned pages and duplicates whenever data changes
             if (typeof renderUnassignedPages === 'function') {
                 renderUnassignedPages();
+            }
+            if (typeof renderDuplicates === 'function') {
+                renderDuplicates();
             }
         }
 
@@ -804,6 +1243,11 @@ function hozio_sitemap_layout_page() {
                 }
                 html += '</div></div>';
             }
+            // "Move Out" button — only for nested accordions (level > 1)
+            if (level > 1) {
+                html += '<button type="button" class="move-out-btn" data-path="' + path + '" title="Move this accordion back to the top level">';
+                html += '<span class="dashicons dashicons-migrate" style="transform: scaleX(-1);"></span> Move Out</button>';
+            }
             html += '<button type="button" class="accordion-card-toggle" title="' + (isCollapsed ? 'Expand' : 'Collapse') + '">';
             html += '<span class="dashicons dashicons-arrow-' + (isCollapsed ? 'down' : 'up') + '-alt2"></span></button>';
             html += '<button type="button" class="accordion-card-delete" data-path="' + path + '" title="Remove">';
@@ -839,10 +1283,47 @@ function hozio_sitemap_layout_page() {
                 html += '<button type="button" class="button button-small import-wp-children-btn" data-path="' + path + '" data-parent-id="' + acc.page_id + '">';
                 html += '<span class="dashicons dashicons-download" style="margin-top: 2px; font-size: 14px;"></span> Import WP Children</button>';
             }
+            html += '<button type="button" class="button button-small import-taxonomy-btn" data-path="' + path + '">';
+            html += '<span class="dashicons dashicons-category" style="margin-top: 2px; font-size: 14px;"></span> Import by Taxonomy</button>';
+            if (acc.children && acc.children.length > 0) {
+                html += '<button type="button" class="button button-small select-mode-btn" data-path="' + path + '">';
+                html += '<span class="dashicons dashicons-yes" style="margin-top: 2px; font-size: 14px;"></span> Select</button>';
+                var isHidden = acc._childrenHidden;
+                html += '<button type="button" class="button button-small toggle-children-btn" data-path="' + path + '" style="margin-left: auto;">';
+                html += '<span class="dashicons dashicons-' + (isHidden ? 'visibility' : 'hidden') + '" style="margin-top: 2px; font-size: 14px;"></span> ' + (isHidden ? 'Show All' : 'Hide All') + '</button>';
+            }
             html += '</div>';
 
+            // Child search panel (hidden by default) — placed BEFORE children list
+            html += '<div class="child-search-panel" data-path="' + path + '" style="display:none;">';
+            html += '<input type="text" class="hozio-search-input child-search-input" placeholder="Search pages to add...">';
+            html += '<div class="child-search-results"></div>';
+            html += '<button type="button" class="button button-small close-child-search">Done</button>';
+            html += '</div>';
+
+            // Taxonomy import panel (hidden by default) — placed BEFORE children list
+            html += '<div class="taxonomy-import-panel" data-path="' + path + '" style="display:none;">';
+            html += '<input type="text" class="hozio-search-input taxonomy-filter-input" placeholder="Filter taxonomies...">';
+            html += '<div class="taxonomy-import-loading">Loading taxonomies...</div>';
+            html += '<div class="taxonomy-import-terms"></div>';
+            html += '<button type="button" class="button button-small close-taxonomy-panel">Done</button>';
+            html += '</div>';
+
+            // Bulk actions bar (hidden until select mode)
+            html += '<div class="bulk-actions-bar" data-path="' + path + '">';
+            html += '<label class="bulk-select-all"><input type="checkbox" class="bulk-select-all-cb" data-path="' + path + '"> Select All</label>';
+            html += '<span class="bulk-selected-count">0 selected</span>';
+            html += '<button type="button" class="button button-small bulk-delete-btn" data-path="' + path + '" disabled>';
+            html += '<span class="dashicons dashicons-trash" style="margin-top: 2px; font-size: 14px;"></span> Delete Selected</button>';
+            html += '</div>';
+
+            // Hidden children notice
+            if (acc._childrenHidden && acc.children && acc.children.length > 0) {
+                html += '<div class="children-hidden-notice"><span class="dashicons dashicons-hidden"></span> ' + acc.children.length + ' page(s) hidden &mdash; click <strong>Show All</strong> to reveal</div>';
+            }
+
             // Children list
-            html += '<div class="children-list" data-path="' + path + '">';
+            html += '<div class="children-list" data-path="' + path + '"' + (acc._childrenHidden ? ' style="display:none;"' : '') + '>';
             if (acc.children && acc.children.length > 0) {
                 for (var c = 0; c < acc.children.length; c++) {
                     var child = acc.children[c];
@@ -850,6 +1331,7 @@ function hozio_sitemap_layout_page() {
                     var isChildAccordion = child._is_accordion || (child.children && child.children.length > 0);
 
                     html += '<div class="child-item ' + (isChildAccordion ? 'is-accordion' : '') + '" data-child-path="' + childPath + '">';
+                    html += '<input type="checkbox" class="bulk-child-cb" data-child-path="' + childPath + '">';
                     html += '<span class="child-drag dashicons dashicons-move" title="Drag to reorder"></span>';
                     html += '<span class="child-title">' + escHtml(getPageTitleShort(child.page_id)) + '</span>';
                     var childLink = getPagePermalink(child.page_id);
@@ -884,13 +1366,6 @@ function hozio_sitemap_layout_page() {
             }
             html += '</div>';
 
-            // Child search panel (hidden by default)
-            html += '<div class="child-search-panel" data-path="' + path + '" style="display:none;">';
-            html += '<input type="text" class="hozio-search-input child-search-input" placeholder="Search pages to add...">';
-            html += '<div class="child-search-results"></div>';
-            html += '<button type="button" class="button button-small close-child-search">Done</button>';
-            html += '</div>';
-
             html += '</div>'; // end field
             html += '</div>'; // end body
             html += '</div>'; // end card
@@ -909,6 +1384,17 @@ function hozio_sitemap_layout_page() {
                 'opacity': enabled ? 1 : 0.5,
                 'pointer-events': enabled ? 'auto' : 'none'
             });
+            if (enabled) {
+                $('#hozio-override-off-banner').slideUp(200);
+            } else {
+                $('#hozio-override-off-banner').slideDown(200);
+            }
+        });
+
+        // "Enable Now" button in the banner
+        $('#hozio-enable-overrides-btn').on('click', function() {
+            $('#hozio-layout-enabled').prop('checked', true).trigger('change');
+            $('html, body').animate({ scrollTop: $('#hozio-layout-enabled').closest('.hozio-section').offset().top - 40 }, 300);
         });
 
         // Radio option styling
@@ -1009,17 +1495,46 @@ function hozio_sitemap_layout_page() {
 
             if (!targetAcc.children) targetAcc.children = [];
 
-            // Add source as a child of target, preserving its entire subtree
-            targetAcc.children.push({
+            // Add source at the TOP of target's children, collapsed by default
+            targetAcc.children.unshift({
                 page_id: sourceAcc.page_id,
-                order: targetAcc.children.length,
+                order: 0,
                 children: sourceAcc.children || [],
                 _is_accordion: true,
-                _collapsed: false
+                _collapsed: true
             });
 
             // Remove source from top-level
             accordions.splice(sourceIdx, 1);
+
+            renderAccordions();
+        });
+
+        // Move Out — extract a nested accordion back to top level
+        $(document).on('click', '.move-out-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var path = String($(this).data('path'));
+            var node = getNodeByPath(path);
+            if (!node) return;
+
+            var title = getPageTitleShort(node.page_id);
+            if (!confirm('Move "' + title + '" back to the top level?')) return;
+
+            // Remove from parent
+            var info = getParentAndIndex(path);
+            if (info.parent && info.parent.children) {
+                info.parent.children.splice(info.index, 1);
+            }
+
+            // Add to top level as a full accordion
+            accordions.push({
+                page_id: node.page_id,
+                order: accordions.length,
+                children: node.children || [],
+                _is_accordion: true,
+                _collapsed: true
+            });
 
             renderAccordions();
         });
@@ -1033,46 +1548,61 @@ function hozio_sitemap_layout_page() {
             $selector.find('.parent-search').val('').focus();
         });
 
-        // Parent page search
+        // Parent page search (paginated, supports ID search)
         $(document).on('input', '.parent-search', function() {
             var $input = $(this);
             var $results = $input.siblings('.page-search-results');
             var query = $input.val();
 
             clearTimeout(searchTimeout);
-            if (query.length < 2) {
+            $input.data('search-page', 1);
+            if (query.length < 1 || (query.length < 2 && !$.isNumeric(query))) {
                 $results.hide().empty();
                 return;
             }
 
             searchTimeout = setTimeout(function() {
-                $.post(ajaxurl, {
-                    action: 'hozio_sitemap_search_pages',
-                    nonce: nonce,
-                    search: query,
-                    exclude_ids: getAllAssignedIds()
-                }, function(response) {
-                    if (response.success && response.data.length > 0) {
-                        var html = '';
-                        for (var i = 0; i < response.data.length; i++) {
-                            var p = response.data[i];
-                            html += '<div class="search-result-item parent-result" data-page-id="' + p.id + '">';
-                            html += '<strong>' + escHtml(p.title) + '</strong>';
-                            if (p.parent_title) html += '<span class="result-meta"> (under: ' + escHtml(p.parent_title) + ')</span>';
-                            html += '<span class="result-meta result-id">ID: ' + p.id + '</span>';
-                            html += '</div>';
-                        }
-                        $results.html(html).show();
-                        for (var i = 0; i < response.data.length; i++) {
-                            var p = response.data[i];
-                            pageTitles[p.id] = { title: p.title, parent_title: p.parent_title, status: 'publish', permalink: p.permalink || '' };
-                        }
-                    } else {
-                        $results.html('<div class="search-no-results">No pages found</div>').show();
-                    }
-                });
+                parentSearchLoad($input, $results, query, 1, false);
             }, 300);
         });
+
+        function parentSearchLoad($input, $results, query, page, append) {
+            $.post(ajaxurl, {
+                action: 'hozio_sitemap_search_pages',
+                nonce: nonce,
+                search: query,
+                exclude_ids: getAllAssignedIds(),
+                paged: page
+            }, function(response) {
+                if (!response.success) return;
+                var data = response.data;
+                var pages = data.pages || [];
+
+                if (pages.length > 0) {
+                    var html = '';
+                    for (var i = 0; i < pages.length; i++) {
+                        var p = pages[i];
+                        html += '<div class="search-result-item parent-result" data-page-id="' + p.id + '">';
+                        html += '<strong>' + escHtml(p.title) + '</strong>';
+                        if (p.parent_title) html += '<span class="result-meta"> (under: ' + escHtml(p.parent_title) + ')</span>';
+                        html += '<span class="result-meta result-id">ID: ' + p.id + '</span>';
+                        html += '</div>';
+                        pageTitles[p.id] = { title: p.title, parent_title: p.parent_title, status: 'publish', permalink: p.permalink || '' };
+                    }
+                    if (data.has_more) {
+                        html += '<div class="search-load-more" data-search-type="parent" data-page="' + (page + 1) + '">Load more results (' + data.total + ' total)</div>';
+                    }
+                    if (append) {
+                        $results.find('.search-load-more').remove();
+                        $results.append(html);
+                    } else {
+                        $results.html(html).show();
+                    }
+                } else if (!append) {
+                    $results.html('<div class="search-no-results">No pages found</div>').show();
+                }
+            });
+        }
 
         // Select parent page from search results (works at any level)
         $(document).on('click', '.parent-result', function() {
@@ -1123,7 +1653,7 @@ function hozio_sitemap_layout_page() {
             renderAccordions();
         });
 
-        // Child page search
+        // Child page search (paginated, supports ID search)
         $(document).on('input', '.child-search-input', function() {
             var $input = $(this);
             var $results = $input.siblings('.child-search-results');
@@ -1131,42 +1661,56 @@ function hozio_sitemap_layout_page() {
             var path = String($input.closest('.child-search-panel').data('path'));
 
             clearTimeout(searchTimeout);
-            if (query.length < 2) {
+            if (query.length < 1 || (query.length < 2 && !$.isNumeric(query))) {
                 $results.hide().empty();
                 return;
             }
 
             searchTimeout = setTimeout(function() {
-                $.post(ajaxurl, {
-                    action: 'hozio_sitemap_search_pages',
-                    nonce: nonce,
-                    search: query,
-                    exclude_ids: getAllAssignedIds()
-                }, function(response) {
-                    if (response.success && response.data.length > 0) {
-                        var html = '';
-                        var assigned = getAllAssignedIds();
-                        for (var i = 0; i < response.data.length; i++) {
-                            var p = response.data[i];
-                            var isAssigned = assigned.indexOf(p.id) !== -1;
-                            html += '<div class="search-result-item child-result ' + (isAssigned ? 'disabled' : '') + '" data-page-id="' + p.id + '" data-target-path="' + path + '">';
-                            html += '<span class="dashicons dashicons-' + (isAssigned ? 'lock' : 'plus-alt2') + '"></span> ';
-                            html += escHtml(p.title);
-                            if (p.parent_title) html += '<span class="result-meta"> (under: ' + escHtml(p.parent_title) + ')</span>';
-                            if (isAssigned) html += '<span class="result-meta assigned-label">Already assigned</span>';
-                            html += '</div>';
-                        }
-                        $results.html(html).show();
-                        for (var i = 0; i < response.data.length; i++) {
-                            var p = response.data[i];
-                            pageTitles[p.id] = { title: p.title, parent_title: p.parent_title, status: 'publish', permalink: p.permalink || '' };
-                        }
-                    } else {
-                        $results.html('<div class="search-no-results">No pages found</div>').show();
-                    }
-                });
+                childSearchLoad($results, query, path, 1, false);
             }, 300);
         });
+
+        function childSearchLoad($results, query, path, page, append) {
+            $.post(ajaxurl, {
+                action: 'hozio_sitemap_search_pages',
+                nonce: nonce,
+                search: query,
+                exclude_ids: getAllAssignedIds(),
+                paged: page
+            }, function(response) {
+                if (!response.success) return;
+                var data = response.data;
+                var pages = data.pages || [];
+
+                if (pages.length > 0) {
+                    var html = '';
+                    var assigned = getAllAssignedIds();
+                    for (var i = 0; i < pages.length; i++) {
+                        var p = pages[i];
+                        var isAssigned = assigned.indexOf(p.id) !== -1;
+                        html += '<div class="search-result-item child-result ' + (isAssigned ? 'disabled' : '') + '" data-page-id="' + p.id + '" data-target-path="' + path + '">';
+                        html += '<span class="dashicons dashicons-' + (isAssigned ? 'lock' : 'plus-alt2') + '"></span> ';
+                        html += escHtml(p.title);
+                        if (p.parent_title) html += '<span class="result-meta"> (under: ' + escHtml(p.parent_title) + ')</span>';
+                        if (isAssigned) html += '<span class="result-meta assigned-label">Already assigned</span>';
+                        html += '</div>';
+                        pageTitles[p.id] = { title: p.title, parent_title: p.parent_title, status: 'publish', permalink: p.permalink || '' };
+                    }
+                    if (data.has_more) {
+                        html += '<div class="search-load-more" data-search-type="child" data-page="' + (page + 1) + '" data-path="' + path + '">Load more results (' + data.total + ' total)</div>';
+                    }
+                    if (append) {
+                        $results.find('.search-load-more').remove();
+                        $results.append(html);
+                    } else {
+                        $results.html(html).show();
+                    }
+                } else if (!append) {
+                    $results.html('<div class="search-no-results">No pages found</div>').show();
+                }
+            });
+        }
 
         // Select child page from results (works at any level via path)
         $(document).on('click', '.child-result:not(.disabled)', function() {
@@ -1249,6 +1793,96 @@ function hozio_sitemap_layout_page() {
         });
 
         // ========================================
+        // HIDE ALL / SHOW ALL CHILDREN
+        // ========================================
+        $(document).on('click', '.toggle-children-btn', function(e) {
+            e.preventDefault();
+            var path = String($(this).data('path'));
+            var node = getNodeByPath(path);
+            if (!node) return;
+            node._childrenHidden = !node._childrenHidden;
+            renderAccordions();
+        });
+
+        // ========================================
+        // BULK SELECT / DELETE CHILDREN
+        // ========================================
+
+        // Toggle select mode on an accordion
+        $(document).on('click', '.select-mode-btn', function(e) {
+            e.preventDefault();
+            var path = String($(this).data('path'));
+            var node = getNodeByPath(path);
+            // Auto-show children when entering select mode
+            if (node && node._childrenHidden) {
+                node._childrenHidden = false;
+                renderAccordions();
+                // Re-find card after DOM rebuild and activate select mode
+                var $card = $('.accordion-card[data-path="' + path + '"]');
+                $card.addClass('bulk-select-mode');
+                $card.find('.select-mode-btn[data-path="' + path + '"]').addClass('is-active');
+                return;
+            }
+            var $card = $(this).closest('.accordion-card');
+            $card.toggleClass('bulk-select-mode');
+            $(this).toggleClass('is-active');
+            if (!$card.hasClass('bulk-select-mode')) {
+                $card.find('> .accordion-card-body .bulk-child-cb').prop('checked', false);
+                $card.find('> .accordion-card-body .bulk-select-all-cb').prop('checked', false);
+                updateBulkCount($card);
+            }
+        });
+
+        // Select All checkbox
+        $(document).on('change', '.bulk-select-all-cb', function() {
+            var $card = $(this).closest('.accordion-card');
+            var checked = $(this).is(':checked');
+            $card.find('> .accordion-card-body .children-list > .child-item .bulk-child-cb').prop('checked', checked);
+            updateBulkCount($card);
+        });
+
+        // Individual checkbox
+        $(document).on('change', '.bulk-child-cb', function() {
+            var $card = $(this).closest('.accordion-card');
+            updateBulkCount($card);
+        });
+
+        function updateBulkCount($card) {
+            var $cbs = $card.find('> .accordion-card-body .children-list > .child-item .bulk-child-cb');
+            var total = $cbs.length;
+            var checked = $cbs.filter(':checked').length;
+            $card.find('> .accordion-card-body .bulk-selected-count').text(checked + ' selected');
+            $card.find('> .accordion-card-body .bulk-delete-btn').prop('disabled', checked === 0);
+            $card.find('> .accordion-card-body .bulk-select-all-cb').prop('checked', checked === total && total > 0);
+        }
+
+        // Delete selected children
+        $(document).on('click', '.bulk-delete-btn', function(e) {
+            e.preventDefault();
+            if ($(this).prop('disabled')) return;
+            var path = String($(this).data('path'));
+            var target = getNodeByPath(path);
+            if (!target || !target.children) return;
+
+            var $card = $(this).closest('.accordion-card');
+            var indices = [];
+            $card.find('> .accordion-card-body .children-list > .child-item .bulk-child-cb:checked').each(function() {
+                var cp = String($(this).data('child-path'));
+                indices.push(parseInt(cp.split('.').pop()));
+            });
+
+            if (indices.length === 0) return;
+            if (!confirm('Remove ' + indices.length + ' selected page(s) from this accordion?')) return;
+
+            // Sort descending so splicing doesn't shift later indices
+            indices.sort(function(a, b) { return b - a; });
+            for (var i = 0; i < indices.length; i++) {
+                target.children.splice(indices[i], 1);
+            }
+            renderAccordions();
+        });
+
+        // ========================================
         // IMPORT AUTO-DETECTION
         // ========================================
         $('#hozio-import-auto').on('click', function() {
@@ -1290,6 +1924,213 @@ function hozio_sitemap_layout_page() {
                 alert('Import failed. Please try again.');
                 $btn.prop('disabled', false).html('<span class="dashicons dashicons-download" style="margin-top: 3px;"></span> Import Current Auto-Detection');
             });
+        });
+
+        // ========================================
+        // IMPORT BY TAXONOMY
+        // ========================================
+        $(document).on('click', '.import-taxonomy-btn', function(e) {
+            e.preventDefault();
+            var $panel = $(this).closest('.accordion-card-field').find('> .taxonomy-import-panel');
+            var $terms = $panel.find('.taxonomy-import-terms');
+            var $loading = $panel.find('.taxonomy-import-loading');
+
+            $panel.show();
+            $panel.find('.taxonomy-filter-input').val('').focus();
+            $terms.empty();
+            $loading.show();
+
+            $.post(ajaxurl, {
+                action: 'hozio_sitemap_get_taxonomy_terms',
+                nonce: nonce
+            }, function(response) {
+                $loading.hide();
+                if (!response.success || !response.data.length) {
+                    $terms.html('<div class="taxonomy-no-results">No page taxonomies found.</div>');
+                    return;
+                }
+                var html = '';
+                for (var t = 0; t < response.data.length; t++) {
+                    var tax = response.data[t];
+                    for (var i = 0; i < tax.terms.length; i++) {
+                        var term = tax.terms[i];
+                        html += '<div class="taxonomy-term-item" data-taxonomy="' + escHtml(tax.taxonomy) + '" data-term-id="' + term.id + '" data-term-name="' + escHtml(term.name.toLowerCase()) + '" data-tax-label="' + escHtml(tax.label.toLowerCase()) + '" data-path="' + $panel.data('path') + '">';
+                        html += '<span class="dashicons dashicons-plus-alt2"></span>';
+                        html += '<span class="taxonomy-term-badge">' + escHtml(tax.label) + '</span>';
+                        html += '<span class="taxonomy-term-name">' + escHtml(term.name) + '</span>';
+                        html += '<span class="taxonomy-term-count">' + term.count + '</span>';
+                        html += '</div>';
+                    }
+                }
+                $terms.html(html);
+            }).fail(function() {
+                $loading.hide();
+                $terms.html('<div class="taxonomy-no-results">Failed to load taxonomies.</div>');
+            });
+        });
+
+        // Live filter for taxonomy terms
+        $(document).on('input', '.taxonomy-filter-input', function() {
+            var q = $(this).val().toLowerCase();
+            var $panel = $(this).closest('.taxonomy-import-panel');
+            $panel.find('.taxonomy-term-item').each(function() {
+                var name = $(this).data('term-name') || '';
+                var label = $(this).data('tax-label') || '';
+                if (!q || name.indexOf(q) !== -1 || label.indexOf(q) !== -1) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+        });
+
+        $(document).on('click', '.close-taxonomy-panel', function(e) {
+            e.preventDefault();
+            $(this).closest('.taxonomy-import-panel').hide();
+            renderAccordions();
+        });
+
+        $(document).on('click', '.taxonomy-term-item', function() {
+            var $item = $(this);
+            if ($item.hasClass('disabled')) return;
+
+            var taxonomy = $item.data('taxonomy');
+            var termId = parseInt($item.data('term-id'));
+            var path = String($item.data('path'));
+
+            $item.addClass('disabled').find('.dashicons').removeClass('dashicons-plus-alt2').addClass('dashicons-update');
+
+            $.post(ajaxurl, {
+                action: 'hozio_sitemap_get_pages_by_taxonomy',
+                nonce: nonce,
+                taxonomy: taxonomy,
+                term_id: termId
+            }, function(response) {
+                if (!response.success || !response.data.length) {
+                    $item.find('.dashicons').removeClass('dashicons-update').addClass('dashicons-no');
+                    return;
+                }
+
+                var target = getNodeByPath(path);
+                if (!target) return;
+                if (!target.children) target.children = [];
+
+                // Categorize pages: new, already here, or in another accordion
+                var localIds = getChildIdsAtPath(path);
+                var allIds = getAllAssignedIds();
+                var newPages = [];
+                var conflictPages = [];
+
+                for (var i = 0; i < response.data.length; i++) {
+                    var p = response.data[i];
+                    pageTitles[p.id] = { title: p.title, parent_title: p.parent_title || '', status: 'publish', permalink: p.permalink || '' };
+
+                    if (localIds.indexOf(p.id) !== -1) {
+                        // Already in THIS accordion — skip silently
+                        continue;
+                    } else if (allIds.indexOf(p.id) !== -1) {
+                        // In a DIFFERENT accordion — conflict
+                        var locs = findPageLocations(p.id);
+                        var locNames = locs.map(function(l) { return l.accordionTitle; }).join(', ');
+                        conflictPages.push({ id: p.id, title: p.title, inAccordions: locNames });
+                    } else {
+                        newPages.push(p);
+                    }
+                }
+
+                // Import new pages immediately
+                for (var n = 0; n < newPages.length; n++) {
+                    target.children.push({
+                        page_id: newPages[n].id,
+                        order: target.children.length,
+                        children: []
+                    });
+                }
+
+                var $panel = $item.closest('.taxonomy-import-panel');
+
+                if (conflictPages.length > 0) {
+                    // Show conflict dialog — actions pinned at top, list flows below
+                    var $terms = $panel.find('.taxonomy-import-terms');
+                    $panel.find('.taxonomy-filter-input').hide();
+
+                    var html = '<div class="taxonomy-conflict-dialog">';
+                    // Sticky action bar at top
+                    html += '<div class="taxonomy-conflict-bar">';
+                    html += '<div class="taxonomy-conflict-summary">';
+                    html += '<span class="dashicons dashicons-warning" style="color: #f59e0b;"></span>';
+                    if (newPages.length > 0) {
+                        html += '<strong>' + newPages.length + ' imported.</strong> ';
+                    }
+                    html += '<span>' + conflictPages.length + ' already in other accordions:</span>';
+                    html += '</div>';
+                    html += '<div class="taxonomy-conflict-actions">';
+                    html += '<button type="button" class="button button-small taxonomy-conflict-skip" data-path="' + path + '">Skip All ' + conflictPages.length + '</button>';
+                    html += '<button type="button" class="button button-small taxonomy-conflict-override" data-path="' + path + '">Import Anyway (duplicates)</button>';
+                    html += '</div>';
+                    html += '</div>';
+                    // Page list — no inner scroll, panel scroll handles it
+                    html += '<div class="taxonomy-conflict-list">';
+                    for (var c = 0; c < conflictPages.length; c++) {
+                        var cp = conflictPages[c];
+                        html += '<div class="taxonomy-conflict-item">';
+                        html += '<span class="dashicons dashicons-minus" style="color: #dc2626;"></span>';
+                        html += '<span class="taxonomy-conflict-item-title">' + escHtml(cp.title) + '</span>';
+                        html += '<span class="taxonomy-conflict-location">' + escHtml(cp.inAccordions) + '</span>';
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                    html += '</div>';
+
+                    // Store conflict pages for the override button
+                    $panel.data('conflict-pages', conflictPages);
+                    $terms.html(html);
+                    // Expand terms container for conflict view — single scroll, sticky bar inside
+                    $terms.css('max-height', '400px');
+
+                    // If new pages were added, sync form but keep panel open
+                    if (newPages.length > 0) syncFormData();
+                } else {
+                    // No conflicts — close and render
+                    $panel.hide();
+                    renderAccordions();
+                }
+            }).fail(function() {
+                $item.removeClass('disabled').find('.dashicons').removeClass('dashicons-update').addClass('dashicons-plus-alt2');
+                alert('Failed to import pages. Please try again.');
+            });
+        });
+
+        // Conflict: Skip
+        $(document).on('click', '.taxonomy-conflict-skip', function() {
+            var $panel = $(this).closest('.taxonomy-import-panel');
+            $panel.find('.taxonomy-filter-input').show();
+            $panel.find('.taxonomy-import-terms').css('max-height', '');
+            $panel.hide();
+            renderAccordions();
+        });
+
+        // Conflict: Import Anyway (create duplicates)
+        $(document).on('click', '.taxonomy-conflict-override', function() {
+            var $panel = $(this).closest('.taxonomy-import-panel');
+            var path = String($(this).data('path'));
+            var target = getNodeByPath(path);
+            var conflictPages = $panel.data('conflict-pages') || [];
+
+            if (target && conflictPages.length > 0) {
+                if (!target.children) target.children = [];
+                for (var i = 0; i < conflictPages.length; i++) {
+                    target.children.push({
+                        page_id: conflictPages[i].id,
+                        order: target.children.length,
+                        children: []
+                    });
+                }
+            }
+            $panel.find('.taxonomy-filter-input').show();
+            $panel.find('.taxonomy-import-terms').css('max-height', '');
+            $panel.hide();
+            renderAccordions();
         });
 
         function loadPageTitles(ids, callback) {
@@ -1342,44 +2183,84 @@ function hozio_sitemap_layout_page() {
             var $results = $('#hozio-exclude-results');
 
             clearTimeout(excludeSearchTimeout);
-            if (query.length < 2) {
+            if (query.length < 1 || (query.length < 2 && !$.isNumeric(query))) {
                 $results.hide().empty();
                 return;
             }
 
             excludeSearchTimeout = setTimeout(function() {
-                $.post(ajaxurl, {
-                    action: 'hozio_sitemap_search_pages',
-                    nonce: nonce,
-                    search: query
-                }, function(response) {
-                    if (response.success && response.data.length > 0) {
-                        var html = '';
-                        for (var i = 0; i < response.data.length; i++) {
-                            var p = response.data[i];
-                            var isExcluded = excludeIds.indexOf(p.id) !== -1;
-                            html += '<div class="search-result-item exclude-result ' + (isExcluded ? 'disabled' : '') + '" data-page-id="' + p.id + '">';
-                            html += escHtml(p.title);
-                            if (p.parent_title) html += '<span class="result-meta"> (under: ' + escHtml(p.parent_title) + ')</span>';
-                            if (isExcluded) html += '<span class="result-meta assigned-label">Already excluded</span>';
-                            html += '</div>';
-                        }
-                        $results.html(html).show();
-                        for (var i = 0; i < response.data.length; i++) {
-                            pageTitles[response.data[i].id] = { title: response.data[i].title, parent_title: response.data[i].parent_title, status: 'publish', permalink: response.data[i].permalink || '' };
-                        }
-                    } else {
-                        $results.html('<div class="search-no-results">No pages found</div>').show();
-                    }
-                });
+                excludeSearchLoad($results, query, 1, false);
             }, 300);
         });
+
+        function excludeSearchLoad($results, query, page, append) {
+            $.post(ajaxurl, {
+                action: 'hozio_sitemap_search_pages',
+                nonce: nonce,
+                search: query,
+                paged: page
+            }, function(response) {
+                if (!response.success) return;
+                var data = response.data;
+                var pages = data.pages || [];
+
+                if (pages.length > 0) {
+                    var html = '';
+                    for (var i = 0; i < pages.length; i++) {
+                        var p = pages[i];
+                        var isExcluded = excludeIds.indexOf(p.id) !== -1;
+                        html += '<div class="search-result-item exclude-result ' + (isExcluded ? 'disabled' : '') + '" data-page-id="' + p.id + '">';
+                        html += escHtml(p.title);
+                        if (p.parent_title) html += '<span class="result-meta"> (under: ' + escHtml(p.parent_title) + ')</span>';
+                        if (isExcluded) html += '<span class="result-meta assigned-label">Already excluded</span>';
+                        html += '</div>';
+                        pageTitles[p.id] = { title: p.title, parent_title: p.parent_title, status: 'publish', permalink: p.permalink || '' };
+                    }
+                    if (data.has_more) {
+                        html += '<div class="search-load-more" data-search-type="exclude" data-page="' + (page + 1) + '">Load more results (' + data.total + ' total)</div>';
+                    }
+                    if (append) {
+                        $results.find('.search-load-more').remove();
+                        $results.append(html);
+                    } else {
+                        $results.html(html).show();
+                    }
+                } else if (!append) {
+                    $results.html('<div class="search-no-results">No pages found</div>').show();
+                }
+            });
+        }
 
         $(document).on('click', '.exclude-result:not(.disabled)', function() {
             var pageId = parseInt($(this).data('page-id'));
             excludeIds.push(pageId);
             $(this).addClass('disabled').append('<span class="result-meta assigned-label">Excluded</span>');
             renderExcludeTags();
+        });
+
+        // ========================================
+        // LOAD MORE (unified handler for all search types)
+        // ========================================
+        $(document).on('click', '.search-load-more', function() {
+            var $btn = $(this);
+            var type = $btn.data('search-type');
+            var page = parseInt($btn.data('page'));
+            var $results = $btn.closest('.page-search-results, .child-search-results, .hozio-search-results');
+            var query = '';
+
+            $btn.text('Loading...');
+
+            if (type === 'parent') {
+                query = $btn.closest('.page-search-wrapper').find('.parent-search').val();
+                parentSearchLoad($btn.closest('.page-search-wrapper').find('.parent-search'), $results, query, page, true);
+            } else if (type === 'child') {
+                query = $btn.closest('.child-search-panel').find('.child-search-input').val();
+                var path = String($btn.data('path'));
+                childSearchLoad($results, query, path, page, true);
+            } else if (type === 'exclude') {
+                query = $('#hozio-exclude-search').val();
+                excludeSearchLoad($results, query, page, true);
+            }
         });
 
         // ========================================
@@ -1438,6 +2319,90 @@ function hozio_sitemap_layout_page() {
             }
             return unassigned;
         }
+
+        // ========================================
+        // DUPLICATE ENTRIES
+        // ========================================
+        function renderDuplicates() {
+            var dupes = getDuplicatePages();
+            var dupeIds = Object.keys(dupes);
+            var $section = $('#hozio-duplicates-section');
+            var $list = $('#hozio-duplicates-list');
+            var $count = $('#hozio-duplicate-count');
+
+            if (dupeIds.length === 0) {
+                $section.hide();
+                return;
+            }
+
+            $section.show();
+            $count.text(dupeIds.length);
+
+            var html = '';
+            for (var d = 0; d < dupeIds.length; d++) {
+                var pid = dupeIds[d];
+                var locations = dupes[pid];
+                html += '<div class="duplicate-entry">';
+                html += '<div class="duplicate-entry-header">';
+                html += '<span class="dashicons dashicons-media-default"></span>';
+                html += '<strong>' + escHtml(getPageTitleShort(pid)) + '</strong>';
+                html += '<span class="duplicate-entry-count">' + locations.length + ' locations</span>';
+                html += '</div>';
+                for (var l = 0; l < locations.length; l++) {
+                    var loc = locations[l];
+                    html += '<div class="duplicate-location">';
+                    html += '<span class="dashicons dashicons-arrow-right-alt2"></span>';
+                    html += '<span class="duplicate-location-name">' + escHtml(loc.accordionTitle) + '</span>';
+                    html += '<button type="button" class="button button-small duplicate-goto" data-path="' + loc.path + '">Go to</button>';
+                    html += '<button type="button" class="button button-small duplicate-remove" data-path="' + loc.path + '" data-page-id="' + pid + '">Remove</button>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+            $list.html(html);
+        }
+
+        // Go to accordion from duplicates section
+        $(document).on('click', '.duplicate-goto', function(e) {
+            e.preventDefault();
+            var path = String($(this).data('path'));
+            var parts = path.split('.');
+
+            // Expand all ancestor accordion cards
+            var currentPath = '';
+            for (var i = 0; i < parts.length; i++) {
+                currentPath = currentPath ? currentPath + '.' + parts[i] : parts[i];
+                var node = getNodeByPath(currentPath);
+                if (node) node._collapsed = false;
+            }
+            renderAccordions();
+
+            // Find the target element — could be an accordion card or a child item
+            setTimeout(function() {
+                var $target = $('.accordion-card[data-path="' + path + '"]');
+                if ($target.length === 0) {
+                    $target = $('.child-item[data-child-path="' + path + '"]');
+                }
+                if ($target.length > 0) {
+                    $('html, body').animate({ scrollTop: $target.offset().top - 100 }, 300);
+                    $target.addClass('highlight-flash');
+                    setTimeout(function() { $target.removeClass('highlight-flash'); }, 2000);
+                }
+            }, 100);
+        });
+
+        // Remove from specific location via duplicates section
+        $(document).on('click', '.duplicate-remove', function(e) {
+            e.preventDefault();
+            var path = String($(this).data('path'));
+            var info = getParentAndIndex(path);
+            if (info.isTopLevel) {
+                accordions.splice(info.index, 1);
+            } else if (info.parent && info.parent.children) {
+                info.parent.children.splice(info.index, 1);
+            }
+            renderAccordions();
+        });
 
         function renderUnassignedPages() {
             var pages = getUnassignedPages();
@@ -1510,10 +2475,23 @@ function hozio_sitemap_layout_page() {
         });
 
         // ========================================
+        // UNSAVED CHANGES WARNING
+        // ========================================
+        window.onbeforeunload = function() {
+            if (formDirty) {
+                return 'You have unsaved changes. Are you sure you want to leave?';
+            }
+        };
+        $('#hozio-layout-form').on('submit', function() {
+            formDirty = false;
+        });
+
+        // ========================================
         // INITIAL RENDER
         // ========================================
         renderAccordions();
         renderExcludeTags();
+        renderDuplicates();
         renderUnassignedPages();
     });
     </script>
@@ -1645,6 +2623,37 @@ function hozio_sitemap_layout_inline_styles() {
             font-size: 20px;
             color: #1f2937;
             font-weight: 600;
+        }
+
+        /* Override-off banner */
+        .hozio-override-off-banner {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 18px;
+            margin-bottom: 16px;
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-radius: 8px;
+        }
+        .hozio-override-off-icon .dashicons {
+            font-size: 28px !important;
+            width: 28px !important;
+            height: 28px !important;
+            color: #f59e0b !important;
+        }
+        .hozio-override-off-content {
+            flex: 1;
+        }
+        .hozio-override-off-content strong {
+            font-size: 14px;
+            color: #92400e;
+        }
+        .hozio-override-off-content p {
+            margin: 4px 0 0 0;
+            font-size: 13px;
+            color: #a16207;
+            line-height: 1.4;
         }
 
         .hozio-field { margin-bottom: 20px; }
@@ -1879,6 +2888,17 @@ function hozio_sitemap_layout_inline_styles() {
         .result-id { float: right; }
         .assigned-label { color: #f59e0b; font-weight: 500; }
         .search-no-results { padding: 16px; text-align: center; color: #9ca3af; font-size: 14px; }
+        .search-load-more {
+            padding: 12px 14px;
+            text-align: center;
+            color: var(--hozio-blue);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border-top: 1px solid #e5e7eb;
+            transition: background 0.15s;
+        }
+        .search-load-more:hover { background: #f0f9ff; }
 
         /* Children actions */
         .children-actions {
@@ -2035,6 +3055,32 @@ function hozio_sitemap_layout_inline_styles() {
         }
         .move-to-option:hover .dashicons { color: var(--hozio-blue); }
 
+        /* Move Out button */
+        .move-out-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #6b7280;
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+            line-height: 1.4;
+        }
+        .move-out-btn .dashicons {
+            font-size: 14px; width: 14px; height: 14px;
+        }
+        .move-out-btn:hover {
+            color: var(--hozio-orange);
+            border-color: var(--hozio-orange);
+            background: #fff7ed;
+        }
+
         .child-remove {
             background: none;
             border: none;
@@ -2045,6 +3091,81 @@ function hozio_sitemap_layout_inline_styles() {
             transition: all 0.2s;
         }
         .child-remove:hover { background: #fee2e2; color: #dc2626; }
+
+        /* Bulk select mode */
+        .children-hidden-notice {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #fef9e7;
+            border: 1px solid #f0d68a;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #92700c;
+        }
+        .children-hidden-notice .dashicons {
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+        }
+        .bulk-actions-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 12px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .bulk-select-all {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .bulk-selected-count {
+            color: #6b7280;
+            flex: 1;
+        }
+        .bulk-delete-btn:not(:disabled) {
+            color: #dc2626 !important;
+            border-color: #fecaca !important;
+        }
+        .bulk-child-cb {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        /* Hide bulk UI by default, show when select mode is active on the direct card */
+        .bulk-actions-bar,
+        .bulk-child-cb {
+            display: none;
+        }
+        .bulk-select-mode > .accordion-card-body .bulk-actions-bar,
+        .bulk-select-mode > .accordion-card-body > .accordion-card-field > .children-list > .child-item > .bulk-child-cb {
+            display: flex;
+        }
+        .bulk-select-mode > .accordion-card-body > .accordion-card-field > .children-list > .child-item > .bulk-child-cb {
+            display: inline-block;
+        }
+        /* Select button active state */
+        .select-mode-btn.is-active {
+            background: var(--hozio-blue) !important;
+            color: white !important;
+            border-color: var(--hozio-blue) !important;
+        }
+        /* Highlight checked child items */
+        .child-item:has(.bulk-child-cb:checked) {
+            background: #eff6ff;
+            border-color: #93c5fd;
+        }
 
         .children-empty { padding: 16px; text-align: center; color: #9ca3af; font-size: 14px; }
 
@@ -2058,6 +3179,92 @@ function hozio_sitemap_layout_inline_styles() {
         }
         .child-search-panel .child-search-results { margin-top: 8px; }
         .child-search-panel .close-child-search { margin-top: 8px; }
+
+        /* Taxonomy import panel */
+        .taxonomy-import-panel {
+            margin-top: 8px;
+            margin-bottom: 12px;
+            padding: 12px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+        .taxonomy-import-panel .taxonomy-filter-input {
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+        .taxonomy-import-loading {
+            color: #6b7280;
+            font-style: italic;
+            padding: 6px 0;
+            font-size: 13px;
+        }
+        .taxonomy-import-terms {
+            max-height: 340px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            background: white;
+        }
+        .taxonomy-term-item {
+            padding: 6px 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            border-bottom: 1px solid #f3f4f6;
+            transition: background 0.15s;
+        }
+        .taxonomy-term-item:last-child { border-bottom: none; }
+        .taxonomy-term-item:hover:not(.disabled) {
+            background: #f0f9ff;
+        }
+        .taxonomy-term-item.disabled {
+            cursor: default;
+            opacity: 0.6;
+        }
+        .taxonomy-term-item .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+            color: var(--hozio-blue);
+            flex-shrink: 0;
+        }
+        .taxonomy-term-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            background: #e5e7eb;
+            color: #6b7280;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+        .taxonomy-term-name {
+            flex: 1;
+            color: #374151;
+            font-weight: 500;
+        }
+        .taxonomy-term-count {
+            color: #9ca3af;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        .taxonomy-term-count::after { content: ' pg'; }
+        .taxonomy-no-results {
+            color: #6b7280;
+            padding: 12px;
+            text-align: center;
+            font-size: 13px;
+        }
+        .taxonomy-import-panel .close-taxonomy-panel {
+            margin-top: 8px;
+        }
 
         /* Empty state */
         .hozio-empty-state {
@@ -2265,6 +3472,189 @@ function hozio_sitemap_layout_inline_styles() {
             text-align: center;
             color: #9ca3af;
             font-size: 14px;
+        }
+
+        /* Duplicate entries section */
+        .duplicate-count-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 24px;
+            padding: 0 8px;
+            background: #ef4444;
+            color: white;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .duplicate-entry {
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            background: #fff;
+            overflow: hidden;
+        }
+
+        .duplicate-entry-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: #fef2f2;
+            border-bottom: 1px solid #fecaca;
+            font-weight: 600;
+            font-size: 14px;
+            color: #991b1b;
+        }
+
+        .duplicate-entry-header .dashicons {
+            color: #ef4444;
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+        }
+
+        .duplicate-entry-count {
+            font-size: 12px;
+            font-weight: 400;
+            color: #dc2626;
+            margin-left: auto;
+        }
+
+        .duplicate-location {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px 8px 38px;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 13px;
+            color: #6b7280;
+        }
+        .duplicate-location:last-child {
+            border-bottom: none;
+        }
+
+        .duplicate-location-name {
+            flex: 1;
+        }
+
+        .duplicate-goto,
+        .duplicate-remove {
+            padding: 2px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            background: #fff;
+            color: #374151;
+            white-space: nowrap;
+        }
+        .duplicate-goto:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+        }
+        .duplicate-remove {
+            color: #dc2626;
+            border-color: #fecaca;
+        }
+        .duplicate-remove:hover {
+            background: #fef2f2;
+            border-color: #f87171;
+        }
+
+        /* Highlight flash for Go-to navigation */
+        @keyframes highlightFlash {
+            0% { background-color: #fef08a; box-shadow: 0 0 0 3px #facc15; }
+            100% { background-color: transparent; box-shadow: none; }
+        }
+        .accordion-card.highlight-flash {
+            animation: highlightFlash 2s ease-out;
+        }
+
+        /* Taxonomy conflict dialog */
+        .taxonomy-conflict-dialog {
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .taxonomy-conflict-bar {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 14px;
+            background: #fef3c7;
+            border-bottom: 1px solid #fcd34d;
+            flex-wrap: wrap;
+        }
+
+        .taxonomy-conflict-summary {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #92400e;
+        }
+        .taxonomy-conflict-summary .dashicons {
+            font-size: 18px;
+            width: 18px;
+            height: 18px;
+        }
+
+        .taxonomy-conflict-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .taxonomy-conflict-skip {
+            color: #6b7280 !important;
+        }
+
+        .taxonomy-conflict-override {
+            color: #dc2626 !important;
+            border-color: #fecaca !important;
+        }
+
+        .taxonomy-conflict-list {
+            padding: 4px 0;
+        }
+
+        .taxonomy-conflict-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 14px;
+            font-size: 13px;
+            color: #374151;
+            border-bottom: 1px solid rgba(252, 211, 77, 0.3);
+        }
+        .taxonomy-conflict-item:last-child {
+            border-bottom: none;
+        }
+        .taxonomy-conflict-item .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+        }
+        .taxonomy-conflict-item-title {
+            flex: 1;
+            font-weight: 500;
+        }
+
+        .taxonomy-conflict-location {
+            font-size: 12px;
+            color: #b45309;
+            font-style: italic;
+            flex-shrink: 0;
         }
 
         @media (max-width: 768px) {
