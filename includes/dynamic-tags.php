@@ -286,6 +286,14 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         }
     }
 
+    if (!class_exists('My_Google_Ads_Phone_Name_Tag')) {
+        class My_Google_Ads_Phone_Name_Tag extends Hozio_Text_Base_Tag {
+            protected $tag_name   = 'google-ads-phone-name';
+            protected $tag_title  = 'Google Ads Phone # Name';
+            protected $option_key = 'hozio_google_ads_phone';
+        }
+    }
+
     if (!class_exists('My_Company_Address_Tag')) {
         class My_Company_Address_Tag extends Hozio_Text_Base_Tag {
             protected $tag_name   = 'company-address';
@@ -377,6 +385,7 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         'My_Company_Phone_1_Name_Tag',
         'My_Company_Phone_2_Name_Tag',
         'My_Sms_Phone_Name_Tag',
+        'My_Google_Ads_Phone_Name_Tag',
         'My_Company_Address_Tag',
         'My_Business_Hours_Tag',
         'My_To_Email_Contact_Form_Tag',
