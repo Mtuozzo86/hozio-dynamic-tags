@@ -1121,6 +1121,7 @@ function hozio_sitemap_layout_page() {
         var unassignedExpanded = false;
         var unassignedFilter = '';
         var formDirty = false;
+        var initialRenderDone = false;
 
         // ========================================
         // PATH-BASED TREE NAVIGATION
@@ -1249,7 +1250,7 @@ function hozio_sitemap_layout_page() {
         }
 
         function syncFormData() {
-            formDirty = true;
+            if (initialRenderDone) formDirty = true;
             for (var i = 0; i < accordions.length; i++) {
                 accordions[i].order = i;
             }
@@ -2616,6 +2617,7 @@ function hozio_sitemap_layout_page() {
         // INITIAL RENDER
         // ========================================
         renderAccordions();
+        initialRenderDone = true;
         renderExcludeTags();
         renderDuplicates();
         renderUnassignedPages();
