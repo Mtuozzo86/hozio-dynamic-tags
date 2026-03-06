@@ -2617,10 +2617,10 @@ function hozio_sitemap_layout_page() {
         // INITIAL RENDER
         // ========================================
         renderAccordions();
-        initialRenderDone = true;
         renderExcludeTags();
         renderDuplicates();
         renderUnassignedPages();
+        initialRenderDone = true;
     });
     </script>
 
