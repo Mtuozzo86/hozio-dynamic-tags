@@ -649,6 +649,63 @@ function hozio_sitemap_auto_place_page($new_status, $old_status, $post) {
 }
 add_action('transition_post_status', 'hozio_sitemap_auto_place_page', 10, 3);
 
+/**
+ * Auto-remove permanently deleted pages from the sitemap layout.
+ */
+function hozio_sitemap_auto_remove_deleted_page($post_id) {
+    $post = get_post($post_id);
+    if (!$post || $post->post_type !== 'page') return;
+
+    $overrides = get_option('hozio_sitemap_layout_overrides', array());
+    if (empty($overrides['enabled'])) return;
+
+    $accordions = isset($overrides['accordions']) ? $overrides['accordions'] : array();
+    if (empty($accordions)) return;
+
+    if (hozio_sitemap_remove_from_tree($accordions, $post_id)) {
+        $overrides['accordions'] = $accordions;
+        update_option('hozio_sitemap_layout_overrides', $overrides);
+    }
+
+    // Also remove from exclude list
+    if (!empty($overrides['exclude_ids'])) {
+        $overrides['exclude_ids'] = array_values(array_filter($overrides['exclude_ids'], function($id) use ($post_id) {
+            return intval($id) !== intval($post_id);
+        }));
+        update_option('hozio_sitemap_layout_overrides', $overrides);
+    }
+}
+add_action('before_delete_post', 'hozio_sitemap_auto_remove_deleted_page');
+
+/**
+ * Clean up deleted/non-existent pages from the accordion tree.
+ * Removes any page_id that no longer exists as a published page.
+ */
+function hozio_sitemap_cleanup_deleted_pages(&$items, $valid_ids) {
+    if (!is_array($items)) return false;
+    $changed = false;
+    for ($i = count($items) - 1; $i >= 0; $i--) {
+        $pid = intval($items[$i]['page_id']);
+        if (!in_array($pid, $valid_ids)) {
+            array_splice($items, $i, 1);
+            $changed = true;
+            continue;
+        }
+        if (!empty($items[$i]['children'])) {
+            if (hozio_sitemap_cleanup_deleted_pages($items[$i]['children'], $valid_ids)) {
+                $changed = true;
+            }
+        }
+    }
+    // Re-index order values
+    if ($changed) {
+        for ($j = 0; $j < count($items); $j++) {
+            $items[$j]['order'] = $j;
+        }
+    }
+    return $changed;
+}
+
 // ========================================
 // SAVE HANDLER
 // ========================================
@@ -734,6 +791,49 @@ function hozio_sitemap_layout_page() {
     $mode = isset($overrides['mode']) ? $overrides['mode'] : 'override_first';
     $accordions = isset($overrides['accordions']) ? $overrides['accordions'] : array();
     $exclude_ids = isset($overrides['exclude_ids']) ? $overrides['exclude_ids'] : array();
+
+    // Clean up deleted/trashed pages from accordion data on page load
+    if (!empty($accordions)) {
+        $all_referenced_ids = array();
+        hozio_collect_page_ids_from_accordions($accordions, $all_referenced_ids);
+        $all_referenced_ids = array_unique(array_filter($all_referenced_ids));
+
+        if (!empty($all_referenced_ids)) {
+            $existing_pages = get_posts(array(
+                'post_type'      => 'page',
+                'post_status'    => 'publish',
+                'post__in'       => $all_referenced_ids,
+                'posts_per_page' => -1,
+                'fields'         => 'ids',
+            ));
+            $valid_ids = array_map('intval', $existing_pages);
+
+            if (count($valid_ids) < count($all_referenced_ids)) {
+                $cleaned = hozio_sitemap_cleanup_deleted_pages($accordions, $valid_ids);
+                if ($cleaned) {
+                    $overrides['accordions'] = $accordions;
+                    update_option('hozio_sitemap_layout_overrides', $overrides);
+                }
+            }
+        }
+    }
+
+    // Clean up deleted pages from exclude list
+    if (!empty($exclude_ids)) {
+        $existing_excluded = get_posts(array(
+            'post_type'      => 'page',
+            'post_status'    => array('publish', 'draft', 'private'),
+            'post__in'       => $exclude_ids,
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+        ));
+        $valid_exclude = array_map('intval', $existing_excluded);
+        if (count($valid_exclude) < count($exclude_ids)) {
+            $exclude_ids = $valid_exclude;
+            $overrides['exclude_ids'] = $exclude_ids;
+            update_option('hozio_sitemap_layout_overrides', $overrides);
+        }
+    }
 
     // Pre-load page titles for all referenced page IDs
     $all_page_ids = array();
@@ -1841,9 +1941,22 @@ function hozio_sitemap_layout_page() {
             updateBulkCount($card);
         });
 
-        // Individual checkbox
-        $(document).on('change', '.bulk-child-cb', function() {
+        // Individual checkbox with shift+click range selection
+        var lastCheckedCb = null;
+        $(document).on('click', '.bulk-child-cb', function(e) {
             var $card = $(this).closest('.accordion-card');
+            if (e.shiftKey && lastCheckedCb) {
+                var $allCbs = $card.find('> .accordion-card-body .children-list > .child-item .bulk-child-cb');
+                var startIdx = $allCbs.index(lastCheckedCb);
+                var endIdx = $allCbs.index(this);
+                if (startIdx > -1 && endIdx > -1) {
+                    var from = Math.min(startIdx, endIdx);
+                    var to = Math.max(startIdx, endIdx);
+                    var checked = $(this).is(':checked');
+                    $allCbs.slice(from, to + 1).prop('checked', checked);
+                }
+            }
+            lastCheckedCb = this;
             updateBulkCount($card);
         });
 
@@ -2017,6 +2130,19 @@ function hozio_sitemap_layout_page() {
 
                 // Categorize pages: new, already here, or in another accordion
                 var localIds = getChildIdsAtPath(path);
+                // Also consider the current accordion's own page_id as "local" (not a conflict)
+                var selfId = parseInt(target.page_id);
+                if (selfId && localIds.indexOf(selfId) === -1) localIds.push(selfId);
+                // Include ancestor accordion parent pages as local too
+                var pathParts = path.split('.');
+                for (var ap = 0; ap < pathParts.length; ap++) {
+                    var ancestorPath = pathParts.slice(0, ap + 1).join('.');
+                    var ancestorNode = getNodeByPath(ancestorPath);
+                    if (ancestorNode) {
+                        var ancestorId = parseInt(ancestorNode.page_id);
+                        if (ancestorId && localIds.indexOf(ancestorId) === -1) localIds.push(ancestorId);
+                    }
+                }
                 var allIds = getAllAssignedIds();
                 var newPages = [];
                 var conflictPages = [];
