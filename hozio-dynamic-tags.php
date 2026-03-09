@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.01
+Version:         4.02
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -14,7 +14,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.01');
+define('HOZIO_VERSION', '4.02');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -86,6 +86,15 @@ add_action('init', function() {
         wp_schedule_event(time() + 3600, 'hourly', 'hozio_hub_heartbeat');
     }
 });
+
+// Flush rewrite rules once after a version upgrade (taxonomy changes need this)
+add_action('init', function() {
+    $last_version = get_option('hozio_last_flushed_version', '0');
+    if (version_compare($last_version, HOZIO_VERSION, '<')) {
+        flush_rewrite_rules(true);
+        update_option('hozio_last_flushed_version', HOZIO_VERSION);
+    }
+}, 99);
 
 
 add_action( 'init', function() {

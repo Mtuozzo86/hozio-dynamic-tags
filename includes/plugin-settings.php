@@ -39,6 +39,12 @@ function hozio_plugin_settings_register() {
         'default' => true,
         'sanitize_callback' => 'rest_sanitize_boolean'
     ]);
+
+    register_setting('hozio_plugin_settings', 'hozio_ghost_page_action', [
+        'type' => 'string',
+        'default' => 'redirect',
+        'sanitize_callback' => 'sanitize_text_field'
+    ]);
 }
 add_action('admin_init', 'hozio_plugin_settings_register');
 
@@ -279,6 +285,13 @@ function hozio_plugin_settings_save() {
     // Save auto-updates enabled setting
     $auto_updates_enabled = isset($_POST['hozio_auto_updates_enabled']) ? '1' : '0';
     update_option('hozio_auto_updates_enabled', $auto_updates_enabled);
+
+    // Save ghost page action setting
+    $ghost_page_action = isset($_POST['hozio_ghost_page_action']) ? sanitize_text_field($_POST['hozio_ghost_page_action']) : 'redirect';
+    if (!in_array($ghost_page_action, ['redirect', '404'], true)) {
+        $ghost_page_action = 'redirect';
+    }
+    update_option('hozio_ghost_page_action', $ghost_page_action);
 
     wp_redirect(add_query_arg('settings-updated', 'true', admin_url('admin.php?page=hozio-plugin-settings')));
     exit;
@@ -596,6 +609,35 @@ function hozio_plugin_settings_page() {
                                 <code>service-pages-loop-item</code> taxonomy term.
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ghost Page Protection Section -->
+            <div class="hozio-section" style="border-left-color: #e67e00;">
+                <h2 class="hozio-section-title">Ghost Page Protection</h2>
+                <p class="hozio-section-description">
+                    WordPress can serve child pages at incorrect root-level URLs (e.g. <code>/soda-blasting/</code> instead of <code>/services/soda-blasting/</code>).
+                    Choose how to handle these ghost URLs.
+                </p>
+
+                <?php $ghost_action = get_option('hozio_ghost_page_action', 'redirect'); ?>
+                <div class="hozio-field">
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <label style="display: flex; align-items: flex-start; gap: 10px; padding: 12px; background: <?php echo $ghost_action === 'redirect' ? '#f0fdf4' : '#f9fafb'; ?>; border: 2px solid <?php echo $ghost_action === 'redirect' ? '#86efac' : '#e5e7eb'; ?>; border-radius: 8px; cursor: pointer;">
+                            <input type="radio" name="hozio_ghost_page_action" value="redirect" <?php checked($ghost_action, 'redirect'); ?> style="margin-top: 3px;">
+                            <div>
+                                <div style="font-weight: 600;">301 Redirect to correct URL</div>
+                                <div style="color: #666; font-size: 13px;">Visitors are sent to the real page. Preserves SEO link equity. <strong>(Recommended)</strong></div>
+                            </div>
+                        </label>
+                        <label style="display: flex; align-items: flex-start; gap: 10px; padding: 12px; background: <?php echo $ghost_action === '404' ? '#fef2f2' : '#f9fafb'; ?>; border: 2px solid <?php echo $ghost_action === '404' ? '#fca5a5' : '#e5e7eb'; ?>; border-radius: 8px; cursor: pointer;">
+                            <input type="radio" name="hozio_ghost_page_action" value="404" <?php checked($ghost_action, '404'); ?> style="margin-top: 3px;">
+                            <div>
+                                <div style="font-weight: 600;">404 Not Found</div>
+                                <div style="color: #666; font-size: 13px;">Ghost URL returns a 404 error. Search engines will de-index it faster.</div>
+                            </div>
+                        </label>
                     </div>
                 </div>
             </div>

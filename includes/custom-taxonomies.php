@@ -24,7 +24,7 @@ function create_parent_pages_taxonomy() {
         'show_ui'               => true,
         'show_admin_column'     => false,
         'public'                => true,
-        'publicly_queryable'    => true,
+        'publicly_queryable'    => $archives_enabled ? true : false,
         'query_var'             => $archives_enabled ? true : false,
         'show_in_rest'          => true,
         'rest_base'             => 'parent_pages',
@@ -61,7 +61,7 @@ function create_town_taxonomies_taxonomy() {
         'show_ui'               => true,
         'show_admin_column'     => false,
         'public'                => true,
-        'publicly_queryable'    => true,
+        'publicly_queryable'    => $archives_enabled ? true : false,
         'query_var'             => $archives_enabled ? true : false,
         'show_in_rest'          => true,
         'rest_base'             => 'town_taxonomies',
@@ -74,22 +74,81 @@ function create_town_taxonomies_taxonomy() {
 add_action('init', 'create_town_taxonomies_taxonomy');
 
 // ========================
-// REDIRECT DISABLED ARCHIVES
+// KILL GHOST PAGES
 // ========================
-add_action('template_redirect', 'hozio_redirect_disabled_taxonomy_archives');
-function hozio_redirect_disabled_taxonomy_archives() {
-    if (is_tax('parent_pages')) {
-        $enabled = get_option('hozio_parent_pages_archive_enabled', 0);
-        if (!$enabled) {
-            wp_redirect(home_url('/'), 301);
-            exit;
+// Ghost pages come from two sources:
+// 1) Taxonomy terms: publicly_queryable creates URLs for every term
+// 2) WordPress slug matching: WP finds child pages by slug alone, ignoring hierarchy
+// This function does direct DB checks — does NOT rely on is_page()/is_tax() which
+// can be unreliable depending on how WordPress resolved the URL.
+add_action('template_redirect', 'hozio_kill_ghost_pages', 1);
+function hozio_kill_ghost_pages() {
+    if (is_admin() || wp_doing_ajax()) {
+        return;
+    }
+
+    // Get clean request path
+    $request_path = trim(strtok(wp_unslash($_SERVER['REQUEST_URI']), '?'), '/');
+    if (empty($request_path)) {
+        return; // Home page
+    }
+
+    // --- GHOST TYPE 1: Taxonomy term URLs ---
+    // Check the last slug segment against taxonomy terms
+    $slug = basename($request_path);
+    $parent_archives_on = get_option('hozio_parent_pages_archive_enabled', 0);
+    $town_archives_on   = get_option('hozio_town_taxonomies_archive_enabled', 0);
+
+    if (!$parent_archives_on && get_term_by('slug', $slug, 'parent_pages')) {
+        // Only 404 if this URL is actually being served as a taxonomy archive
+        if (is_tax('parent_pages')) {
+            global $wp_query;
+            $wp_query->set_404();
+            status_header(404);
+            nocache_headers();
+            return;
         }
     }
-    
-    if (is_tax('town_taxonomies')) {
-        $enabled = get_option('hozio_town_taxonomies_archive_enabled', 0);
-        if (!$enabled) {
-            wp_redirect(home_url('/'), 301);
+
+    if (!$town_archives_on && get_term_by('slug', $slug, 'town_taxonomies')) {
+        if (is_tax('town_taxonomies')) {
+            global $wp_query;
+            $wp_query->set_404();
+            status_header(404);
+            nocache_headers();
+            return;
+        }
+    }
+
+    // --- GHOST TYPE 2: Child pages at wrong URL ---
+    // Direct DB lookup: find a published child page whose slug matches
+    global $wpdb;
+    $child_page = $wpdb->get_row($wpdb->prepare(
+        "SELECT ID, post_parent FROM {$wpdb->posts}
+         WHERE post_name = %s
+           AND post_type = 'page'
+           AND post_status = 'publish'
+           AND post_parent > 0
+         LIMIT 1",
+        $slug
+    ));
+
+    if ($child_page) {
+        $correct_url  = get_permalink($child_page->ID);
+        $correct_path = trim(parse_url($correct_url, PHP_URL_PATH), '/');
+
+        if ($correct_path !== $request_path) {
+            $action = get_option('hozio_ghost_page_action', 'redirect');
+            if ($action === '404') {
+                // Block WordPress from guessing the correct URL and redirecting
+                add_filter('do_redirect_guess_404_permalink', '__return_false');
+                global $wp_query;
+                $wp_query->set_404();
+                status_header(404);
+                nocache_headers();
+                return;
+            }
+            wp_redirect($correct_url, 301);
             exit;
         }
     }
