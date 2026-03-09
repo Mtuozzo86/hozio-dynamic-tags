@@ -12,10 +12,10 @@ if (!defined('ABSPATH')) exit;
 class Hozio_Plugin_Updater {
 
     /**
-     * Plugin configuration (detected dynamically from actual install location)
+     * Plugin configuration
      */
-    private $plugin_slug;
-    private $plugin_file;
+    private $plugin_slug = 'hozio-dynamic-tags';
+    private $plugin_file = 'hozio-dynamic-tags/hozio-dynamic-tags.php';
     private $plugin_name = 'Hozio Pro';
 
     /**
@@ -49,10 +49,6 @@ class Hozio_Plugin_Updater {
      * Constructor - hook into WordPress update system
      */
     public function __construct() {
-        // Detect actual install directory (works regardless of folder name)
-        $this->plugin_file = plugin_basename(HOZIO_PLUGIN_FILE);
-        $this->plugin_slug = dirname($this->plugin_file);
-
         $this->current_version = $this->get_current_version();
 
         // Only run in admin
