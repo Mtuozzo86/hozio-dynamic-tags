@@ -113,12 +113,15 @@ add_action('wp_ajax_hozio_sitemap_get_page_children', function() {
     if (!$parent_id) wp_send_json_error('No parent ID');
 
     $children = get_posts(array(
-        'post_type'      => 'page',
-        'post_status'    => 'publish',
-        'post_parent'    => $parent_id,
-        'posts_per_page' => -1,
-        'orderby'        => 'title',
-        'order'          => 'ASC',
+        'post_type'              => 'page',
+        'post_status'            => 'publish',
+        'post_parent'            => $parent_id,
+        'posts_per_page'         => -1,
+        'orderby'                => 'title',
+        'order'                  => 'ASC',
+        'no_found_rows'          => true,
+        'update_post_meta_cache' => false,
+        'update_post_term_cache' => false,
     ));
 
     $results = array();
@@ -229,12 +232,15 @@ add_action('wp_ajax_hozio_sitemap_get_pages_by_taxonomy', function() {
     if (!taxonomy_exists($taxonomy)) wp_send_json_error('Invalid taxonomy');
 
     $pages = get_posts(array(
-        'post_type'      => 'page',
-        'post_status'    => 'publish',
-        'posts_per_page' => -1,
-        'orderby'        => 'title',
-        'order'          => 'ASC',
-        'tax_query'      => array(
+        'post_type'              => 'page',
+        'post_status'            => 'publish',
+        'posts_per_page'         => -1,
+        'orderby'                => 'title',
+        'order'                  => 'ASC',
+        'no_found_rows'          => true,
+        'update_post_meta_cache' => false,
+        'update_post_term_cache' => false,
+        'tax_query'              => array(
             array(
                 'taxonomy' => $taxonomy,
                 'field'    => 'term_id',
@@ -256,18 +262,55 @@ add_action('wp_ajax_hozio_sitemap_get_pages_by_taxonomy', function() {
     wp_send_json_success($results);
 });
 
-// 5. Import current auto-detection as overrides
+// 5. Get all published pages (lightweight, for unassigned pages section)
+add_action('wp_ajax_hozio_sitemap_get_all_site_pages', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    global $wpdb;
+    $rows = $wpdb->get_results(
+        "SELECT ID, post_title, post_parent FROM {$wpdb->posts}
+         WHERE post_type = 'page' AND post_status = 'publish'
+         ORDER BY post_title ASC"
+    );
+
+    // Build parent title map from the same data
+    $title_map = array();
+    foreach ($rows as $row) {
+        $title_map[(int)$row->ID] = $row->post_title ? $row->post_title : '(Untitled)';
+    }
+
+    $pages = array();
+    foreach ($rows as $row) {
+        $parent_title = '';
+        if ($row->post_parent && isset($title_map[(int)$row->post_parent])) {
+            $parent_title = $title_map[(int)$row->post_parent];
+        }
+        $pages[] = array(
+            'id'           => (int)$row->ID,
+            'title'        => $row->post_title ? $row->post_title : '(Untitled)',
+            'parent_title' => $parent_title,
+        );
+    }
+
+    wp_send_json_success($pages);
+});
+
+// 6. Import current auto-detection as overrides
 add_action('wp_ajax_hozio_sitemap_import_auto', function() {
     check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
     if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
 
     // Get all published pages
     $all_pages = get_posts(array(
-        'post_type'      => 'page',
-        'post_status'    => 'publish',
-        'posts_per_page' => -1,
-        'orderby'        => 'title',
-        'order'          => 'ASC',
+        'post_type'              => 'page',
+        'post_status'            => 'publish',
+        'posts_per_page'         => -1,
+        'orderby'                => 'title',
+        'order'                  => 'ASC',
+        'no_found_rows'          => true,
+        'update_post_meta_cache' => false,
+        'update_post_term_cache' => false,
     ));
 
     if (empty($all_pages)) {
@@ -792,6 +835,71 @@ function hozio_sitemap_layout_page() {
     $accordions = isset($overrides['accordions']) ? $overrides['accordions'] : array();
     $exclude_ids = isset($overrides['exclude_ids']) ? $overrides['exclude_ids'] : array();
 
+    // Only load pages referenced by accordions + excludes (bounded, not ALL pages)
+    // Unassigned pages are loaded separately via AJAX to avoid memory exhaustion on large sites
+    global $wpdb;
+
+    // Collect all page IDs referenced in accordions + excludes
+    $all_page_ids = array();
+    hozio_collect_page_ids_from_accordions($accordions, $all_page_ids);
+    $all_page_ids = array_merge($all_page_ids, $exclude_ids);
+    $all_page_ids = array_unique(array_filter(array_map('intval', $all_page_ids)));
+
+    // Load only the referenced pages from DB (bounded query)
+    $page_lookup = array();
+    if (!empty($all_page_ids)) {
+        $id_list = implode(',', $all_page_ids);
+        $rows = $wpdb->get_results(
+            "SELECT ID, post_title, post_name, post_parent, post_status
+             FROM {$wpdb->posts} WHERE ID IN ($id_list)"
+        );
+        foreach ($rows as $row) {
+            $page_lookup[(int)$row->ID] = $row;
+        }
+        unset($rows);
+
+        // Load ancestor pages needed for permalink building (parents not already in the set)
+        $need_ancestors = array();
+        foreach ($page_lookup as $row) {
+            $parent_id = (int)$row->post_parent;
+            if ($parent_id && !isset($page_lookup[$parent_id])) {
+                $need_ancestors[$parent_id] = true;
+            }
+        }
+        $max_depth = 5;
+        while (!empty($need_ancestors) && $max_depth-- > 0) {
+            $ancestor_list = implode(',', array_map('intval', array_keys($need_ancestors)));
+            $ancestor_rows = $wpdb->get_results(
+                "SELECT ID, post_title, post_name, post_parent, post_status
+                 FROM {$wpdb->posts} WHERE ID IN ($ancestor_list)"
+            );
+            $need_ancestors = array();
+            foreach ($ancestor_rows as $row) {
+                $page_lookup[(int)$row->ID] = $row;
+                $parent_id = (int)$row->post_parent;
+                if ($parent_id && !isset($page_lookup[$parent_id])) {
+                    $need_ancestors[$parent_id] = true;
+                }
+            }
+            unset($ancestor_rows);
+        }
+    }
+
+    // Helper: build page permalink from slug chain
+    $home_url = home_url('/');
+    $build_permalink = function($page_id) use (&$page_lookup, $home_url) {
+        $slugs = array();
+        $current_id = (int)$page_id;
+        $max_depth = 10;
+        while ($current_id && $max_depth-- > 0) {
+            if (!isset($page_lookup[$current_id])) break;
+            $slugs[] = $page_lookup[$current_id]->post_name;
+            $current_id = (int)$page_lookup[$current_id]->post_parent;
+        }
+        if (empty($slugs)) return '';
+        return $home_url . implode('/', array_reverse($slugs)) . '/';
+    };
+
     // Clean up deleted/trashed pages from accordion data on page load
     if (!empty($accordions)) {
         $all_referenced_ids = array();
@@ -799,14 +907,12 @@ function hozio_sitemap_layout_page() {
         $all_referenced_ids = array_unique(array_filter($all_referenced_ids));
 
         if (!empty($all_referenced_ids)) {
-            $existing_pages = get_posts(array(
-                'post_type'      => 'page',
-                'post_status'    => 'publish',
-                'post__in'       => $all_referenced_ids,
-                'posts_per_page' => -1,
-                'fields'         => 'ids',
-            ));
-            $valid_ids = array_map('intval', $existing_pages);
+            $valid_ids = array();
+            foreach ($all_referenced_ids as $rid) {
+                if (isset($page_lookup[(int)$rid]) && $page_lookup[(int)$rid]->post_status === 'publish') {
+                    $valid_ids[] = (int)$rid;
+                }
+            }
 
             if (count($valid_ids) < count($all_referenced_ids)) {
                 $cleaned = hozio_sitemap_cleanup_deleted_pages($accordions, $valid_ids);
@@ -820,14 +926,13 @@ function hozio_sitemap_layout_page() {
 
     // Clean up deleted pages from exclude list
     if (!empty($exclude_ids)) {
-        $existing_excluded = get_posts(array(
-            'post_type'      => 'page',
-            'post_status'    => array('publish', 'draft', 'private'),
-            'post__in'       => $exclude_ids,
-            'posts_per_page' => -1,
-            'fields'         => 'ids',
-        ));
-        $valid_exclude = array_map('intval', $existing_excluded);
+        $valid_exclude = array();
+        foreach ($exclude_ids as $eid) {
+            $eid = (int)$eid;
+            if (isset($page_lookup[$eid]) && in_array($page_lookup[$eid]->post_status, array('publish', 'draft', 'private'))) {
+                $valid_exclude[] = $eid;
+            }
+        }
         if (count($valid_exclude) < count($exclude_ids)) {
             $exclude_ids = $valid_exclude;
             $overrides['exclude_ids'] = $exclude_ids;
@@ -835,37 +940,23 @@ function hozio_sitemap_layout_page() {
         }
     }
 
-    // Pre-load page titles for all referenced page IDs
-    $all_page_ids = array();
-    hozio_collect_page_ids_from_accordions($accordions, $all_page_ids);
-    $all_page_ids = array_merge($all_page_ids, $exclude_ids);
-    $all_page_ids = array_unique(array_filter($all_page_ids));
-
+    // Build page_titles for JS (only pages in accordions + excludes)
     $page_titles = array();
-    if (!empty($all_page_ids)) {
-        $pages = get_posts(array(
-            'post_type'      => 'page',
-            'post_status'    => 'any',
-            'post__in'       => $all_page_ids,
-            'posts_per_page' => -1,
-        ));
-        foreach ($pages as $p) {
-            $parent_title = '';
-            if ($p->post_parent) {
-                $parent_title = get_the_title($p->post_parent);
-            }
-            $page_titles[$p->ID] = array(
-                'title'        => $p->post_title ? $p->post_title : '(Untitled)',
-                'parent_title' => $parent_title,
-                'status'       => $p->post_status,
-                'permalink'    => get_permalink($p->ID),
-            );
-        }
-    }
-
-    // Mark missing pages
     foreach ($all_page_ids as $pid) {
-        if (!isset($page_titles[$pid])) {
+        if (isset($page_lookup[$pid])) {
+            $row = $page_lookup[$pid];
+            $parent_title = '';
+            if ($row->post_parent && isset($page_lookup[(int)$row->post_parent])) {
+                $pt = $page_lookup[(int)$row->post_parent]->post_title;
+                $parent_title = $pt ? $pt : '(Untitled)';
+            }
+            $page_titles[$pid] = array(
+                'title'        => $row->post_title ? $row->post_title : '(Untitled)',
+                'parent_title' => $parent_title,
+                'status'       => $row->post_status,
+                'permalink'    => $build_permalink($pid),
+            );
+        } else {
             $page_titles[$pid] = array(
                 'title'        => '(Deleted Page #' . $pid . ')',
                 'parent_title' => '',
@@ -873,25 +964,7 @@ function hozio_sitemap_layout_page() {
             );
         }
     }
-
-    // Pre-load all published pages for the Unassigned Pages section
-    $all_site_pages = array();
-    $all_published = get_posts(array(
-        'post_type'      => 'page',
-        'post_status'    => 'publish',
-        'posts_per_page' => -1,
-        'orderby'        => 'title',
-        'order'          => 'ASC',
-    ));
-    foreach ($all_published as $p) {
-        $parent_title = $p->post_parent ? get_the_title($p->post_parent) : '';
-        $all_site_pages[] = array(
-            'id'           => $p->ID,
-            'title'        => $p->post_title ? $p->post_title : '(Untitled)',
-            'parent_title' => $parent_title,
-            'permalink'    => get_permalink($p->ID),
-        );
-    }
+    unset($page_lookup);
     ?>
 
     <div class="wrap">
@@ -1116,7 +1189,8 @@ function hozio_sitemap_layout_page() {
         var pageTitles = <?php echo json_encode($page_titles); ?>;
         var accordions = <?php echo json_encode($accordions); ?>;
         var excludeIds = <?php echo json_encode($exclude_ids); ?>;
-        var allSitePages = <?php echo json_encode($all_site_pages); ?>;
+        var allSitePages = []; // Loaded via AJAX to avoid memory exhaustion on large sites
+        var allSitePagesLoaded = false;
         var searchTimeout = null;
         var unassignedExpanded = false;
         var unassignedFilter = '';
@@ -2532,11 +2606,21 @@ function hozio_sitemap_layout_page() {
         });
 
         function renderUnassignedPages() {
-            var pages = getUnassignedPages();
             var $list = $('#hozio-unassigned-list');
             var $count = $('#hozio-unassigned-count');
             var $toggle = $('#hozio-toggle-unassigned');
             var $searchWrap = $('#hozio-unassigned-search-wrapper');
+
+            // Show loading state while AJAX is fetching pages
+            if (!allSitePagesLoaded) {
+                $list.html('<div class="unassigned-loading" style="color: #6b7280; font-style: italic;">Loading pages...</div>');
+                $count.text('...');
+                $toggle.hide();
+                $searchWrap.hide();
+                return;
+            }
+
+            var pages = getUnassignedPages();
 
             // Filter by search
             var filtered = pages;
@@ -2619,7 +2703,18 @@ function hozio_sitemap_layout_page() {
         renderAccordions();
         renderExcludeTags();
         renderDuplicates();
-        renderUnassignedPages();
+        // Load all site pages via AJAX (separate request to avoid memory exhaustion)
+        renderUnassignedPages(); // Show loading state
+        $.post(ajaxurl, {
+            action: 'hozio_sitemap_get_all_site_pages',
+            nonce: nonce
+        }, function(response) {
+            if (response.success) {
+                allSitePages = response.data;
+            }
+            allSitePagesLoaded = true;
+            renderUnassignedPages();
+        });
         initialRenderDone = true;
     });
     </script>
@@ -2651,10 +2746,13 @@ add_action('wp_ajax_hozio_sitemap_load_titles', function() {
     if (empty($ids)) wp_send_json_success(array());
 
     $pages = get_posts(array(
-        'post_type'      => 'page',
-        'post_status'    => 'any',
-        'post__in'       => $ids,
-        'posts_per_page' => -1,
+        'post_type'              => 'page',
+        'post_status'            => 'any',
+        'post__in'               => $ids,
+        'posts_per_page'         => -1,
+        'no_found_rows'          => true,
+        'update_post_meta_cache' => false,
+        'update_post_term_cache' => false,
     ));
 
     $results = array();

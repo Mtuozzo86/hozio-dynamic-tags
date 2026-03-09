@@ -33,7 +33,788 @@ if ($dark_mode_enabled) {
 $custom_link_color = get_option('hozio_sitemap_link_color', '');
 $custom_link_hover_color = get_option('hozio_sitemap_link_hover_color', '');
 
-get_header(); 
+get_header();
+?>
+
+<?php
+// Output styles BEFORE HTML to prevent Flash of Unstyled Content (FOUC)
+echo '<style>';
+?>
+.sitemap-wrapper * {
+    box-sizing: border-box;
+}
+
+.sitemap-wrapper {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+}
+
+.sitemap-main {
+    background: <?php echo $bg_color; ?>;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.sitemap-header {
+    background: <?php echo $bg_color; ?>;
+    color: <?php echo $text_color; ?>;
+    padding: 0;
+    text-align: center;
+    width: 100%;
+    margin: 0;
+}
+
+.sitemap-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin: 0 0 1rem 0;
+    text-shadow: none;
+    color: <?php echo $text_color; ?>;
+}
+
+.sitemap-description {
+    font-size: 1.1rem;
+    opacity: 1;
+    max-width: none;
+    margin: 0;
+    color: <?php echo $desc_color; ?>;
+    width: 100%;
+}
+
+.sitemap-description p {
+    margin: 0;
+}
+
+.sitemap-grid {
+    display: block;
+    padding: 2rem 1rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.sitemap-section {
+    background: <?php echo $bg_color; ?>;
+    border-radius: 15px;
+    padding: 1.5rem;
+    border: 1px solid <?php echo $border_color; ?>;
+    transition: none;
+    margin-bottom: 2rem;
+    box-shadow: none;
+}
+
+.sitemap-section:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: <?php echo $text_color; ?>;
+    margin: 0 0 1.5rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid <?php echo $border_light; ?>;
+}
+
+.section-icon {
+    color: <?php echo $text_color; ?>;
+    flex-shrink: 0;
+}
+
+/* Ensure all headings use correct color */
+.sitemap-section h2,
+.sitemap-section h3,
+h2.section-title,
+h3.section-title {
+    color: <?php echo $text_color; ?> !important;
+}
+
+/* Section Accordion Styles for Posts */
+.sitemap-section-accordion {
+    overflow: hidden;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.sitemap-section-accordion:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.section-accordion-header {
+    cursor: pointer;
+    user-select: none;
+    justify-content: space-between;
+    margin-bottom: -0.75rem !important;
+    padding-bottom: 0.75rem !important;
+    transition: all 0.2s ease;
+    position: relative;
+    border-bottom: none !important;
+}
+
+.section-accordion-header.active {
+    border-bottom: 1px solid <?php echo $border_light; ?> !important;
+    margin-bottom: 0 !important;
+}
+
+.section-title-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.post-count-small {
+    font-size: 0.875rem;
+    font-weight: 400;
+    opacity: 0.7;
+    margin-left: 0.25rem;
+}
+
+.section-accordion-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.accordion-helper-text {
+    font-size: 1rem;
+    font-weight: 500;
+    color: <?php echo $text_color; ?>;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.section-accordion-icon {
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+    color: <?php echo $text_color; ?>;
+    stroke: <?php echo $text_color; ?>;
+    fill: none;
+    width: 24px;
+    height: 24px;
+}
+
+.sitemap-section-accordion:hover .section-accordion-icon {
+    transform: translateY(2px);
+}
+
+.section-accordion-header.active .section-accordion-icon {
+    transform: rotate(180deg);
+}
+
+.sitemap-section-accordion:hover .section-accordion-header.active .section-accordion-icon {
+    transform: rotate(180deg) translateY(2px);
+}
+
+.section-accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    padding-top: 0;
+}
+
+.section-accordion-content.active {
+    max-height: 3000px;
+    padding-top: 1.5rem;
+}
+
+/* Pages Accordion Styles */
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordions {
+    margin-top: 40px;
+    margin-bottom: 1.5rem;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion {
+    margin-bottom: 1rem;
+    border: none;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 1rem 1.25rem !important;
+    background: <?php echo $accordion_bg; ?> !important;
+    background-color: <?php echo $accordion_bg; ?> !important;
+    border: none !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    font-weight: 600 !important;
+    color: <?php echo $text_color; ?> !important;
+    text-align: left !important;
+    transition: background-color 0.2s ease !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    text-decoration: none !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+    line-height: normal !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:hover {
+    background: <?php echo $accordion_hover; ?> !important;
+    background-color: <?php echo $accordion_hover; ?> !important;
+    color: <?php echo $text_color; ?> !important;
+    box-shadow: none !important;
+    transform: none !important;
+    border: none !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header.active {
+    background: <?php echo $accordion_active; ?> !important;
+    background-color: <?php echo $accordion_active; ?> !important;
+    color: <?php echo $text_color; ?> !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:focus {
+    outline: none !important;
+    box-shadow: none !important;
+    background: <?php echo $accordion_hover; ?> !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-title.accordion-title {
+    flex-grow: 1 !important;
+    color: <?php echo $text_color; ?> !important;
+    text-shadow: none !important;
+    font-weight: 600 !important;
+    font-size: 18px !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-icon.accordion-icon {
+    flex-shrink: 0 !important;
+    transition: transform 0.3s ease !important;
+    color: <?php echo $text_color; ?> !important;
+    stroke: <?php echo $text_color; ?> !important;
+    fill: none !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.active .accordion-icon {
+    transform: rotate(180deg) !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-content.sitemap-accordion-content {
+    max-height: 0 !important;
+    overflow: hidden !important;
+    transition: max-height 0.3s ease !important;
+    background: <?php echo $bg_color; ?> !important;
+    background-color: <?php echo $bg_color; ?> !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-content.active {
+    max-height: 100% !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list.accordion-child-list {
+    padding: 40px 1.25rem !important;
+    margin: 0 !important;
+    background: <?php echo $bg_color; ?> !important;
+    background-color: <?php echo $bg_color; ?> !important;
+}
+
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link {
+    font-size: 16px !important;
+    text-decoration: none !important;
+    font-weight: 500 !important;
+}
+
+/* Accordion child lists keep the same 3-column grid as regular lists */
+
+/* Accordion count badge */
+.sitemap-wrapper .accordion-count {
+    font-size: 13px !important;
+    font-weight: 400 !important;
+    opacity: 0.6;
+    margin-left: 0.5rem;
+}
+
+/* Nested sub-sections indicator badge */
+.sitemap-wrapper .accordion-nested-badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    background: <?php echo $dark_mode_enabled ? 'rgba(100,160,255,0.15)' : 'rgba(0,90,200,0.08)'; ?> !important;
+    color: <?php echo $dark_mode_enabled ? '#8bb8ff' : '#0059c7'; ?> !important;
+    padding: 3px 12px !important;
+    border-radius: 12px !important;
+    margin-left: 0.75rem !important;
+    white-space: nowrap !important;
+    vertical-align: middle !important;
+}
+
+.sitemap-wrapper .accordion-nested-badge svg {
+    flex-shrink: 0 !important;
+    opacity: 0.85 !important;
+}
+
+/* Pages indicator badge (shown when hub has both sub-accordions AND plain pages) */
+.sitemap-wrapper .accordion-pages-badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    background: <?php echo $dark_mode_enabled ? 'rgba(160,160,160,0.15)' : 'rgba(0,0,0,0.05)'; ?> !important;
+    color: <?php echo $dark_mode_enabled ? '#aaaaaa' : '#555555'; ?> !important;
+    padding: 3px 12px !important;
+    border-radius: 12px !important;
+    margin-left: 0.5rem !important;
+    white-space: nowrap !important;
+    vertical-align: middle !important;
+}
+
+.sitemap-wrapper .accordion-pages-badge svg {
+    flex-shrink: 0 !important;
+    opacity: 0.7 !important;
+}
+
+/* Pages Drawer — collapsible page list with centered divider toggle */
+.sitemap-wrapper .pages-drawer-content {
+    overflow: hidden !important;
+    transition: max-height 0.4s ease !important;
+}
+
+.sitemap-wrapper .pages-drawer-divider {
+    display: flex !important;
+    align-items: center !important;
+    gap: 16px !important;
+    padding: 8px 4px !important;
+    margin: 4px 0 8px 0 !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    border: none !important;
+    background: none !important;
+}
+.sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-label {
+    color: <?php echo $link_color; ?> !important;
+}
+.sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-line {
+    border-color: <?php echo $dark_mode_enabled ? '#555555' : '#bbb'; ?> !important;
+}
+.sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-chevron {
+    color: <?php echo $link_color; ?> !important;
+}
+
+.sitemap-wrapper .pages-drawer-line {
+    flex: 1 !important;
+    height: 0 !important;
+    border: none !important;
+    border-top: 1px dashed <?php echo $dark_mode_enabled ? '#444444' : '#d0d0d0'; ?> !important;
+    transition: border-color 0.2s !important;
+}
+
+.sitemap-wrapper .pages-drawer-label {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    color: <?php echo $dark_mode_enabled ? '#888888' : '#999999'; ?> !important;
+    white-space: nowrap !important;
+    transition: color 0.2s !important;
+    letter-spacing: 0.3px !important;
+}
+
+.sitemap-wrapper .pages-drawer-text {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+}
+
+.sitemap-wrapper .pages-drawer-chevron {
+    flex-shrink: 0 !important;
+    color: <?php echo $dark_mode_enabled ? '#888888' : '#999999'; ?> !important;
+    transition: transform 0.3s ease, color 0.2s !important;
+}
+.sitemap-wrapper .pages-drawer-divider.collapsed .pages-drawer-chevron {
+    transform: rotate(180deg) !important;
+}
+
+/* Nested Accordion Styles — Width reduction per nesting level */
+/* Each level gets progressively narrower and centered */
+.sitemap-wrapper .sitemap-accordion .sitemap-accordion {
+    border: none !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+}
+
+/* Spacing between sibling sub-accordions */
+.sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-2 + .sitemap-accordion-level-2 {
+    margin-top: 14px !important;
+}
+
+.sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-3 + .sitemap-accordion-level-3 {
+    margin-top: 10px !important;
+}
+
+/* Top padding for first sub-accordion inside content (no child-list before it) */
+.sitemap-wrapper .sitemap-accordion .sitemap-accordion-content > .sitemap-accordion:first-child {
+    margin-top: 12px !important;
+}
+
+/* Spacing after sub-accordions before the child list */
+.sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-2 + .accordion-child-list,
+.sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-3 + .accordion-child-list {
+    margin-top: 10px !important;
+}
+
+/* Spacing before the first sub-accordion when it follows a child list */
+.sitemap-wrapper .sitemap-accordion .accordion-child-list + .sitemap-accordion-level-2,
+.sitemap-wrapper .sitemap-accordion .accordion-child-list + .sitemap-accordion-level-3 {
+    margin-top: 10px !important;
+}
+
+/* Level 2 — e.g., Gutter Services inside Services */
+.sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-2 {
+    margin: 0 2rem !important;
+    border-radius: 6px !important;
+}
+
+.sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
+    padding: 0.85rem 1.25rem !important;
+    background: <?php echo $dark_mode_enabled ? '#222222' : '#f0f0f0'; ?> !important;
+    border-radius: 6px !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:hover {
+    background: <?php echo $dark_mode_enabled ? '#2a2a2a' : '#e8e8e8'; ?> !important;
+}
+
+.sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header.active {
+    background: <?php echo $dark_mode_enabled ? '#2a2a2a' : '#e5e5e5'; ?> !important;
+    border-radius: 6px 6px 0 0 !important;
+}
+
+.sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header .accordion-title {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+}
+
+/* Level 3 — e.g., Gutter Installation inside Gutter Services */
+.sitemap-wrapper .sitemap-accordion .sitemap-accordion .sitemap-accordion-level-3 {
+    margin: 0 1.5rem !important;
+    border-radius: 5px !important;
+}
+
+.sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
+    padding: 0.7rem 1.25rem !important;
+    background: <?php echo $dark_mode_enabled ? '#2a2a2a' : '#e8e8e8'; ?> !important;
+    border-radius: 5px !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:hover {
+    background: <?php echo $dark_mode_enabled ? '#333333' : '#dedede'; ?> !important;
+}
+
+.sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header.active {
+    background: <?php echo $dark_mode_enabled ? '#333333' : '#d8d8d8'; ?> !important;
+    border-radius: 5px 5px 0 0 !important;
+}
+
+.sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header .accordion-title {
+    font-size: 14px !important;
+    font-weight: 500 !important;
+}
+
+/* Nested accordion content */
+.sitemap-wrapper .sitemap-accordion .sitemap-accordion .sitemap-accordion-content {
+    background: <?php echo $bg_color; ?> !important;
+    border-radius: 0 0 6px 6px !important;
+}
+
+.sitemap-wrapper .sitemap-accordion .sitemap-accordion .accordion-child-list {
+    padding: 20px 1.25rem !important;
+}
+
+/* List Styles */
+.sitemap-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem 1rem;
+    align-items: stretch;
+}
+
+.sitemap-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0;
+    margin-bottom: 0;
+    background: none;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+    border-bottom: 1px solid <?php echo $border_color; ?>;
+    box-sizing: border-box;
+}
+
+.sitemap-item:last-child {
+    margin-bottom: 0;
+}
+
+.sitemap-link {
+    color: <?php echo $link_color; ?>;
+    text-decoration: none;
+    font-weight: 500;
+    transition: none;
+    flex-grow: 1;
+    font-size: 16px !important;
+}
+
+.sitemap-link:hover {
+    color: <?php echo $link_color; ?>;
+    text-decoration: underline;
+}
+
+.post-date,
+.post-count {
+    font-size: 0.875rem;
+    color: <?php echo $desc_color; ?>;
+    font-weight: 400;
+    flex-shrink: 0;
+    margin-left: 1rem;
+}
+
+.tag-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.tag-link {
+    display: inline-block;
+    padding: 0.375rem 0.75rem;
+    background: <?php echo $bg_color; ?>;
+    color: <?php echo $text_color; ?>;
+    text-decoration: none;
+    border-radius: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: none;
+    border: 1px solid <?php echo $text_color; ?>;
+    margin: 0.25rem;
+}
+
+.tag-link:hover {
+    background: <?php echo $bg_color; ?>;
+    transform: none;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+    .sitemap-wrapper {
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+
+    .sitemap-grid {
+        display: block;
+        padding: 1rem 0;
+    }
+
+    .sitemap-header {
+        padding: 1rem 0 0.5rem;
+    }
+
+    .sitemap-title {
+        font-size: 2rem;
+    }
+
+    .sitemap-section {
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .sitemap-list {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .sitemap-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+
+    .post-date,
+    .post-count {
+        margin-left: 0;
+        font-size: 0.8rem;
+    }
+
+    .tag-cloud {
+        gap: 0.375rem;
+    }
+
+    .tag-link {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    /* Reduce nested accordion indentation on tablet */
+    .sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-2 {
+        margin: 0 0.75rem !important;
+    }
+    .sitemap-wrapper .sitemap-accordion .sitemap-accordion .sitemap-accordion-level-3 {
+        margin: 0 0.5rem !important;
+    }
+
+    /* Reduce accordion content padding on tablet */
+    .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list.accordion-child-list {
+        padding: 20px 0.75rem !important;
+    }
+    .sitemap-wrapper .sitemap-accordion .sitemap-accordion .accordion-child-list {
+        padding: 15px 0.75rem !important;
+    }
+
+    /* Tighter accordion header padding */
+    .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
+        padding: 0.75rem 1rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .sitemap-wrapper {
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+
+    .sitemap-grid {
+        display: block;
+        padding: 0.5rem 0;
+    }
+
+    .sitemap-section {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .sitemap-list {
+        grid-template-columns: 1fr;
+    }
+
+    .sitemap-title {
+        font-size: 1.75rem;
+    }
+
+    .section-title {
+        font-size: 1.125rem;
+    }
+
+    .sitemap-link {
+        font-size: 0.9rem;
+    }
+
+    /* Minimal nested accordion indentation on small mobile */
+    .sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-2 {
+        margin: 0 0.35rem !important;
+    }
+    .sitemap-wrapper .sitemap-accordion .sitemap-accordion .sitemap-accordion-level-3 {
+        margin: 0 0.25rem !important;
+    }
+
+    /* Tighter accordion padding on small mobile */
+    .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list.accordion-child-list {
+        padding: 15px 0.5rem !important;
+    }
+    .sitemap-wrapper .sitemap-accordion .sitemap-accordion .accordion-child-list {
+        padding: 10px 0.5rem !important;
+    }
+    .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
+        padding: 0.65rem 0.75rem !important;
+    }
+    .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordions {
+        margin-top: 20px;
+    }
+}
+
+.sitemap-wrapper,
+.sitemap-main,
+.sitemap-section {
+    background: <?php echo $bg_color; ?> !important;
+    color: <?php echo $text_color; ?> !important;
+}
+
+@media print {
+    .sitemap-wrapper {
+        box-shadow: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .sitemap-header {
+        background: <?php echo $bg_color; ?>;
+        color: <?php echo $text_color; ?>;
+        text-shadow: none;
+    }
+
+    .sitemap-section {
+        background: <?php echo $bg_color; ?>;
+        border: 1px solid <?php echo $text_color; ?>;
+        break-inside: avoid;
+    }
+
+    .tag-link {
+        background: <?php echo $bg_color; ?>;
+        color: <?php echo $text_color; ?>;
+        border: 1px solid <?php echo $text_color; ?>;
+    }
+
+    .sitemap-accordion-content,
+    .section-accordion-content {
+        max-height: none !important;
+    }
+}
+
+<?php
+// Add custom link color overrides if set (overrides Elementor global styles)
+if (!empty($custom_link_color)) {
+    echo '
+/* Custom Link Color Override */
+.sitemap-wrapper .sitemap-link,
+.sitemap-wrapper .sitemap-link:visited,
+.sitemap-wrapper .tag-link,
+.sitemap-wrapper .tag-link:visited,
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link {
+    color: ' . esc_attr($custom_link_color) . ' !important;
+}
+    ';
+}
+
+if (!empty($custom_link_hover_color)) {
+    echo '
+/* Custom Link Hover Color Override */
+.sitemap-wrapper .sitemap-link:hover,
+.sitemap-wrapper .sitemap-link:focus,
+.sitemap-wrapper .tag-link:hover,
+.sitemap-wrapper .tag-link:focus,
+.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link:hover {
+    color: ' . esc_attr($custom_link_hover_color) . ' !important;
+}
+    ';
+}
+?>
+<?php
+echo '</style>';
 ?>
 
 <!-- SEO Meta Description -->
@@ -83,29 +864,33 @@ document.addEventListener('DOMContentLoaded', function() {
                     </h2>
 
                     <?php
-                    // Get all pages
-                    $all_pages = get_pages(array(
-                        'sort_column' => 'menu_order',
-                        'sort_order' => 'ASC',
+                    // Get all pages (suppress meta/term cache priming to avoid memory exhaustion on large sites)
+                    $all_pages = get_posts(array(
+                        'post_type' => 'page',
+                        'posts_per_page' => -1,
                         'post_status' => 'publish',
-                        'exclude' => get_the_ID()
+                        'orderby' => 'menu_order',
+                        'order' => 'ASC',
+                        'exclude' => array(get_the_ID()),
+                        'update_post_meta_cache' => false,
+                        'update_post_term_cache' => false,
+                        'no_found_rows' => true,
                     ));
 
-                    // ========================================
-                    // PERFORMANCE: Batch-prime caches (replaces ~800+ individual queries with 2-3)
-                    // ========================================
+                    // Build noindex set via a single targeted DB query instead of per-page get_post_meta()
+                    global $wpdb;
+                    $noindex_ids = array();
                     $all_page_ids = wp_list_pluck($all_pages, 'ID');
                     if (!empty($all_page_ids)) {
-                        update_meta_cache('post', $all_page_ids);
-                        update_object_term_cache($all_page_ids, 'page');
-                    }
-
-                    // Build noindex set once (all meta is now cached, so these are free lookups)
-                    $noindex_ids = array();
-                    foreach ($all_pages as $page) {
-                        $yoast_noindex = get_post_meta($page->ID, '_yoast_wpseo_meta-robots-noindex', true);
-                        if ($yoast_noindex === '1') {
-                            $noindex_ids[$page->ID] = true;
+                        $id_list = implode(',', array_map('intval', $all_page_ids));
+                        $noindex_rows = $wpdb->get_col(
+                            "SELECT post_id FROM {$wpdb->postmeta}
+                             WHERE meta_key = '_yoast_wpseo_meta-robots-noindex'
+                             AND meta_value = '1'
+                             AND post_id IN ($id_list)"
+                        );
+                        foreach ($noindex_rows as $nid) {
+                            $noindex_ids[(int)$nid] = true;
                         }
                     }
 
@@ -1018,12 +1803,28 @@ document.addEventListener('DOMContentLoaded', function() {
                     'numberposts' => 20,
                     'post_status' => 'publish',
                     'orderby' => 'date',
-                    'order' => 'DESC'
+                    'order' => 'DESC',
+                    'update_post_meta_cache' => false,
+                    'update_post_term_cache' => false,
                 ));
-                
-                $recent_posts = array_filter($recent_posts, function($post) {
-                    $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
-                    return $yoast_noindex !== '1';
+
+                // Filter out Yoast noindex posts via single DB query
+                $rp_ids = wp_list_pluck($recent_posts, 'ID');
+                $rp_noindex = array();
+                if (!empty($rp_ids)) {
+                    $rp_id_list = implode(',', array_map('intval', $rp_ids));
+                    $rp_noindex_rows = $wpdb->get_col(
+                        "SELECT post_id FROM {$wpdb->postmeta}
+                         WHERE meta_key = '_yoast_wpseo_meta-robots-noindex'
+                         AND meta_value = '1'
+                         AND post_id IN ($rp_id_list)"
+                    );
+                    foreach ($rp_noindex_rows as $nid) {
+                        $rp_noindex[(int)$nid] = true;
+                    }
+                }
+                $recent_posts = array_filter($recent_posts, function($post) use ($rp_noindex) {
+                    return !isset($rp_noindex[$post->ID]);
                 });
                 
                 if (!empty($recent_posts)):
@@ -1080,19 +1881,35 @@ document.addEventListener('DOMContentLoaded', function() {
                         
                         if (!$post_type_obj) continue; // Skip if post type doesn't exist
                         
-                        // Query posts for this custom post type
+                        // Query posts for this custom post type (suppress cache priming to avoid memory exhaustion)
                         $cpt_posts = get_posts(array(
                             'post_type' => $post_type_slug,
                             'numberposts' => -1,
                             'post_status' => 'publish',
                             'orderby' => 'title',
-                            'order' => 'ASC'
+                            'order' => 'ASC',
+                            'update_post_meta_cache' => false,
+                            'update_post_term_cache' => false,
+                            'no_found_rows' => true,
                         ));
-                        
-                        // Filter out Yoast noindex posts
-                        $cpt_posts = array_filter($cpt_posts, function($post) {
-                            $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
-                            return $yoast_noindex !== '1';
+
+                        // Filter out Yoast noindex posts via single DB query instead of per-post get_post_meta()
+                        $cpt_ids = wp_list_pluck($cpt_posts, 'ID');
+                        $cpt_noindex = array();
+                        if (!empty($cpt_ids)) {
+                            $cpt_id_list = implode(',', array_map('intval', $cpt_ids));
+                            $cpt_noindex_rows = $wpdb->get_col(
+                                "SELECT post_id FROM {$wpdb->postmeta}
+                                 WHERE meta_key = '_yoast_wpseo_meta-robots-noindex'
+                                 AND meta_value = '1'
+                                 AND post_id IN ($cpt_id_list)"
+                            );
+                            foreach ($cpt_noindex_rows as $nid) {
+                                $cpt_noindex[(int)$nid] = true;
+                            }
+                        }
+                        $cpt_posts = array_filter($cpt_posts, function($post) use ($cpt_noindex) {
+                            return !isset($cpt_noindex[$post->ID]);
                         });
                         
                         // Only show section if posts exist
@@ -1193,787 +2010,6 @@ document.addEventListener('DOMContentLoaded', function() {
         </article>
     </main>
 </div>
-
-<?php
-// Output styles with PHP variables
-echo '<style>';
-?>
-.sitemap-wrapper * {
-    box-sizing: border-box;
-}
-
-.sitemap-wrapper {
-    width: 100%;
-    margin: 0;
-    padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    line-height: 1.6;
-    overflow-x: hidden;
-}
-
-.sitemap-main {
-    background: <?php echo $bg_color; ?>;
-    border-radius: 0;
-    box-shadow: none;
-}
-
-.sitemap-header {
-    background: <?php echo $bg_color; ?>;
-    color: <?php echo $text_color; ?>;
-    padding: 0;
-    text-align: center;
-    width: 100%;
-    margin: 0;
-}
-
-.sitemap-title {
-    font-size: 2.5rem;
-    font-weight: 700;
-    margin: 0 0 1rem 0;
-    text-shadow: none;
-    color: <?php echo $text_color; ?>;
-}
-
-.sitemap-description {
-    font-size: 1.1rem;
-    opacity: 1;
-    max-width: none;
-    margin: 0;
-    color: <?php echo $desc_color; ?>;
-    width: 100%;
-}
-
-.sitemap-description p {
-    margin: 0;
-}
-
-.sitemap-grid {
-    display: block;
-    padding: 2rem 1rem;
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.sitemap-section {
-    background: <?php echo $bg_color; ?>;
-    border-radius: 15px;
-    padding: 1.5rem;
-    border: 1px solid <?php echo $border_color; ?>;
-    transition: none;
-    margin-bottom: 2rem;
-    box-shadow: none;
-}
-
-.sitemap-section:hover {
-    transform: none;
-    box-shadow: none;
-}
-
-.section-title {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: <?php echo $text_color; ?>;
-    margin: 0 0 1.5rem 0;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid <?php echo $border_light; ?>;
-}
-
-.section-icon {
-    color: <?php echo $text_color; ?>;
-    flex-shrink: 0;
-}
-
-/* Ensure all headings use correct color */
-.sitemap-section h2,
-.sitemap-section h3,
-h2.section-title,
-h3.section-title {
-    color: <?php echo $text_color; ?> !important;
-}
-
-/* Section Accordion Styles for Posts */
-.sitemap-section-accordion {
-    overflow: hidden;
-    cursor: pointer;
-    transition: background 0.2s ease;
-}
-
-.sitemap-section-accordion:hover {
-    background: rgba(0, 0, 0, 0.03);
-}
-
-.section-accordion-header {
-    cursor: pointer;
-    user-select: none;
-    justify-content: space-between;
-    margin-bottom: -0.75rem !important;
-    padding-bottom: 0.75rem !important;
-    transition: all 0.2s ease;
-    position: relative;
-    border-bottom: none !important;
-}
-
-.section-accordion-header.active {
-    border-bottom: 1px solid <?php echo $border_light; ?> !important;
-    margin-bottom: 0 !important;
-}
-
-.section-title-content {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.post-count-small {
-    font-size: 0.875rem;
-    font-weight: 400;
-    opacity: 0.7;
-    margin-left: 0.25rem;
-}
-
-.section-accordion-trigger {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.2s ease;
-}
-
-.accordion-helper-text {
-    font-size: 1rem;
-    font-weight: 500;
-    color: <?php echo $text_color; ?>;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-}
-
-.section-accordion-icon {
-    flex-shrink: 0;
-    transition: transform 0.3s ease;
-    color: <?php echo $text_color; ?>;
-    stroke: <?php echo $text_color; ?>;
-    fill: none;
-    width: 24px;
-    height: 24px;
-}
-
-.sitemap-section-accordion:hover .section-accordion-icon {
-    transform: translateY(2px);
-}
-
-.section-accordion-header.active .section-accordion-icon {
-    transform: rotate(180deg);
-}
-
-.sitemap-section-accordion:hover .section-accordion-header.active .section-accordion-icon {
-    transform: rotate(180deg) translateY(2px);
-}
-
-.section-accordion-content {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
-    padding-top: 0;
-}
-
-.section-accordion-content.active {
-    max-height: 3000px;
-    padding-top: 1.5rem;
-}
-
-/* Pages Accordion Styles */
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordions {
-    margin-top: 40px;
-    margin-bottom: 1.5rem;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion {
-    margin-bottom: 1rem;
-    border: none;
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
-    width: 100% !important;
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    padding: 1rem 1.25rem !important;
-    background: <?php echo $accordion_bg; ?> !important;
-    background-color: <?php echo $accordion_bg; ?> !important;
-    border: none !important;
-    border-radius: 8px !important;
-    cursor: pointer !important;
-    font-weight: 600 !important;
-    color: <?php echo $text_color; ?> !important;
-    text-align: left !important;
-    transition: background-color 0.2s ease !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-    text-decoration: none !important;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
-    line-height: normal !important;
-    letter-spacing: normal !important;
-    text-transform: none !important;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:hover {
-    background: <?php echo $accordion_hover; ?> !important;
-    background-color: <?php echo $accordion_hover; ?> !important;
-    color: <?php echo $text_color; ?> !important;
-    box-shadow: none !important;
-    transform: none !important;
-    border: none !important;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header.active {
-    background: <?php echo $accordion_active; ?> !important;
-    background-color: <?php echo $accordion_active; ?> !important;
-    color: <?php echo $text_color; ?> !important;
-    box-shadow: none !important;
-    border: none !important;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:focus {
-    outline: none !important;
-    box-shadow: none !important;
-    background: <?php echo $accordion_hover; ?> !important;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-title.accordion-title {
-    flex-grow: 1 !important;
-    color: <?php echo $text_color; ?> !important;
-    text-shadow: none !important;
-    font-weight: 600 !important;
-    font-size: 18px !important;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-icon.accordion-icon {
-    flex-shrink: 0 !important;
-    transition: transform 0.3s ease !important;
-    color: <?php echo $text_color; ?> !important;
-    stroke: <?php echo $text_color; ?> !important;
-    fill: none !important;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.active .accordion-icon {
-    transform: rotate(180deg) !important;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-content.sitemap-accordion-content {
-    max-height: 0 !important;
-    overflow: hidden !important;
-    transition: max-height 0.3s ease !important;
-    background: <?php echo $bg_color; ?> !important;
-    background-color: <?php echo $bg_color; ?> !important;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-content.active {
-    max-height: 100% !important;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list.accordion-child-list {
-    padding: 40px 1.25rem !important;
-    margin: 0 !important;
-    background: <?php echo $bg_color; ?> !important;
-    background-color: <?php echo $bg_color; ?> !important;
-}
-
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link {
-    font-size: 16px !important;
-    text-decoration: none !important;
-    font-weight: 500 !important;
-}
-
-/* Accordion child lists keep the same 3-column grid as regular lists */
-
-/* Accordion count badge */
-.sitemap-wrapper .accordion-count {
-    font-size: 13px !important;
-    font-weight: 400 !important;
-    opacity: 0.6;
-    margin-left: 0.5rem;
-}
-
-/* Nested sub-sections indicator badge */
-.sitemap-wrapper .accordion-nested-badge {
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 5px !important;
-    font-size: 12px !important;
-    font-weight: 600 !important;
-    background: <?php echo $dark_mode_enabled ? 'rgba(100,160,255,0.15)' : 'rgba(0,90,200,0.08)'; ?> !important;
-    color: <?php echo $dark_mode_enabled ? '#8bb8ff' : '#0059c7'; ?> !important;
-    padding: 3px 12px !important;
-    border-radius: 12px !important;
-    margin-left: 0.75rem !important;
-    white-space: nowrap !important;
-    vertical-align: middle !important;
-}
-
-.sitemap-wrapper .accordion-nested-badge svg {
-    flex-shrink: 0 !important;
-    opacity: 0.85 !important;
-}
-
-/* Pages indicator badge (shown when hub has both sub-accordions AND plain pages) */
-.sitemap-wrapper .accordion-pages-badge {
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 5px !important;
-    font-size: 12px !important;
-    font-weight: 600 !important;
-    background: <?php echo $dark_mode_enabled ? 'rgba(160,160,160,0.15)' : 'rgba(0,0,0,0.05)'; ?> !important;
-    color: <?php echo $dark_mode_enabled ? '#aaaaaa' : '#555555'; ?> !important;
-    padding: 3px 12px !important;
-    border-radius: 12px !important;
-    margin-left: 0.5rem !important;
-    white-space: nowrap !important;
-    vertical-align: middle !important;
-}
-
-.sitemap-wrapper .accordion-pages-badge svg {
-    flex-shrink: 0 !important;
-    opacity: 0.7 !important;
-}
-
-/* Pages Drawer — collapsible page list with centered divider toggle */
-.sitemap-wrapper .pages-drawer-content {
-    overflow: hidden !important;
-    transition: max-height 0.4s ease !important;
-}
-
-.sitemap-wrapper .pages-drawer-divider {
-    display: flex !important;
-    align-items: center !important;
-    gap: 16px !important;
-    padding: 8px 4px !important;
-    margin: 4px 0 8px 0 !important;
-    cursor: pointer !important;
-    user-select: none !important;
-    border: none !important;
-    background: none !important;
-}
-.sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-label {
-    color: <?php echo $link_color; ?> !important;
-}
-.sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-line {
-    border-color: <?php echo $dark_mode_enabled ? '#555555' : '#bbb'; ?> !important;
-}
-.sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-chevron {
-    color: <?php echo $link_color; ?> !important;
-}
-
-.sitemap-wrapper .pages-drawer-line {
-    flex: 1 !important;
-    height: 0 !important;
-    border: none !important;
-    border-top: 1px dashed <?php echo $dark_mode_enabled ? '#444444' : '#d0d0d0'; ?> !important;
-    transition: border-color 0.2s !important;
-}
-
-.sitemap-wrapper .pages-drawer-label {
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 6px !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    color: <?php echo $dark_mode_enabled ? '#888888' : '#999999'; ?> !important;
-    white-space: nowrap !important;
-    transition: color 0.2s !important;
-    letter-spacing: 0.3px !important;
-}
-
-.sitemap-wrapper .pages-drawer-text {
-    font-size: 13px !important;
-    font-weight: 500 !important;
-}
-
-.sitemap-wrapper .pages-drawer-chevron {
-    flex-shrink: 0 !important;
-    color: <?php echo $dark_mode_enabled ? '#888888' : '#999999'; ?> !important;
-    transition: transform 0.3s ease, color 0.2s !important;
-}
-.sitemap-wrapper .pages-drawer-divider.collapsed .pages-drawer-chevron {
-    transform: rotate(180deg) !important;
-}
-
-/* Nested Accordion Styles — Width reduction per nesting level */
-/* Each level gets progressively narrower and centered */
-.sitemap-wrapper .sitemap-accordion .sitemap-accordion {
-    border: none !important;
-    box-shadow: none !important;
-    overflow: hidden !important;
-}
-
-/* Spacing between sibling sub-accordions */
-.sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-2 + .sitemap-accordion-level-2 {
-    margin-top: 14px !important;
-}
-
-.sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-3 + .sitemap-accordion-level-3 {
-    margin-top: 10px !important;
-}
-
-/* Top padding for first sub-accordion inside content (no child-list before it) */
-.sitemap-wrapper .sitemap-accordion .sitemap-accordion-content > .sitemap-accordion:first-child {
-    margin-top: 12px !important;
-}
-
-/* Spacing after sub-accordions before the child list */
-.sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-2 + .accordion-child-list,
-.sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-3 + .accordion-child-list {
-    margin-top: 10px !important;
-}
-
-/* Spacing before the first sub-accordion when it follows a child list */
-.sitemap-wrapper .sitemap-accordion .accordion-child-list + .sitemap-accordion-level-2,
-.sitemap-wrapper .sitemap-accordion .accordion-child-list + .sitemap-accordion-level-3 {
-    margin-top: 10px !important;
-}
-
-/* Level 2 — e.g., Gutter Services inside Services */
-.sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-2 {
-    margin: 0 2rem !important;
-    border-radius: 6px !important;
-}
-
-.sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
-    padding: 0.85rem 1.25rem !important;
-    background: <?php echo $dark_mode_enabled ? '#222222' : '#f0f0f0'; ?> !important;
-    border-radius: 6px !important;
-    border: none !important;
-    box-shadow: none !important;
-}
-
-.sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:hover {
-    background: <?php echo $dark_mode_enabled ? '#2a2a2a' : '#e8e8e8'; ?> !important;
-}
-
-.sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header.active {
-    background: <?php echo $dark_mode_enabled ? '#2a2a2a' : '#e5e5e5'; ?> !important;
-    border-radius: 6px 6px 0 0 !important;
-}
-
-.sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header .accordion-title {
-    font-size: 16px !important;
-    font-weight: 600 !important;
-}
-
-/* Level 3 — e.g., Gutter Installation inside Gutter Services */
-.sitemap-wrapper .sitemap-accordion .sitemap-accordion .sitemap-accordion-level-3 {
-    margin: 0 1.5rem !important;
-    border-radius: 5px !important;
-}
-
-.sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
-    padding: 0.7rem 1.25rem !important;
-    background: <?php echo $dark_mode_enabled ? '#2a2a2a' : '#e8e8e8'; ?> !important;
-    border-radius: 5px !important;
-    border: none !important;
-    box-shadow: none !important;
-}
-
-.sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:hover {
-    background: <?php echo $dark_mode_enabled ? '#333333' : '#dedede'; ?> !important;
-}
-
-.sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header.active {
-    background: <?php echo $dark_mode_enabled ? '#333333' : '#d8d8d8'; ?> !important;
-    border-radius: 5px 5px 0 0 !important;
-}
-
-.sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header .accordion-title {
-    font-size: 14px !important;
-    font-weight: 500 !important;
-}
-
-/* Nested accordion content */
-.sitemap-wrapper .sitemap-accordion .sitemap-accordion .sitemap-accordion-content {
-    background: <?php echo $bg_color; ?> !important;
-    border-radius: 0 0 6px 6px !important;
-}
-
-.sitemap-wrapper .sitemap-accordion .sitemap-accordion .accordion-child-list {
-    padding: 20px 1.25rem !important;
-}
-
-/* List Styles */
-.sitemap-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem 1rem;
-    align-items: stretch;
-}
-
-.sitemap-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 0;
-    margin-bottom: 0;
-    background: none;
-    border-radius: 0;
-    box-shadow: none;
-    border: none;
-    border-bottom: 1px solid <?php echo $border_color; ?>;
-    box-sizing: border-box;
-}
-
-.sitemap-item:last-child {
-    margin-bottom: 0;
-}
-
-.sitemap-link {
-    color: <?php echo $link_color; ?>;
-    text-decoration: none;
-    font-weight: 500;
-    transition: none;
-    flex-grow: 1;
-    font-size: 16px !important;
-}
-
-.sitemap-link:hover {
-    color: <?php echo $link_color; ?>;
-    text-decoration: underline;
-}
-
-.post-date,
-.post-count {
-    font-size: 0.875rem;
-    color: <?php echo $desc_color; ?>;
-    font-weight: 400;
-    flex-shrink: 0;
-    margin-left: 1rem;
-}
-
-.tag-cloud {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-.tag-link {
-    display: inline-block;
-    padding: 0.375rem 0.75rem;
-    background: <?php echo $bg_color; ?>;
-    color: <?php echo $text_color; ?>;
-    text-decoration: none;
-    border-radius: 0;
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: none;
-    border: 1px solid <?php echo $text_color; ?>;
-    margin: 0.25rem;
-}
-
-.tag-link:hover {
-    background: <?php echo $bg_color; ?>;
-    transform: none;
-    box-shadow: none;
-    text-decoration: underline;
-}
-
-@media (max-width: 768px) {
-    .sitemap-wrapper {
-        margin: 0 auto;
-        padding: 0 20px;
-    }
-
-    .sitemap-grid {
-        display: block;
-        padding: 1rem 0;
-    }
-
-    .sitemap-header {
-        padding: 1rem 0 0.5rem;
-    }
-
-    .sitemap-title {
-        font-size: 2rem;
-    }
-
-    .sitemap-section {
-        padding: 1rem;
-        margin-bottom: 1rem;
-    }
-
-    .sitemap-list {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .sitemap-item {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.25rem;
-    }
-
-    .post-date,
-    .post-count {
-        margin-left: 0;
-        font-size: 0.8rem;
-    }
-
-    .tag-cloud {
-        gap: 0.375rem;
-    }
-
-    .tag-link {
-        font-size: 0.8rem;
-        padding: 0.25rem 0.5rem;
-    }
-
-    /* Reduce nested accordion indentation on tablet */
-    .sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-2 {
-        margin: 0 0.75rem !important;
-    }
-    .sitemap-wrapper .sitemap-accordion .sitemap-accordion .sitemap-accordion-level-3 {
-        margin: 0 0.5rem !important;
-    }
-
-    /* Reduce accordion content padding on tablet */
-    .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list.accordion-child-list {
-        padding: 20px 0.75rem !important;
-    }
-    .sitemap-wrapper .sitemap-accordion .sitemap-accordion .accordion-child-list {
-        padding: 15px 0.75rem !important;
-    }
-
-    /* Tighter accordion header padding */
-    .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
-        padding: 0.75rem 1rem !important;
-    }
-}
-
-@media (max-width: 480px) {
-    .sitemap-wrapper {
-        margin: 0 auto;
-        padding: 0 20px;
-    }
-
-    .sitemap-grid {
-        display: block;
-        padding: 0.5rem 0;
-    }
-
-    .sitemap-section {
-        padding: 0.75rem;
-        margin-bottom: 0.75rem;
-    }
-
-    .sitemap-list {
-        grid-template-columns: 1fr;
-    }
-
-    .sitemap-title {
-        font-size: 1.75rem;
-    }
-
-    .section-title {
-        font-size: 1.125rem;
-    }
-
-    .sitemap-link {
-        font-size: 0.9rem;
-    }
-
-    /* Minimal nested accordion indentation on small mobile */
-    .sitemap-wrapper .sitemap-accordion .sitemap-accordion-level-2 {
-        margin: 0 0.35rem !important;
-    }
-    .sitemap-wrapper .sitemap-accordion .sitemap-accordion .sitemap-accordion-level-3 {
-        margin: 0 0.25rem !important;
-    }
-
-    /* Tighter accordion padding on small mobile */
-    .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list.accordion-child-list {
-        padding: 15px 0.5rem !important;
-    }
-    .sitemap-wrapper .sitemap-accordion .sitemap-accordion .accordion-child-list {
-        padding: 10px 0.5rem !important;
-    }
-    .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
-        padding: 0.65rem 0.75rem !important;
-    }
-    .sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordions {
-        margin-top: 20px;
-    }
-}
-
-.sitemap-wrapper,
-.sitemap-main,
-.sitemap-section {
-    background: <?php echo $bg_color; ?> !important;
-    color: <?php echo $text_color; ?> !important;
-}
-
-@media print {
-    .sitemap-wrapper {
-        box-shadow: none;
-        margin: 0;
-        padding: 0;
-    }
-    
-    .sitemap-header {
-        background: <?php echo $bg_color; ?>;
-        color: <?php echo $text_color; ?>;
-        text-shadow: none;
-    }
-    
-    .sitemap-section {
-        background: <?php echo $bg_color; ?>;
-        border: 1px solid <?php echo $text_color; ?>;
-        break-inside: avoid;
-    }
-    
-    .tag-link {
-        background: <?php echo $bg_color; ?>;
-        color: <?php echo $text_color; ?>;
-        border: 1px solid <?php echo $text_color; ?>;
-    }
-    
-    .sitemap-accordion-content,
-    .section-accordion-content {
-        max-height: none !important;
-    }
-}
-
-<?php
-// Add custom link color overrides if set (overrides Elementor global styles)
-if (!empty($custom_link_color)) {
-    echo '
-/* Custom Link Color Override */
-.sitemap-wrapper .sitemap-link,
-.sitemap-wrapper .sitemap-link:visited,
-.sitemap-wrapper .tag-link,
-.sitemap-wrapper .tag-link:visited,
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link {
-    color: ' . esc_attr($custom_link_color) . ' !important;
-}
-    ';
-}
-
-if (!empty($custom_link_hover_color)) {
-    echo '
-/* Custom Link Hover Color Override */
-.sitemap-wrapper .sitemap-link:hover,
-.sitemap-wrapper .sitemap-link:focus,
-.sitemap-wrapper .tag-link:hover,
-.sitemap-wrapper .tag-link:focus,
-.sitemap-wrapper .sitemap-section.sitemap-pages .sitemap-accordion .accordion-child-list .sitemap-link.sitemap-link:hover {
-    color: ' . esc_attr($custom_link_hover_color) . ' !important;
-}
-    ';
-}
-?>
-<?php
-echo '</style>';
-?>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
