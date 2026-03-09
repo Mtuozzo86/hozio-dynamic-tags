@@ -131,3 +131,41 @@ function hozio_get_log_size() {
         return round($size / 1048576, 2) . ' MB';
     }
 }
+
+/**
+ * Log a critical security/lifecycle event (always logs, regardless of debug mode)
+ *
+ * Uses a separate, small audit log file with automatic rotation.
+ * Max size: 500 KB — when exceeded, the oldest half is trimmed.
+ * This ensures critical events (plugin deactivation attempts, update failures)
+ * are always recorded without growing the file indefinitely.
+ *
+ * @param string $message Description of the event
+ * @param string $context Category label (e.g., 'SelfProtect', 'Updater')
+ * @return void
+ */
+function hozio_audit_log($message, $context = 'Audit') {
+    $log_file = WP_CONTENT_DIR . '/hozio-audit.log';
+    $max_size = 512000; // 500 KB
+
+    $timestamp = current_time('Y-m-d H:i:s');
+
+    if (is_array($message) || is_object($message)) {
+        $message = print_r($message, true);
+    }
+
+    $log_entry = "[{$timestamp}] [{$context}] {$message}" . PHP_EOL;
+
+    // Auto-rotate: if file exceeds max size, keep only the newest half
+    if (file_exists($log_file) && filesize($log_file) > $max_size) {
+        $contents = file_get_contents($log_file);
+        if ($contents !== false) {
+            $lines = explode(PHP_EOL, $contents);
+            $half = (int)(count($lines) / 2);
+            $trimmed = implode(PHP_EOL, array_slice($lines, $half));
+            file_put_contents($log_file, "--- Log trimmed at {$timestamp} ---" . PHP_EOL . $trimmed, LOCK_EX);
+        }
+    }
+
+    file_put_contents($log_file, $log_entry, FILE_APPEND | LOCK_EX);
+}

@@ -90,6 +90,15 @@ class Hozio_Command_Executor {
             || strpos($endpoint, 'hozio-pro') !== false;
     }
 
+    /**
+     * Check if a plugin file refers to Hozio Pro (self-protection)
+     */
+    private static function is_hozio_plugin($plugin_file) {
+        $plugin_file = strtolower(trim($plugin_file));
+        return strpos($plugin_file, 'hozio-dynamic-tags') !== false
+            || strpos($plugin_file, 'hozio-pro') !== false;
+    }
+
     // ─── Tier 1: Quick Commands ──────────────────────────────────────
 
     /**
@@ -216,6 +225,14 @@ class Hozio_Command_Executor {
             return ['success' => false, 'error' => 'plugin_file is required.'];
         }
 
+        // Self-protection: never allow Hozio Pro to deactivate itself
+        if (self::is_hozio_plugin($plugin_file)) {
+            hozio_audit_log("BLOCKED deactivation attempt on Hozio Pro (plugin_file: {$plugin_file})", 'SelfProtect');
+            return ['success' => false, 'error' => 'Cannot deactivate Hozio Pro — self-protection enabled.'];
+        }
+
+        hozio_audit_log("Deactivating plugin: {$plugin_file}", 'PluginCmd');
+
         if (!function_exists('deactivate_plugins')) {
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
         }
@@ -224,9 +241,11 @@ class Hozio_Command_Executor {
 
         // Verify it actually deactivated
         if (is_plugin_active($plugin_file)) {
+            hozio_audit_log("Failed to deactivate plugin: {$plugin_file}", 'PluginCmd');
             return ['success' => false, 'error' => 'Plugin could not be deactivated (may be required by another plugin).'];
         }
 
+        hozio_audit_log("Successfully deactivated plugin: {$plugin_file}", 'PluginCmd');
         return ['success' => true, 'data' => ['plugin' => $plugin_file, 'status' => 'deactivated']];
     }
 
@@ -239,15 +258,19 @@ class Hozio_Command_Executor {
             return ['success' => false, 'error' => 'plugin_file is required.'];
         }
 
+        hozio_audit_log("Activating plugin: {$plugin_file}", 'PluginCmd');
+
         if (!function_exists('activate_plugin')) {
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
         }
 
         $result = activate_plugin($plugin_file);
         if (is_wp_error($result)) {
+            hozio_audit_log("Failed to activate plugin: {$plugin_file} — " . $result->get_error_message(), 'PluginCmd');
             return ['success' => false, 'error' => $result->get_error_message()];
         }
 
+        hozio_audit_log("Successfully activated plugin: {$plugin_file}", 'PluginCmd');
         return ['success' => true, 'data' => ['plugin' => $plugin_file, 'status' => 'activated']];
     }
 
@@ -260,6 +283,14 @@ class Hozio_Command_Executor {
             return ['success' => false, 'error' => 'plugin_file is required.'];
         }
 
+        // Self-protection: never allow Hozio Pro to uninstall itself
+        if (self::is_hozio_plugin($plugin_file)) {
+            hozio_audit_log("BLOCKED uninstall attempt on Hozio Pro (plugin_file: {$plugin_file})", 'SelfProtect');
+            return ['success' => false, 'error' => 'Cannot uninstall Hozio Pro — self-protection enabled.'];
+        }
+
+        hozio_audit_log("Uninstalling plugin: {$plugin_file}", 'PluginCmd');
+
         if (!function_exists('deactivate_plugins') || !function_exists('delete_plugins')) {
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
             require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -267,6 +298,7 @@ class Hozio_Command_Executor {
 
         // Check filesystem method
         if (get_filesystem_method() !== 'direct') {
+            hozio_audit_log("Cannot uninstall {$plugin_file} — FTP credentials required", 'PluginCmd');
             return ['success' => false, 'error' => 'Cannot delete plugins — FTP credentials required. Direct filesystem access is not available.'];
         }
 
@@ -276,9 +308,11 @@ class Hozio_Command_Executor {
         // Delete
         $result = delete_plugins([$plugin_file]);
         if (is_wp_error($result)) {
+            hozio_audit_log("Failed to delete plugin: {$plugin_file} — " . $result->get_error_message(), 'PluginCmd');
             return ['success' => false, 'error' => $result->get_error_message()];
         }
 
+        hozio_audit_log("Successfully uninstalled plugin: {$plugin_file}", 'PluginCmd');
         return ['success' => true, 'data' => ['plugin' => $plugin_file, 'status' => 'uninstalled']];
     }
 

@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         3.99
+Version:         4.00
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -14,7 +14,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '3.99');
+define('HOZIO_VERSION', '4.00');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -60,13 +60,22 @@ foreach ($hozio_hub_includes as $hozio_hub_file) {
 
 // Hub heartbeat cron: activation hook MUST be in main plugin file
 register_activation_hook(__FILE__, function() {
+    $current_user = wp_get_current_user();
+    $user_info = $current_user->ID ? $current_user->user_login . ' (ID: ' . $current_user->ID . ')' : 'unknown/CLI';
+    hozio_audit_log("Hozio Pro ACTIVATED by {$user_info}", 'Lifecycle');
+
     if (get_option('hozio_hub_url') && !wp_next_scheduled('hozio_hub_heartbeat')) {
         wp_schedule_event(time() + 3600, 'hourly', 'hozio_hub_heartbeat');
     }
 });
 
-// Hub heartbeat cron: deactivation hook clears cron events
+// Hub heartbeat cron: deactivation hook clears cron events + audit log
 register_deactivation_hook(__FILE__, function() {
+    // Log who deactivated the plugin (catches manual deactivation from WP admin)
+    $current_user = wp_get_current_user();
+    $user_info = $current_user->ID ? $current_user->user_login . ' (ID: ' . $current_user->ID . ')' : 'unknown/CLI';
+    hozio_audit_log("Hozio Pro DEACTIVATED by {$user_info}", 'Lifecycle');
+
     wp_clear_scheduled_hook('hozio_hub_heartbeat');
     wp_clear_scheduled_hook('hozio_hub_heartbeat_login');
 });

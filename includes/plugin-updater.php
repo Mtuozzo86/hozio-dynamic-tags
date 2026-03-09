@@ -448,18 +448,34 @@ class Hozio_Plugin_Updater {
         $install_directory = $result['destination'];
         $plugin_directory = WP_PLUGIN_DIR . '/' . $this->plugin_slug;
 
+        hozio_audit_log("Update started — install dir: {$install_directory}, plugin dir: {$plugin_directory}", 'Updater');
+
         if ($install_directory !== $plugin_directory && $wp_filesystem->is_dir($install_directory)) {
-            // Remove old directory if it exists to prevent move failure
+            // Safety: verify new files exist, then remove old directory, then move new into place
             if ($wp_filesystem->is_dir($plugin_directory)) {
+                // Verify new install directory has our main plugin file before deleting old
+                if (!$wp_filesystem->exists($install_directory . '/hozio-dynamic-tags.php')) {
+                    hozio_audit_log('ABORT: New install directory missing main plugin file — keeping old version intact', 'Updater');
+                    hozio_log('ABORT: New install directory missing main plugin file, keeping old version', 'Updater');
+                    return $response;
+                }
+                hozio_audit_log('Deleting old plugin directory before move', 'Updater');
                 $wp_filesystem->delete($plugin_directory, true);
             }
-            $wp_filesystem->move($install_directory, $plugin_directory);
+            $move_result = $wp_filesystem->move($install_directory, $plugin_directory);
+            if (!$move_result) {
+                hozio_audit_log('CRITICAL: Failed to move new plugin directory into place — plugin may be missing!', 'Updater');
+                hozio_log('ERROR: Failed to move plugin directory after install', 'Updater');
+                return $response;
+            }
             $result['destination'] = $plugin_directory;
 
+            hozio_audit_log('Successfully moved new plugin directory into place', 'Updater');
             hozio_log('Renamed plugin folder after install', 'Updater');
         }
 
         // Reactivate the plugin
+        hozio_audit_log('Reactivating plugin after update', 'Updater');
         activate_plugin($this->plugin_file);
 
         // Clear update cache
