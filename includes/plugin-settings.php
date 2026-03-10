@@ -40,10 +40,10 @@ function hozio_plugin_settings_register() {
         'sanitize_callback' => 'rest_sanitize_boolean'
     ]);
 
-    register_setting('hozio_plugin_settings', 'hozio_ghost_page_action', [
-        'type' => 'string',
-        'default' => 'redirect',
-        'sanitize_callback' => 'sanitize_text_field'
+    register_setting('hozio_plugin_settings', 'hozio_canonical_redirect_enabled', [
+        'type' => 'boolean',
+        'default' => true,
+        'sanitize_callback' => 'rest_sanitize_boolean'
     ]);
 }
 add_action('admin_init', 'hozio_plugin_settings_register');
@@ -286,12 +286,9 @@ function hozio_plugin_settings_save() {
     $auto_updates_enabled = isset($_POST['hozio_auto_updates_enabled']) ? '1' : '0';
     update_option('hozio_auto_updates_enabled', $auto_updates_enabled);
 
-    // Save ghost page action setting
-    $ghost_page_action = isset($_POST['hozio_ghost_page_action']) ? sanitize_text_field($_POST['hozio_ghost_page_action']) : 'redirect';
-    if (!in_array($ghost_page_action, ['redirect', '404'], true)) {
-        $ghost_page_action = 'redirect';
-    }
-    update_option('hozio_ghost_page_action', $ghost_page_action);
+    // Save canonical redirect enabled setting
+    $canonical_redirect_enabled = isset($_POST['hozio_canonical_redirect_enabled']) ? '1' : '0';
+    update_option('hozio_canonical_redirect_enabled', $canonical_redirect_enabled);
 
     wp_redirect(add_query_arg('settings-updated', 'true', admin_url('admin.php?page=hozio-plugin-settings')));
     exit;
@@ -337,6 +334,7 @@ function hozio_plugin_settings_page() {
     $service_menu_sync_enabled = get_option('hozio_service_menu_sync_enabled', '1');
     $license_key = get_option('hozio_license_key', '');
     $auto_updates_enabled = get_option('hozio_auto_updates_enabled', '1');
+    $canonical_redirect_enabled = get_option('hozio_canonical_redirect_enabled', '1');
 
     // Get update timing info
     $last_update_check = function_exists('hozio_get_last_update_check') ? hozio_get_last_update_check() : 'Unknown';
@@ -611,33 +609,22 @@ function hozio_plugin_settings_page() {
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Ghost Page Protection Section -->
-            <div class="hozio-section" style="border-left-color: #e67e00;">
-                <h2 class="hozio-section-title">Ghost Page Protection</h2>
-                <p class="hozio-section-description">
-                    WordPress can serve child pages at incorrect root-level URLs (e.g. <code>/soda-blasting/</code> instead of <code>/services/soda-blasting/</code>).
-                    Choose how to handle these ghost URLs.
-                </p>
-
-                <?php $ghost_action = get_option('hozio_ghost_page_action', 'redirect'); ?>
                 <div class="hozio-field">
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
-                        <label style="display: flex; align-items: flex-start; gap: 10px; padding: 12px; background: <?php echo $ghost_action === 'redirect' ? '#f0fdf4' : '#f9fafb'; ?>; border: 2px solid <?php echo $ghost_action === 'redirect' ? '#86efac' : '#e5e7eb'; ?>; border-radius: 8px; cursor: pointer;">
-                            <input type="radio" name="hozio_ghost_page_action" value="redirect" <?php checked($ghost_action, 'redirect'); ?> style="margin-top: 3px;">
-                            <div>
-                                <div style="font-weight: 600;">301 Redirect to correct URL</div>
-                                <div style="color: #666; font-size: 13px;">Visitors are sent to the real page. Preserves SEO link equity. <strong>(Recommended)</strong></div>
-                            </div>
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_canonical_redirect_enabled" value="1"
+                                   <?php checked($canonical_redirect_enabled, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
                         </label>
-                        <label style="display: flex; align-items: flex-start; gap: 10px; padding: 12px; background: <?php echo $ghost_action === '404' ? '#fef2f2' : '#f9fafb'; ?>; border: 2px solid <?php echo $ghost_action === '404' ? '#fca5a5' : '#e5e7eb'; ?>; border-radius: 8px; cursor: pointer;">
-                            <input type="radio" name="hozio_ghost_page_action" value="404" <?php checked($ghost_action, '404'); ?> style="margin-top: 3px;">
-                            <div>
-                                <div style="font-weight: 600;">404 Not Found</div>
-                                <div style="color: #666; font-size: 13px;">Ghost URL returns a 404 error. Search engines will de-index it faster.</div>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">WordPress Canonical Redirects</div>
+                            <div class="hozio-toggle-description">
+                                WordPress automatically redirects mistyped or guessed URLs to the closest matching page.
+                                Disable this if canonical redirects are causing unwanted redirects on your site.
+                                <strong>Enabled by default.</strong>
                             </div>
-                        </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -705,6 +692,14 @@ function hozio_plugin_settings_page() {
                         <td>
                             <span class="hozio-status hozio-status-<?php echo $service_menu_sync_enabled === '1' ? 'on' : 'off'; ?>">
                                 <?php echo $service_menu_sync_enabled === '1' ? 'Enabled' : 'Disabled'; ?>
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Canonical Redirects</th>
+                        <td>
+                            <span class="hozio-status hozio-status-<?php echo $canonical_redirect_enabled === '1' ? 'on' : 'off'; ?>">
+                                <?php echo $canonical_redirect_enabled === '1' ? 'Enabled' : 'Disabled'; ?>
                             </span>
                         </td>
                     </tr>

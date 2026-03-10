@@ -74,83 +74,141 @@ function create_town_taxonomies_taxonomy() {
 add_action('init', 'create_town_taxonomies_taxonomy');
 
 // ========================
-// KILL GHOST PAGES
+// DISABLE CANONICAL REDIRECTS (if toggled off in settings)
 // ========================
-// Ghost pages come from two sources:
-// 1) Taxonomy terms: publicly_queryable creates URLs for every term
-// 2) WordPress slug matching: WP finds child pages by slug alone, ignoring hierarchy
-// This function does direct DB checks — does NOT rely on is_page()/is_tax() which
-// can be unreliable depending on how WordPress resolved the URL.
-add_action('template_redirect', 'hozio_kill_ghost_pages', 1);
-function hozio_kill_ghost_pages() {
+// When disabled, WordPress will NOT auto-redirect mistyped/guessed URLs.
+// Default is ON (canonical redirects enabled).
+add_action('template_redirect', 'hozio_maybe_disable_canonical_redirect', 0);
+function hozio_maybe_disable_canonical_redirect() {
     if (is_admin() || wp_doing_ajax()) {
         return;
     }
 
-    // Get clean request path
-    $request_path = trim(strtok(wp_unslash($_SERVER['REQUEST_URI']), '?'), '/');
-    if (empty($request_path)) {
-        return; // Home page
+    $enabled = get_option('hozio_canonical_redirect_enabled', '1');
+    if ($enabled !== '1' && $enabled !== true) {
+        remove_action('template_redirect', 'redirect_canonical');
+        add_filter('do_redirect_guess_404_permalink', '__return_false');
+    }
+}
+
+// ========================
+// BLOCK PAGES AT WRONG URLs
+// ========================
+// WordPress core bug: child pages can be served at root-level URLs
+// (e.g., /bathroom-remodeling/ serves /services/bathroom-remodeling/).
+// This hook compares the requested URL to the page's canonical permalink
+// and forces a 404 if they don't match.
+add_action('template_redirect', 'hozio_block_wrong_url_pages', 1);
+function hozio_block_wrong_url_pages() {
+    if (is_admin() || wp_doing_ajax()) {
+        return;
     }
 
-    // --- GHOST TYPE 1: Taxonomy term URLs ---
-    // Check the last slug segment against taxonomy terms
-    $slug = basename($request_path);
-    $parent_archives_on = get_option('hozio_parent_pages_archive_enabled', 0);
-    $town_archives_on   = get_option('hozio_town_taxonomies_archive_enabled', 0);
+    // Debug mode: add ?hozio_ghost_debug=1 to any URL to see response headers
+    $debug = isset($_GET['hozio_ghost_debug']);
 
-    if (!$parent_archives_on && get_term_by('slug', $slug, 'parent_pages')) {
-        // Only 404 if this URL is actually being served as a taxonomy archive
-        if (is_tax('parent_pages')) {
-            global $wp_query;
-            $wp_query->set_404();
-            status_header(404);
-            nocache_headers();
-            return;
+    if ($debug) {
+        header('X-Ghost-Debug-Fired: YES');
+        header('X-Ghost-Debug-IsPage: ' . (is_page() ? 'YES' : 'NO'));
+        header('X-Ghost-Debug-IsSingular: ' . (is_singular() ? 'YES' : 'NO'));
+        header('X-Ghost-Debug-IsTax: ' . (is_tax() ? 'YES' : 'NO'));
+        header('X-Ghost-Debug-Is404: ' . (is_404() ? 'YES' : 'NO'));
+        header('X-Ghost-Debug-QueriedID: ' . get_queried_object_id());
+        $obj = get_queried_object();
+        header('X-Ghost-Debug-ObjectType: ' . (is_object($obj) ? get_class($obj) : 'none'));
+        if (is_object($obj) && isset($obj->post_type)) {
+            header('X-Ghost-Debug-PostType: ' . $obj->post_type);
+            header('X-Ghost-Debug-PostParent: ' . $obj->post_parent);
+            header('X-Ghost-Debug-PostName: ' . $obj->post_name);
+        }
+        if (is_object($obj) && isset($obj->taxonomy)) {
+            header('X-Ghost-Debug-Taxonomy: ' . $obj->taxonomy);
+            header('X-Ghost-Debug-TermSlug: ' . $obj->slug);
         }
     }
 
-    if (!$town_archives_on && get_term_by('slug', $slug, 'town_taxonomies')) {
-        if (is_tax('town_taxonomies')) {
-            global $wp_query;
-            $wp_query->set_404();
-            status_header(404);
-            nocache_headers();
-            return;
-        }
+    // Check if WordPress resolved a page (by any means — pagename or name query var)
+    // Note: is_page() can return false when WP resolves a page through the 'name' query
+    // var instead of 'pagename', so we check the queried object's post_type directly.
+    $obj = get_queried_object();
+    if (!is_object($obj) || !isset($obj->post_type) || $obj->post_type !== 'page') {
+        if ($debug) header('X-Ghost-Debug-Result: SKIPPED (not a page post type)');
+        return;
     }
 
-    // --- GHOST TYPE 2: Child pages at wrong URL ---
-    // Direct DB lookup: find a published child page whose slug matches
-    global $wpdb;
-    $child_page = $wpdb->get_row($wpdb->prepare(
-        "SELECT ID, post_parent FROM {$wpdb->posts}
-         WHERE post_name = %s
-           AND post_type = 'page'
-           AND post_status = 'publish'
-           AND post_parent > 0
-         LIMIT 1",
-        $slug
-    ));
+    $page_id = $obj->ID;
+    if (!$page_id) {
+        if ($debug) header('X-Ghost-Debug-Result: SKIPPED (no page ID)');
+        return;
+    }
 
-    if ($child_page) {
-        $correct_url  = get_permalink($child_page->ID);
-        $correct_path = trim(parse_url($correct_url, PHP_URL_PATH), '/');
+    // Get the page's real permalink path
+    $canonical = trim(parse_url(get_permalink($page_id), PHP_URL_PATH), '/');
 
-        if ($correct_path !== $request_path) {
-            $action = get_option('hozio_ghost_page_action', 'redirect');
-            if ($action === '404') {
-                // Block WordPress from guessing the correct URL and redirecting
-                add_filter('do_redirect_guess_404_permalink', '__return_false');
-                global $wp_query;
-                $wp_query->set_404();
-                status_header(404);
-                nocache_headers();
+    // Get the requested URL path (strip query string)
+    $request = trim(strtok(wp_unslash($_SERVER['REQUEST_URI']), '?'), '/');
+
+    // Strip known suffixes (pagination, feed, embed)
+    $request_base = preg_replace('#/(page/\d+|feed|amp|embed)/?$#', '', $request);
+
+    if ($debug) {
+        header('X-Ghost-Debug-Canonical: ' . $canonical);
+        header('X-Ghost-Debug-Request: ' . $request_base);
+        header('X-Ghost-Debug-Match: ' . ($canonical === $request_base ? 'YES' : 'NO'));
+    }
+
+    // If the base request path doesn't match the canonical path → wrong URL
+    if ($canonical !== $request_base) {
+        $canonical_redirect_on = get_option('hozio_canonical_redirect_enabled', '1') === '1';
+
+        if ($canonical_redirect_on) {
+            // Canonical redirects enabled: 301 redirect to the correct URL
+            if ($debug) header('X-Ghost-Debug-Result: REDIRECTING (URL mismatch - 301 to canonical)');
+            $redirect_url = get_permalink($page_id);
+            if ($debug) {
+                header('X-Ghost-Debug-RedirectTo: ' . $redirect_url);
+                // Don't actually redirect in debug mode so headers are visible
                 return;
             }
-            wp_redirect($correct_url, 301);
+            wp_redirect($redirect_url, 301);
             exit;
+        } else {
+            // Canonical redirects disabled: hard 404
+            if ($debug) header('X-Ghost-Debug-Result: BLOCKED (URL mismatch - forcing 404)');
+            add_filter('do_redirect_guess_404_permalink', '__return_false');
+            remove_action('template_redirect', 'redirect_canonical');
+            global $wp_query;
+            $wp_query->set_404();
+            status_header(404);
+            nocache_headers();
         }
+    } else {
+        if ($debug) header('X-Ghost-Debug-Result: PASSED (URL matches)');
+    }
+}
+
+// ========================
+// BLOCK DISABLED TAXONOMY ARCHIVES
+// ========================
+add_action('template_redirect', 'hozio_block_disabled_taxonomy_archives', 1);
+function hozio_block_disabled_taxonomy_archives() {
+    if (is_admin() || wp_doing_ajax()) {
+        return;
+    }
+
+    if (is_tax('parent_pages') && !get_option('hozio_parent_pages_archive_enabled', 0)) {
+        global $wp_query;
+        $wp_query->set_404();
+        status_header(404);
+        nocache_headers();
+        return;
+    }
+
+    if (is_tax('town_taxonomies') && !get_option('hozio_town_taxonomies_archive_enabled', 0)) {
+        global $wp_query;
+        $wp_query->set_404();
+        status_header(404);
+        nocache_headers();
     }
 }
 
