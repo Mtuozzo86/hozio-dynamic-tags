@@ -444,68 +444,15 @@ class Hozio_Plugin_Updater {
     }
 
     public function after_install($response, $hook_extra, $result) {
-        global $wp_filesystem;
-
         // Only process our plugin
         if (!isset($hook_extra['plugin']) || $hook_extra['plugin'] !== $this->plugin_file) {
             return $response;
         }
 
-        // Normalize paths — WordPress adds trailing slash to $result['destination']
-        // but WP_PLUGIN_DIR does not, causing false mismatches
-        $install_directory = untrailingslashit($result['destination']);
-        $plugin_directory  = untrailingslashit(WP_PLUGIN_DIR . '/' . $this->plugin_slug);
-
-        hozio_audit_log("Update started — install dir: {$install_directory}, plugin dir: {$plugin_directory}", 'Updater');
-
-        // If directories match, WordPress already put files in the right place
-        if ($install_directory === $plugin_directory) {
-            hozio_audit_log('Directories match — no relocation needed', 'Updater');
-        } elseif ($wp_filesystem->is_dir($install_directory)) {
-            // Need to relocate: verify new files first
-            if (!$wp_filesystem->exists(trailingslashit($install_directory) . 'hozio-dynamic-tags.php')) {
-                hozio_audit_log('ABORT: New install directory missing main plugin file — keeping old version intact', 'Updater');
-                hozio_log('ABORT: New install directory missing main plugin file, keeping old version', 'Updater');
-                return $response;
-            }
-
-            // Move old directory to backup (safer than deleting first)
-            $backup_dir = $plugin_directory . '-backup-' . time();
-            if ($wp_filesystem->is_dir($plugin_directory)) {
-                if (!$wp_filesystem->move($plugin_directory, $backup_dir)) {
-                    // Can't back up — try direct delete as fallback
-                    $wp_filesystem->delete($plugin_directory, true);
-                    $backup_dir = null;
-                }
-            } else {
-                $backup_dir = null;
-            }
-
-            // Move new directory into place
-            $move_result = $wp_filesystem->move(trailingslashit($install_directory), $plugin_directory);
-            if ($move_result) {
-                // Success — clean up backup
-                if ($backup_dir && $wp_filesystem->is_dir($backup_dir)) {
-                    $wp_filesystem->delete($backup_dir, true);
-                }
-                $result['destination'] = $plugin_directory;
-                hozio_audit_log('Successfully relocated plugin directory', 'Updater');
-                hozio_log('Renamed plugin folder after install', 'Updater');
-            } else {
-                // Move failed — restore backup if we have one
-                if ($backup_dir && $wp_filesystem->is_dir($backup_dir)) {
-                    $wp_filesystem->move($backup_dir, $plugin_directory);
-                    hozio_audit_log('Move failed — restored from backup', 'Updater');
-                } else {
-                    hozio_audit_log('CRITICAL: Move failed and no backup available — plugin may be missing!', 'Updater');
-                    hozio_log('ERROR: Failed to move plugin directory after install', 'Updater');
-                }
-                return $response;
-            }
-        }
-
-        // Reactivate the plugin
-        hozio_audit_log('Reactivating plugin after update', 'Updater');
+        // WordPress already handles directory placement during install.
+        // fix_source_directory() (above) corrects the folder name BEFORE install.
+        // All we need to do here is reactivate and clear cache.
+        hozio_audit_log('Update complete — reactivating plugin', 'Updater');
         activate_plugin($this->plugin_file);
 
         // Clear update cache
