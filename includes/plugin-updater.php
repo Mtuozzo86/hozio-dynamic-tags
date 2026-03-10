@@ -13,9 +13,12 @@ class Hozio_Plugin_Updater {
 
     /**
      * Plugin configuration
+     * Slug and file are detected dynamically to handle installs where the
+     * folder is "hozio-dynamic-tags-main" (GitHub source ZIP) instead of
+     * the expected "hozio-dynamic-tags" (release asset ZIP).
      */
-    private $plugin_slug = 'hozio-dynamic-tags';
-    private $plugin_file = 'hozio-dynamic-tags/hozio-dynamic-tags.php';
+    private $plugin_slug;
+    private $plugin_file;
     private $plugin_name = 'Hozio Pro';
 
     /**
@@ -49,6 +52,10 @@ class Hozio_Plugin_Updater {
      * Constructor - hook into WordPress update system
      */
     public function __construct() {
+        // Detect actual plugin directory (handles 'hozio-dynamic-tags', 'hozio-dynamic-tags-main', etc.)
+        $this->plugin_slug = basename(dirname(__DIR__));
+        $this->plugin_file = $this->plugin_slug . '/hozio-dynamic-tags.php';
+
         $this->current_version = $this->get_current_version();
 
         // Only run in admin
@@ -589,7 +596,7 @@ function hozio_get_auto_update_status() {
 
     // Check if there's an update available
     $update_plugins = get_site_transient('update_plugins');
-    $plugin_file = 'hozio-dynamic-tags/hozio-dynamic-tags.php';
+    $plugin_file = basename(dirname(__DIR__)) . '/hozio-dynamic-tags.php';
 
     if (isset($update_plugins->response[$plugin_file])) {
         // Update is available and auto-updates are enabled
