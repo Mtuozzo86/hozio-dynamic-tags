@@ -1,2 +1,7 @@
 # Claude Code
 .claude/
+
+# Release guide and build artifacts
+RELEASE.md
+releases/
+build-zip.ps1
