@@ -159,6 +159,9 @@ function hozio_block_wrong_url_pages() {
 
     // If the base request path doesn't match the canonical path → wrong URL
     if ($canonical !== $request_base) {
+        // Tell search engines to de-index this ghost URL
+        header('X-Robots-Tag: noindex, nofollow', true);
+
         $canonical_redirect_on = get_option('hozio_canonical_redirect_enabled', '1') === '1';
 
         if ($canonical_redirect_on) {
@@ -185,6 +188,44 @@ function hozio_block_wrong_url_pages() {
     } else {
         if ($debug) header('X-Ghost-Debug-Result: PASSED (URL matches)');
     }
+}
+
+// ========================
+// FILTER GHOST PAGES FROM YOAST XML SITEMAP
+// ========================
+// Yoast builds its sitemap from DB queries using get_permalink() — it never
+// visits URLs to check if they work. This filter excludes pages with broken
+// parent chains (orphaned child pages whose URLs 404) from the XML sitemap.
+add_filter('wpseo_sitemap_entry', 'hozio_filter_yoast_sitemap_ghost_pages', 10, 3);
+function hozio_filter_yoast_sitemap_ghost_pages($url, $type, $post) {
+    // Only filter page entries
+    if ($type !== 'post' || !$post || $post->post_type !== 'page') {
+        return $url;
+    }
+
+    // Check 1: Verify entire parent chain is published
+    // If any ancestor is missing or not published, the permalink is broken (404s)
+    $current = $post;
+    while ($current->post_parent) {
+        $parent = get_post($current->post_parent);
+        if (!$parent || $parent->post_status !== 'publish') {
+            return false; // Broken parent chain — exclude from sitemap
+        }
+        $current = $parent;
+    }
+
+    // Check 2: URL mismatch check (same logic as ghost page guard)
+    // Verify the sitemap URL matches the page's canonical permalink
+    if (is_array($url) && isset($url['loc'])) {
+        $canonical_path = trim(parse_url(get_permalink($post->ID), PHP_URL_PATH), '/');
+        $sitemap_path   = trim(parse_url($url['loc'], PHP_URL_PATH), '/');
+
+        if ($canonical_path !== $sitemap_path) {
+            return false; // URL mismatch — exclude from sitemap
+        }
+    }
+
+    return $url;
 }
 
 // ========================
