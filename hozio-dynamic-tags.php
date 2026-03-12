@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.05
+Version:         4.06
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -14,7 +14,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.05');
+define('HOZIO_VERSION', '4.06');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -670,6 +670,19 @@ add_filter('template_include', function($template) {
     }
     return $template;
 });
+
+// Inject meta tags into <head> for the HTML sitemap template
+add_action('wp_head', function() {
+    if (!is_page()) return;
+    if (get_page_template_slug(get_queried_object_id()) !== 'html-sitemap-template.php') return;
+
+    echo '<meta name="robots" content="noindex">' . "\n";
+
+    // Only add meta description if one doesn't already exist (e.g. from Yoast)
+    if (!defined('WPSEO_VERSION')) {
+        echo '<meta name="description" content="Complete HTML sitemap showing all pages, posts, categories, and archives for easy navigation and search engine indexing.">' . "\n";
+    }
+}, 1);
 
 class Your_Plugin_ACF_Maps {
     

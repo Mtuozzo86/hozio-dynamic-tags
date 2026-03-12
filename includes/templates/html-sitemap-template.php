@@ -817,25 +817,12 @@ if (!empty($custom_link_hover_color)) {
 echo '</style>';
 ?>
 
-<!-- SEO Meta Description -->
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    if (!document.querySelector('meta[name="description"]')) {
-        const metaDescription = document.createElement('meta');
-        metaDescription.name = 'description';
-        metaDescription.content = 'Complete HTML sitemap of our website showing all pages, posts, categories, and archives for easy navigation and search engine indexing.';
-        document.head.appendChild(metaDescription);
-    }
-});
-</script>
-
 <div class="sitemap-wrapper">
     <main class="sitemap-main">
         <article class="sitemap-article">
             
             <!-- Page Header -->
             <header class="sitemap-header">
-            <meta name="robots" content="noindex">
                 <?php
                 // Display page content - Required for Elementor
                 if (have_posts()) :
