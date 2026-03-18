@@ -1,9 +1,33 @@
 <?php
 // ========================================
+// HELPER: Filter ghost pages from Elementor query results
+// ========================================
+// Adds a one-time posts_results filter that removes pages with broken
+// parent chains (orphaned child pages whose URLs 404) from query results.
+function hozio_add_ghost_page_filter() {
+    add_filter('posts_results', $fn = function($posts, $query) use (&$fn) {
+        // Remove this filter immediately so it only runs once
+        remove_filter('posts_results', $fn, 10);
+
+        if (empty($posts)) return $posts;
+
+        // Only filter page queries
+        if ($query->get('post_type') !== 'page') return $posts;
+
+        return array_values(array_filter($posts, function($post) {
+            return hozio_has_valid_parent_chain($post);
+        }));
+    }, 10, 2);
+}
+
+// ========================================
 // QUERY 1: Original dynamic parent pages query
 // ⭐ NOW EXCLUDES pages with "county" term
 // ========================================
 add_action('elementor/query/dynamic_parent_pages_query', function($query) {
+    // Filter out ghost pages (broken parent chains) from results
+    hozio_add_ghost_page_filter();
+
     // Get the current page ID
     $current_page_id = get_the_ID();
 
@@ -156,6 +180,9 @@ add_action('elementor/query/dynamic_parent_pages_query', function($query) {
 // QUERY 2: Dynamic town pages query
 // ========================================
 add_action('elementor/query/dynamic_town_pages_query', function( $query ) {
+    // Filter out ghost pages (broken parent chains) from results
+    hozio_add_ghost_page_filter();
+
     // Current page ID
     $current_id = get_queried_object_id();
     if ( ! $current_id ) {
@@ -212,6 +239,9 @@ add_action('elementor/query/dynamic_town_pages_query', function( $query ) {
 // Only shows pages that have BOTH the matching term AND "county" term
 // ========================================
 add_action('elementor/query/dynamic_county_pages_query', function($query) {
+    // Filter out ghost pages (broken parent chains) from results
+    hozio_add_ghost_page_filter();
+
     // Get the current page ID
     $current_page_id = get_the_ID();
 

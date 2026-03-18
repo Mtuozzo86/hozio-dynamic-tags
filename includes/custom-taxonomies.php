@@ -191,6 +191,29 @@ function hozio_block_wrong_url_pages() {
 }
 
 // ========================
+// SHARED HELPER: Validate parent chain integrity
+// ========================
+// Returns true if all ancestor pages exist and are published.
+// Used by the Yoast sitemap filter and Elementor query filters
+// to exclude orphaned child pages whose URLs 404.
+function hozio_has_valid_parent_chain($post) {
+    if (is_int($post)) {
+        $post = get_post($post);
+    }
+    if (!$post) return false;
+
+    $current = $post;
+    while ($current->post_parent) {
+        $parent = get_post($current->post_parent);
+        if (!$parent || $parent->post_status !== 'publish') {
+            return false;
+        }
+        $current = $parent;
+    }
+    return true;
+}
+
+// ========================
 // FILTER GHOST PAGES FROM YOAST XML SITEMAP
 // ========================
 // Yoast builds its sitemap from DB queries using get_permalink() — it never
@@ -204,14 +227,8 @@ function hozio_filter_yoast_sitemap_ghost_pages($url, $type, $post) {
     }
 
     // Check 1: Verify entire parent chain is published
-    // If any ancestor is missing or not published, the permalink is broken (404s)
-    $current = $post;
-    while ($current->post_parent) {
-        $parent = get_post($current->post_parent);
-        if (!$parent || $parent->post_status !== 'publish') {
-            return false; // Broken parent chain — exclude from sitemap
-        }
-        $current = $parent;
+    if (!hozio_has_valid_parent_chain($post)) {
+        return false;
     }
 
     // Check 2: URL mismatch check (same logic as ghost page guard)
