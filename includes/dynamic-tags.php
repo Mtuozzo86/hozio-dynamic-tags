@@ -103,7 +103,8 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
 
             public function render() {
                 $val = esc_attr(get_option($this->option_key, ''));
-                echo '<a href="' . $this->scheme . ':' . $val . '">' . esc_html($val) . '</a>';
+                $noswap = ($this->scheme === 'sms' && get_option('hozio_sms_calltrk_noswap', '0') === '1') ? ' data-calltrk-noswap' : '';
+                echo '<a href="' . $this->scheme . ':' . $val . '"' . $noswap . '>' . esc_html($val) . '</a>';
             }
         }
     }
@@ -283,6 +284,15 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
             protected $tag_name   = 'sms-phone-name';
             protected $tag_title  = 'SMS Phone # Name';
             protected $option_key = 'hozio_sms_phone';
+
+            public function render() {
+                $value = get_option($this->option_key, '');
+                if (get_option('hozio_sms_calltrk_noswap', '0') === '1') {
+                    echo '<span data-calltrk-noswap>' . esc_html($value) . '</span>';
+                } else {
+                    echo esc_html($value);
+                }
+            }
         }
     }
 

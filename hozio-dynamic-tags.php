@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.07
+Version:         4.08
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -14,7 +14,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.07');
+define('HOZIO_VERSION', '4.08');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -172,7 +172,11 @@ function hozio_shortcode_handler( $atts ) {
     );
     if ( isset( $icon_box_tags[ $tag ] ) ) {
         $val = esc_attr( get_option( $icon_box_tags[ $tag ]['option'], '' ) );
-        return '<a href="' . esc_url( $icon_box_tags[ $tag ]['prefix'] . $val ) . '">' . esc_html( $val ) . '</a>';
+        $noswap_attr = '';
+        if ( $tag === 'sms-icon-box' && get_option( 'hozio_sms_calltrk_noswap', '0' ) === '1' ) {
+            $noswap_attr = ' data-calltrk-noswap';
+        }
+        return '<a href="' . esc_url( $icon_box_tags[ $tag ]['prefix'] . $val ) . '"' . $noswap_attr . '>' . esc_html( $val ) . '</a>';
     }
 
     // --- Phone tags ---
@@ -189,7 +193,11 @@ function hozio_shortcode_handler( $atts ) {
     // --- SMS tags ---
     if ( $tag === 'sms-phone' ) {
         $val = get_option( 'hozio_sms_phone', '' );
-        return $format === 'url' ? esc_url( 'sms:' . esc_attr( $val ) ) : esc_html( $val );
+        if ( $format === 'url' ) {
+            return esc_url( 'sms:' . esc_attr( $val ) );
+        }
+        $noswap = get_option( 'hozio_sms_calltrk_noswap', '0' ) === '1';
+        return $noswap ? '<span data-calltrk-noswap>' . esc_html( $val ) . '</span>' : esc_html( $val );
     }
 
     // --- Email tag ---

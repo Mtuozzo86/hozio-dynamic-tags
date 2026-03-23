@@ -780,6 +780,14 @@ function hozio_dynamic_tags_settings_page() {
                         }
                         ?>
                     </div>
+                    <!-- CallRail noswap toggle for SMS -->
+                    <div style="margin-top: 16px; padding: 12px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #374151;">
+                            <input type="checkbox" name="hozio_sms_calltrk_noswap" value="1" <?php checked(get_option('hozio_sms_calltrk_noswap', '0'), '1'); ?> style="margin: 0;">
+                            <span>Add <code style="background:#e5e7eb;padding:2px 6px;border-radius:4px;font-size:12px;">data-calltrk-noswap</code> to SMS Phone Number</span>
+                        </label>
+                        <span style="font-size: 11px; color: #6b7280;">(Prevents CallRail from swapping this number)</span>
+                    </div>
                 </div>
 
                 <!-- Business Details Section -->
@@ -969,6 +977,9 @@ function hozio_dynamic_tags_save_settings() {
             }
         }
     }
+
+    // Save CallRail noswap toggle for SMS phone
+    update_option('hozio_sms_calltrk_noswap', isset($_POST['hozio_sms_calltrk_noswap']) ? '1' : '0');
 
     // Save dark mode setting
     update_option('hozio_sitemap_dark_mode', isset($_POST['hozio_sitemap_dark_mode']) ? '1' : '0');
