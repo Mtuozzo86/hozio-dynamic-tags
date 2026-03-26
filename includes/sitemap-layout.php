@@ -23,6 +23,18 @@ function hozio_sitemap_layout_admin_assets($hook) {
 add_action('admin_enqueue_scripts', 'hozio_sitemap_layout_admin_assets', 999);
 
 // ========================================
+// DUPLICATE SLUG CACHE INVALIDATION
+// ========================================
+add_action('save_post_page', function($post_id) {
+    delete_transient('hozio_duplicate_slug_cache');
+}, 20);
+add_action('before_delete_post', function($post_id) {
+    if (get_post_type($post_id) === 'page') {
+        delete_transient('hozio_duplicate_slug_cache');
+    }
+});
+
+// ========================================
 // AJAX ENDPOINTS
 // ========================================
 
@@ -296,7 +308,435 @@ add_action('wp_ajax_hozio_sitemap_get_all_site_pages', function() {
     wp_send_json_success($pages);
 });
 
-// 6. Import current auto-detection as overrides
+// ========================================
+// DUPLICATE SLUG DETECTOR ENDPOINTS
+// ========================================
+
+// 6a. Scan for duplicate slugs
+add_action('wp_ajax_hozio_duplicate_slug_scan', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    // Force refresh if requested, otherwise use cache
+    $force = isset($_POST['force']) && $_POST['force'] === '1';
+    if ($force) {
+        delete_transient('hozio_duplicate_slug_cache');
+    } else {
+        $cached = get_transient('hozio_duplicate_slug_cache');
+        if ($cached !== false) {
+            wp_send_json_success($cached);
+        }
+    }
+
+    global $wpdb;
+
+    // Single query: get all pages (all statuses)
+    $all_pages = $wpdb->get_results(
+        "SELECT ID, post_name, post_title, post_parent, post_status, post_modified
+         FROM {$wpdb->posts}
+         WHERE post_type = 'page'
+         AND post_status IN ('publish','draft','trash','pending','private')
+         ORDER BY post_name ASC"
+    );
+
+    // Build lookup maps
+    $by_id = array();
+    $by_parent_slug = array(); // key: "parentId:slug" => page object
+    foreach ($all_pages as $p) {
+        $by_id[(int)$p->ID] = $p;
+        $key = (int)$p->post_parent . ':' . $p->post_name;
+        $by_parent_slug[$key] = $p;
+    }
+
+    // Find pages with duplicate suffixes (-2, -3, etc.) — skip trashed pages
+    $groups_map = array(); // key: "parentId:base_slug" => array of duplicate pages
+    foreach ($all_pages as $p) {
+        if ($p->post_status === 'trash') continue; // Don't show trashed pages
+        if (preg_match('/^(.+)-([2-9]|\d{2,})$/', $p->post_name, $m)) {
+            $base_slug = $m[1];
+            $suffix = (int)$m[2];
+            $group_key = (int)$p->post_parent . ':' . $base_slug;
+            if (!isset($groups_map[$group_key])) {
+                $groups_map[$group_key] = array(
+                    'base_slug' => $base_slug,
+                    'parent_id' => (int)$p->post_parent,
+                    'duplicates' => array(),
+                );
+            }
+            $groups_map[$group_key]['duplicates'][] = array(
+                'page' => $p,
+                'suffix' => $suffix,
+            );
+        }
+    }
+
+    if (empty($groups_map)) {
+        $result = array('groups' => array(), 'total_duplicates' => 0, 'total_groups' => 0);
+        set_transient('hozio_duplicate_slug_cache', $result, 12 * HOUR_IN_SECONDS);
+        wp_send_json_success($result);
+    }
+
+    // Batch children count query
+    $all_dupe_ids = array();
+    $all_original_ids = array();
+    foreach ($groups_map as $gk => $g) {
+        foreach ($g['duplicates'] as $d) {
+            $all_dupe_ids[] = (int)$d['page']->ID;
+        }
+        // Check if original exists
+        $orig_key = (int)$g['parent_id'] . ':' . $g['base_slug'];
+        if (isset($by_parent_slug[$orig_key])) {
+            $all_original_ids[] = (int)$by_parent_slug[$orig_key]->ID;
+        }
+    }
+    $check_ids = array_unique(array_merge($all_dupe_ids, $all_original_ids));
+
+    $children_counts = array();
+    if (!empty($check_ids)) {
+        $ids_str = implode(',', array_map('intval', $check_ids));
+        $rows = $wpdb->get_results(
+            "SELECT post_parent, COUNT(*) as cnt FROM {$wpdb->posts}
+             WHERE post_type = 'page' AND post_status = 'publish'
+             AND post_parent IN ({$ids_str})
+             GROUP BY post_parent"
+        );
+        foreach ($rows as $r) {
+            $children_counts[(int)$r->post_parent] = (int)$r->cnt;
+        }
+    }
+
+    // Check which pages are in the sitemap layout
+    $sitemap_ids = array();
+    $overrides = get_option('hozio_sitemap_layout_overrides', array());
+    if (!empty($overrides['accordions'])) {
+        hozio_collect_page_ids_from_accordions($overrides['accordions'], $sitemap_ids);
+    }
+
+    // Helper to build page info
+    $build_page_info = function($p) use ($children_counts, $sitemap_ids, $by_id) {
+        return array(
+            'id'             => (int)$p->ID,
+            'title'          => $p->post_title ? $p->post_title : '(Untitled)',
+            'slug'           => $p->post_name,
+            'status'         => $p->post_status,
+            'permalink'      => get_permalink($p->ID),
+            'modified'       => $p->post_modified,
+            'children_count' => isset($children_counts[(int)$p->ID]) ? $children_counts[(int)$p->ID] : 0,
+            'in_sitemap'     => in_array((int)$p->ID, $sitemap_ids),
+        );
+    };
+
+    // Build final groups
+    $groups = array();
+    $total_duplicates = 0;
+    foreach ($groups_map as $gk => $g) {
+        $orig_key = (int)$g['parent_id'] . ':' . $g['base_slug'];
+        $original = null;
+        $type = 'orphaned';
+        $slug_available = true;
+
+        if (isset($by_parent_slug[$orig_key])) {
+            $orig_page = $by_parent_slug[$orig_key];
+            $original = $build_page_info($orig_page);
+            if ($orig_page->post_status === 'publish') {
+                $type = 'true_duplicate';
+                $slug_available = false; // original already has the slug
+            } else {
+                // Original exists but is draft/trash — still an orphaned situation
+                $type = 'orphaned';
+                $slug_available = false; // slug taken by draft/trash page
+            }
+        }
+
+        $parent_title = '';
+        if ($g['parent_id'] && isset($by_id[$g['parent_id']])) {
+            $parent_title = $by_id[$g['parent_id']]->post_title;
+        }
+
+        $dupes = array();
+        foreach ($g['duplicates'] as $d) {
+            $info = $build_page_info($d['page']);
+            $info['suffix'] = $d['suffix'];
+            $dupes[] = $info;
+            $total_duplicates++;
+        }
+
+        // Sort by suffix
+        usort($dupes, function($a, $b) { return $a['suffix'] - $b['suffix']; });
+
+        $groups[] = array(
+            'base_slug'      => $g['base_slug'],
+            'parent_id'      => $g['parent_id'],
+            'parent_title'   => $parent_title,
+            'type'           => $type,
+            'original'       => $original,
+            'duplicates'     => $dupes,
+            'clean_slug'     => $g['base_slug'],
+            'slug_available' => $slug_available,
+        );
+    }
+
+    // Sort groups: true_duplicate first, then orphaned, then alphabetical
+    usort($groups, function($a, $b) {
+        if ($a['type'] !== $b['type']) {
+            return $a['type'] === 'true_duplicate' ? -1 : 1;
+        }
+        return strcmp($a['base_slug'], $b['base_slug']);
+    });
+
+    $result = array(
+        'groups'           => $groups,
+        'total_duplicates' => $total_duplicates,
+        'total_groups'     => count($groups),
+    );
+
+    set_transient('hozio_duplicate_slug_cache', $result, 12 * HOUR_IN_SECONDS);
+    wp_send_json_success($result);
+});
+
+// 6b. Fix a duplicate slug (rename to remove suffix)
+add_action('wp_ajax_hozio_duplicate_slug_fix', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $page_id = isset($_POST['page_id']) ? intval($_POST['page_id']) : 0;
+    $new_slug = isset($_POST['new_slug']) ? sanitize_title($_POST['new_slug']) : '';
+
+    if (!$page_id || !$new_slug) {
+        wp_send_json_error('Missing required parameters.');
+    }
+
+    $page = get_post($page_id);
+    if (!$page || $page->post_type !== 'page') {
+        wp_send_json_error('Page not found.');
+    }
+
+    // Verify current slug matches -N pattern
+    if (!preg_match('/^(.+)-([2-9]|\d{2,})$/', $page->post_name, $m)) {
+        wp_send_json_error('Page slug does not have a duplicate suffix.');
+    }
+
+    $expected_clean = $m[1];
+    if ($new_slug !== $expected_clean) {
+        wp_send_json_error('New slug does not match expected clean slug.');
+    }
+
+    // Check no other page with same parent occupies this slug
+    global $wpdb;
+    $conflict = $wpdb->get_var($wpdb->prepare(
+        "SELECT ID FROM {$wpdb->posts}
+         WHERE post_name = %s AND post_parent = %d AND post_type = 'page'
+         AND post_status IN ('publish','draft','pending','private')
+         AND ID != %d
+         LIMIT 1",
+        $new_slug, $page->post_parent, $page_id
+    ));
+
+    if ($conflict) {
+        $conflict_page = get_post($conflict);
+        wp_send_json_error('Slug "' . $new_slug . '" is already taken by "' . ($conflict_page ? $conflict_page->post_title : 'Page #' . $conflict) . '" (ID: ' . $conflict . ').');
+    }
+
+    $old_permalink = get_permalink($page_id);
+    $old_slug = $page->post_name;
+
+    // Update the slug
+    $result = wp_update_post(array(
+        'ID'        => $page_id,
+        'post_name' => $new_slug,
+    ), true);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error('Failed to update slug: ' . $result->get_error_message());
+    }
+
+    // Verify WordPress didn't re-suffix it
+    $updated = get_post($page_id);
+    if ($updated->post_name !== $new_slug) {
+        wp_send_json_error('WordPress re-assigned slug to "' . $updated->post_name . '" due to a conflict.');
+    }
+
+    $new_permalink = get_permalink($page_id);
+    delete_transient('hozio_duplicate_slug_cache');
+
+    wp_send_json_success(array(
+        'page_id'       => $page_id,
+        'old_slug'      => $old_slug,
+        'new_slug'      => $new_slug,
+        'old_permalink'  => $old_permalink,
+        'new_permalink'  => $new_permalink,
+        'redirect_note' => 'The old URL (' . $old_permalink . ') will now 404. Consider adding a 301 redirect.',
+    ));
+});
+
+// 6c. Trash a duplicate page
+add_action('wp_ajax_hozio_duplicate_slug_trash', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $page_id = isset($_POST['page_id']) ? intval($_POST['page_id']) : 0;
+    $confirm_children = isset($_POST['confirm_children']) && $_POST['confirm_children'] === '1';
+
+    if (!$page_id) {
+        wp_send_json_error('Missing page ID.');
+    }
+
+    $page = get_post($page_id);
+    if (!$page || $page->post_type !== 'page') {
+        wp_send_json_error('Page not found.');
+    }
+
+    // Verify slug matches -N pattern
+    if (!preg_match('/^(.+)-([2-9]|\d{2,})$/', $page->post_name)) {
+        wp_send_json_error('Page slug does not have a duplicate suffix. Cannot trash non-duplicate pages through this tool.');
+    }
+
+    // Check for children
+    $children = get_posts(array(
+        'post_type'      => 'page',
+        'post_status'    => 'publish',
+        'post_parent'    => $page_id,
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+    ));
+
+    if (!empty($children) && !$confirm_children) {
+        $child_info = array();
+        foreach (array_slice($children, 0, 10) as $cid) {
+            $child_info[] = array('id' => $cid, 'title' => get_the_title($cid));
+        }
+        wp_send_json_error(array(
+            'code'            => 'has_children',
+            'children_count'  => count($children),
+            'children'        => $child_info,
+            'message'         => 'This page has ' . count($children) . ' child page(s) that will become orphaned.',
+        ));
+    }
+
+    $result = wp_trash_post($page_id);
+    if (!$result) {
+        wp_send_json_error('Failed to trash page.');
+    }
+
+    // Remove from sitemap layout if present
+    $overrides = get_option('hozio_sitemap_layout_overrides', array());
+    $changed = false;
+    if (!empty($overrides['accordions'])) {
+        $changed = hozio_remove_page_from_accordions($overrides['accordions'], $page_id);
+    }
+    if (!empty($overrides['exclude_ids'])) {
+        $key = array_search($page_id, $overrides['exclude_ids']);
+        if ($key !== false) {
+            array_splice($overrides['exclude_ids'], $key, 1);
+            $changed = true;
+        }
+    }
+    if ($changed) {
+        update_option('hozio_sitemap_layout_overrides', $overrides);
+    }
+
+    delete_transient('hozio_duplicate_slug_cache');
+
+    wp_send_json_success(array(
+        'page_id'      => $page_id,
+        'status'       => 'trashed',
+        'had_children' => !empty($children),
+    ));
+});
+
+// Helper: recursively remove a page ID from accordions
+function hozio_remove_page_from_accordions(&$accordions, $page_id) {
+    $changed = false;
+    for ($i = count($accordions) - 1; $i >= 0; $i--) {
+        if (isset($accordions[$i]['page_id']) && (int)$accordions[$i]['page_id'] === $page_id) {
+            array_splice($accordions, $i, 1);
+            $changed = true;
+            continue;
+        }
+        if (!empty($accordions[$i]['children'])) {
+            if (hozio_remove_page_from_accordions($accordions[$i]['children'], $page_id)) {
+                $changed = true;
+            }
+        }
+    }
+    return $changed;
+}
+
+// 6d. Bulk fix or trash duplicate slugs
+add_action('wp_ajax_hozio_duplicate_slug_bulk', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $operation = isset($_POST['operation']) ? sanitize_text_field($_POST['operation']) : '';
+    $page_ids = isset($_POST['page_ids']) && is_array($_POST['page_ids']) ? array_map('intval', $_POST['page_ids']) : array();
+
+    if (!in_array($operation, array('fix_orphaned', 'trash_duplicates'))) {
+        wp_send_json_error('Invalid operation.');
+    }
+    if (empty($page_ids)) {
+        wp_send_json_error('No pages specified.');
+    }
+
+    global $wpdb;
+    $succeeded = array();
+    $failed = array();
+
+    foreach ($page_ids as $pid) {
+        $page = get_post($pid);
+        if (!$page || $page->post_type !== 'page') {
+            $failed[] = array('id' => $pid, 'reason' => 'Page not found');
+            continue;
+        }
+        if (!preg_match('/^(.+)-([2-9]|\d{2,})$/', $page->post_name, $m)) {
+            $failed[] = array('id' => $pid, 'reason' => 'No duplicate suffix');
+            continue;
+        }
+
+        if ($operation === 'fix_orphaned') {
+            $clean_slug = $m[1];
+            // Check slug availability
+            $conflict = $wpdb->get_var($wpdb->prepare(
+                "SELECT ID FROM {$wpdb->posts}
+                 WHERE post_name = %s AND post_parent = %d AND post_type = 'page'
+                 AND post_status IN ('publish','draft','pending','private')
+                 AND ID != %d LIMIT 1",
+                $clean_slug, $page->post_parent, $pid
+            ));
+            if ($conflict) {
+                $failed[] = array('id' => $pid, 'reason' => 'Slug "' . $clean_slug . '" is taken');
+                continue;
+            }
+            $result = wp_update_post(array('ID' => $pid, 'post_name' => $clean_slug), true);
+            if (is_wp_error($result)) {
+                $failed[] = array('id' => $pid, 'reason' => $result->get_error_message());
+                continue;
+            }
+            $updated = get_post($pid);
+            if ($updated->post_name !== $clean_slug) {
+                $failed[] = array('id' => $pid, 'reason' => 'WordPress re-suffixed to "' . $updated->post_name . '"');
+                continue;
+            }
+            $succeeded[] = array('id' => $pid, 'new_slug' => $clean_slug);
+        } else {
+            // trash_duplicates
+            $result = wp_trash_post($pid);
+            if (!$result) {
+                $failed[] = array('id' => $pid, 'reason' => 'Trash failed');
+                continue;
+            }
+            $succeeded[] = array('id' => $pid, 'status' => 'trashed');
+        }
+    }
+
+    delete_transient('hozio_duplicate_slug_cache');
+
+    wp_send_json_success(array(
+        'succeeded' => $succeeded,
+        'failed'    => $failed,
+    ));
+});
+
+// 7. Import current auto-detection as overrides
 add_action('wp_ajax_hozio_sitemap_import_auto', function() {
     check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
     if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
@@ -1145,6 +1585,23 @@ function hozio_sitemap_layout_page() {
                             These pages appear in multiple accordions. Use "Go to" to navigate or "Remove" to fix.
                         </p>
                         <div id="hozio-duplicates-list"></div>
+                    </div>
+
+                    <!-- Section 3.75: Duplicate Page Detector -->
+                    <div class="hozio-section" id="hozio-slug-dupes-section" style="border-left-color: #f59e0b;">
+                        <div class="hozio-section-header">
+                            <span class="dashicons dashicons-search" style="color: #f59e0b;"></span>
+                            <h2>Duplicate Page Detector</h2>
+                            <span id="hozio-slug-dupe-count" class="slug-dupe-count-badge" style="display: none;">0</span>
+                        </div>
+                        <p class="hozio-field-description" style="margin-bottom: 12px;">
+                            Detects pages with WordPress auto-generated duplicate slugs (e.g., <code>services-2</code>, <code>about-3</code>).
+                        </p>
+                        <div id="hozio-slug-dupe-status">
+                            <span class="slug-dupe-loading"><span class="dashicons dashicons-update slug-dupe-spin"></span> Checking for duplicates...</span>
+                        </div>
+                        <div id="hozio-slug-dupe-actions" style="margin-top: 10px; display: none;"></div>
+                        <div id="hozio-slug-dupe-results" style="margin-top: 12px;"></div>
                     </div>
 
                     <!-- Section 4: Unassigned Pages -->
@@ -2605,6 +3062,391 @@ function hozio_sitemap_layout_page() {
             renderAccordions();
         });
 
+        // ========================================
+        // DUPLICATE PAGE DETECTOR (SLUG DUPLICATES)
+        // ========================================
+        var slugDupeData = null;
+        var slugDupeDetailsVisible = false;
+
+        function slugDupeAutoScan() {
+            var $status = $('#hozio-slug-dupe-status');
+            var $actions = $('#hozio-slug-dupe-actions');
+            var $results = $('#hozio-slug-dupe-results');
+            var $count = $('#hozio-slug-dupe-count');
+
+            $status.html('<span class="slug-dupe-loading"><span class="dashicons dashicons-update slug-dupe-spin"></span> Checking for duplicates...</span>');
+            $actions.hide().empty();
+            $results.empty();
+            $count.hide();
+            slugDupeDetailsVisible = false;
+
+            $.post(ajaxurl, {
+                action: 'hozio_duplicate_slug_scan',
+                nonce: nonce,
+                force: '1'
+            }, function(response) {
+                if (!response.success) {
+                    $status.html('<span style="color: #dc2626;">Scan failed: ' + escHtml(String(response.data || 'Unknown error')) + '</span>');
+                    return;
+                }
+                slugDupeData = response.data;
+                renderSlugDupeStatus();
+            }).fail(function() {
+                $status.html('<span style="color: #dc2626;">Request failed. <a href="#" id="slug-dupe-retry">Retry</a></span>');
+            });
+        }
+
+        $(document).on('click', '#slug-dupe-retry, #slug-dupe-rescan', function(e) {
+            e.preventDefault();
+            slugDupeAutoScan();
+        });
+
+        function renderSlugDupeStatus() {
+            var $status = $('#hozio-slug-dupe-status');
+            var $actions = $('#hozio-slug-dupe-actions');
+            var $count = $('#hozio-slug-dupe-count');
+
+            if (!slugDupeData || slugDupeData.total_groups === 0) {
+                $status.html('<span class="slug-dupe-clean"><span class="dashicons dashicons-yes-alt"></span> No duplicate slugs found.</span>');
+                $count.hide();
+                $actions.html('<button type="button" class="button button-small" id="slug-dupe-rescan"><span class="dashicons dashicons-update"></span> Re-scan</button>').show();
+                return;
+            }
+
+            $count.text(slugDupeData.total_duplicates).show();
+            $status.html('<span class="slug-dupe-warning"><span class="dashicons dashicons-warning"></span> Found <strong>' + slugDupeData.total_duplicates + '</strong> duplicate page' + (slugDupeData.total_duplicates !== 1 ? 's' : '') + ' in <strong>' + slugDupeData.total_groups + '</strong> group' + (slugDupeData.total_groups !== 1 ? 's' : '') + '.</span>');
+
+            var actionsHtml = '<div class="slug-dupe-toolbar">';
+            actionsHtml += '<button type="button" class="button button-small" id="slug-dupe-rescan"><span class="dashicons dashicons-update"></span> Re-scan</button>';
+            actionsHtml += '<button type="button" class="button button-small" id="slug-dupe-toggle-details"><span class="dashicons dashicons-visibility"></span> View Details</button>';
+
+            // Count fixable and trashable
+            var fixableCount = 0;
+            var trashableCount = 0;
+            for (var i = 0; i < slugDupeData.groups.length; i++) {
+                var g = slugDupeData.groups[i];
+                if (g.type === 'orphaned' && g.slug_available) {
+                    fixableCount += g.duplicates.length;
+                }
+                if (g.type === 'true_duplicate') {
+                    trashableCount += g.duplicates.length;
+                }
+            }
+
+            if (fixableCount > 0) {
+                actionsHtml += '<button type="button" class="slug-dupe-action-btn slug-dupe-fix-btn slug-dupe-bulk-fix-btn">' +
+                    '<span class="dashicons dashicons-yes-alt"></span> Fix All Orphaned (' + fixableCount + ')</button>';
+            }
+            if (trashableCount > 0) {
+                actionsHtml += '<button type="button" class="slug-dupe-action-btn slug-dupe-trash-btn slug-dupe-bulk-trash-btn">' +
+                    '<span class="dashicons dashicons-trash"></span> Trash All (' + trashableCount + ')</button>';
+            }
+            actionsHtml += '</div>';
+
+            $actions.html(actionsHtml).show();
+        }
+
+        // Toggle details view
+        $(document).on('click', '#slug-dupe-toggle-details', function() {
+            slugDupeDetailsVisible = !slugDupeDetailsVisible;
+            var $btn = $(this);
+            if (slugDupeDetailsVisible) {
+                $btn.find('.dashicons').removeClass('dashicons-visibility').addClass('dashicons-hidden');
+                $btn.contents().last().replaceWith(' Hide Details');
+                renderSlugDupeDetails();
+            } else {
+                $btn.find('.dashicons').removeClass('dashicons-hidden').addClass('dashicons-visibility');
+                $btn.contents().last().replaceWith(' View Details');
+                $('#hozio-slug-dupe-results').empty();
+            }
+        });
+
+        function renderSlugDupeDetails() {
+            var $results = $('#hozio-slug-dupe-results');
+            if (!slugDupeData || slugDupeData.total_groups === 0) {
+                $results.empty();
+                return;
+            }
+
+            var html = '';
+            for (var i = 0; i < slugDupeData.groups.length; i++) {
+                var g = slugDupeData.groups[i];
+                var isTrue = g.type === 'true_duplicate';
+                var typeLabel = isTrue ? 'Duplicate' : 'Orphaned';
+                var typeClass = isTrue ? 'true' : 'orphaned';
+                var parentCtx = g.parent_title ? ' <span class="slug-dupe-parent-ctx">in ' + escHtml(g.parent_title) + '</span>' : '';
+
+                html += '<div class="slug-dupe-group">';
+
+                // Group header
+                html += '<div class="slug-dupe-group-header slug-dupe-header-' + typeClass + '">';
+                html += '<code class="slug-dupe-slug-label">/' + escHtml(g.base_slug) + '/</code>' + parentCtx;
+                html += '<span class="slug-dupe-type-badge slug-dupe-type-' + typeClass + '">' + typeLabel + '</span>';
+                html += '</div>';
+
+                // Original page row (if exists)
+                if (g.original) {
+                    var o = g.original;
+                    html += '<div class="slug-dupe-row slug-dupe-row-original">';
+                    html += '<div class="slug-dupe-row-info">';
+                    html += '<span class="slug-dupe-row-title">' + escHtml(o.title) + '</span>';
+                    html += '<span class="slug-dupe-status-badge slug-dupe-status-' + o.status + '">' + escHtml(o.status) + '</span>';
+                    html += '<span class="slug-dupe-row-date">' + formatDate(o.modified) + '</span>';
+                    if (o.children_count > 0) {
+                        html += '<span class="slug-dupe-row-children">' + o.children_count + ' child' + (o.children_count !== 1 ? 'ren' : '') + '</span>';
+                    }
+                    html += '</div>';
+                    html += '<div class="slug-dupe-row-actions">';
+                    html += '<a href="' + escHtml(o.permalink) + '" target="_blank" class="slug-dupe-link-btn" title="View"><span class="dashicons dashicons-external"></span></a>';
+                    html += '<a href="' + escHtml(adminUrl + 'post.php?post=' + o.id + '&action=edit') + '" target="_blank" class="slug-dupe-link-btn" title="Edit"><span class="dashicons dashicons-edit"></span></a>';
+                    html += '</div>';
+                    html += '</div>';
+                } else {
+                    html += '<div class="slug-dupe-row slug-dupe-row-missing">';
+                    html += '<span class="dashicons dashicons-info-outline"></span> No original page &mdash; slug can be claimed';
+                    html += '</div>';
+                }
+
+                // Duplicate page rows
+                for (var d = 0; d < g.duplicates.length; d++) {
+                    var dp = g.duplicates[d];
+                    html += '<div class="slug-dupe-row slug-dupe-row-duplicate" id="slug-dupe-row-' + dp.id + '">';
+                    html += '<div class="slug-dupe-row-info">';
+                    html += '<span class="slug-dupe-row-title">' + escHtml(dp.title) + '</span>';
+                    html += '<code class="slug-dupe-row-slug">' + escHtml(dp.slug) + '</code>';
+                    html += '<span class="slug-dupe-status-badge slug-dupe-status-' + dp.status + '">' + escHtml(dp.status) + '</span>';
+                    if (dp.in_sitemap) {
+                        html += '<span class="slug-dupe-sitemap-badge">In Sitemap</span>';
+                    }
+                    html += '<span class="slug-dupe-row-date">' + formatDate(dp.modified) + '</span>';
+                    if (dp.children_count > 0) {
+                        html += '<span class="slug-dupe-row-children"><span class="dashicons dashicons-warning"></span> ' + dp.children_count + ' child' + (dp.children_count !== 1 ? 'ren' : '') + '</span>';
+                    }
+                    html += '</div>';
+                    html += '<div class="slug-dupe-row-actions">';
+                    html += '<a href="' + escHtml(dp.permalink) + '" target="_blank" class="slug-dupe-link-btn" title="View"><span class="dashicons dashicons-external"></span></a>';
+                    html += '<a href="' + escHtml(adminUrl + 'post.php?post=' + dp.id + '&action=edit') + '" target="_blank" class="slug-dupe-link-btn" title="Edit"><span class="dashicons dashicons-edit"></span></a>';
+
+                    if (!isTrue && g.slug_available) {
+                        html += '<button type="button" class="slug-dupe-action-btn slug-dupe-fix-btn" data-page-id="' + dp.id + '" data-old-slug="' + escHtml(dp.slug) + '" data-new-slug="' + escHtml(g.clean_slug) + '" data-children="' + dp.children_count + '" title="' + escHtml(dp.slug) + ' → ' + escHtml(g.clean_slug) + '">';
+                        html += '<span class="dashicons dashicons-yes-alt"></span> Fix</button>';
+                    } else if (!isTrue && !g.slug_available) {
+                        html += '<span class="slug-dupe-blocked">Slug taken</span>';
+                    }
+
+                    if (isTrue) {
+                        html += '<button type="button" class="slug-dupe-action-btn slug-dupe-trash-btn" data-page-id="' + dp.id + '" data-title="' + escHtml(dp.title) + '" data-children="' + dp.children_count + '">';
+                        html += '<span class="dashicons dashicons-trash"></span> Trash</button>';
+                    }
+
+                    html += '</div>';
+                    html += '</div>';
+                }
+
+                html += '</div>'; // end group
+            }
+
+            $results.html(html);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            var d = new Date(dateStr);
+            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+        }
+
+        // Use admin URL for edit links
+        var adminUrl = '<?php echo esc_js(admin_url()); ?>';
+
+        // Fix slug handler
+        $(document).on('click', '.slug-dupe-fix-btn', function() {
+            var $btn = $(this);
+            var pageId = $btn.data('page-id');
+            var oldSlug = $btn.data('old-slug');
+            var newSlug = $btn.data('new-slug');
+            var children = parseInt($btn.data('children')) || 0;
+
+            var msg = 'Rename slug from "' + oldSlug + '" to "' + newSlug + '"?';
+            if (children > 0) {
+                msg += '\n\nWARNING: This page has ' + children + ' child page(s). Their URLs will change!';
+            }
+            msg += '\n\nThe old URL will 404 after this change.';
+            if (!confirm(msg)) return;
+
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Fixing...');
+
+            $.post(ajaxurl, {
+                action: 'hozio_duplicate_slug_fix',
+                nonce: nonce,
+                page_id: pageId,
+                new_slug: newSlug
+            }, function(response) {
+                if (response.success) {
+                    var $row = $('#slug-dupe-row-' + pageId);
+                    $row.addClass('slug-dupe-fixed');
+                    $row.find('.slug-dupe-row-actions').html(
+                        '<span class="slug-dupe-success"><span class="dashicons dashicons-yes-alt"></span> Fixed!</span>' +
+                        '<span class="slug-dupe-redirect-note">Old URL will now 404. Consider adding a redirect.</span>'
+                    );
+                    // Refresh after a moment
+                    setTimeout(function() { slugDupeAutoScan(); }, 1500);
+                } else {
+                    alert('Fix failed: ' + (typeof response.data === 'string' ? response.data : 'Unknown error'));
+                    $btn.prop('disabled', false).html('<span class="dashicons dashicons-yes-alt"></span> Fix Slug');
+                }
+            }).fail(function() {
+                alert('Request failed. Please try again.');
+                $btn.prop('disabled', false).html('<span class="dashicons dashicons-yes-alt"></span> Fix Slug');
+            });
+        });
+
+        // Trash handler
+        $(document).on('click', '.slug-dupe-trash-btn', function() {
+            var $btn = $(this);
+            var pageId = $btn.data('page-id');
+            var title = $btn.data('title');
+            var children = parseInt($btn.data('children')) || 0;
+
+            var msg = 'Move "' + title + '" to trash?';
+            if (children > 0) {
+                msg += '\n\nWARNING: This page has ' + children + ' child page(s) that will become orphaned!';
+            }
+            if (!confirm(msg)) return;
+
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Trashing...');
+
+            $.post(ajaxurl, {
+                action: 'hozio_duplicate_slug_trash',
+                nonce: nonce,
+                page_id: pageId,
+                confirm_children: children > 0 ? '1' : '0'
+            }, function(response) {
+                if (response.success) {
+                    var $row = $('#slug-dupe-row-' + pageId);
+                    $row.addClass('slug-dupe-trashed');
+                    $row.find('.slug-dupe-row-actions').html(
+                        '<span class="slug-dupe-success"><span class="dashicons dashicons-yes-alt"></span> Trashed</span>'
+                    );
+                    setTimeout(function() { slugDupeAutoScan(); }, 1500);
+                } else {
+                    if (response.data && response.data.code === 'has_children') {
+                        if (confirm(response.data.message + '\n\nProceed anyway?')) {
+                            $.post(ajaxurl, {
+                                action: 'hozio_duplicate_slug_trash',
+                                nonce: nonce,
+                                page_id: pageId,
+                                confirm_children: '1'
+                            }, function(r2) {
+                                if (r2.success) {
+                                    var $row = $('#slug-dupe-row-' + pageId);
+                                    $row.addClass('slug-dupe-trashed');
+                                    $row.find('.slug-dupe-row-actions').html('<span class="slug-dupe-success"><span class="dashicons dashicons-yes-alt"></span> Trashed</span>');
+                                    setTimeout(function() { slugDupeAutoScan(); }, 1500);
+                                } else {
+                                    alert('Trash failed.');
+                                    $btn.prop('disabled', false).html('<span class="dashicons dashicons-trash"></span> Trash');
+                                }
+                            });
+                        } else {
+                            $btn.prop('disabled', false).html('<span class="dashicons dashicons-trash"></span> Trash');
+                        }
+                    } else {
+                        alert('Trash failed: ' + (typeof response.data === 'string' ? response.data : 'Unknown error'));
+                        $btn.prop('disabled', false).html('<span class="dashicons dashicons-trash"></span> Trash');
+                    }
+                }
+            }).fail(function() {
+                alert('Request failed.');
+                $btn.prop('disabled', false).html('<span class="dashicons dashicons-trash"></span> Trash');
+            });
+        });
+
+        // Bulk fix orphaned
+        $(document).on('click', '.slug-dupe-bulk-fix-btn', function() {
+            if (!slugDupeData) return;
+            var ids = [];
+            for (var i = 0; i < slugDupeData.groups.length; i++) {
+                var g = slugDupeData.groups[i];
+                if (g.type === 'orphaned' && g.slug_available) {
+                    for (var d = 0; d < g.duplicates.length; d++) {
+                        ids.push(g.duplicates[d].id);
+                    }
+                }
+            }
+            if (ids.length === 0) return;
+            if (!confirm('Fix slugs for ' + ids.length + ' orphaned duplicate page(s)?\n\nEach page will have its -2, -3, etc. suffix removed. Old URLs will 404.')) return;
+
+            var $btn = $(this);
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Fixing...');
+
+            $.post(ajaxurl, {
+                action: 'hozio_duplicate_slug_bulk',
+                nonce: nonce,
+                operation: 'fix_orphaned',
+                page_ids: ids
+            }, function(response) {
+                if (response.success) {
+                    var s = response.data.succeeded.length;
+                    var f = response.data.failed.length;
+                    var msg = s + ' fixed';
+                    if (f > 0) msg += ', ' + f + ' failed';
+                    alert(msg + '.');
+                    slugDupeAutoScan();
+                } else {
+                    alert('Bulk fix failed.');
+                }
+                $btn.prop('disabled', false);
+            }).fail(function() {
+                alert('Request failed.');
+                $btn.prop('disabled', false);
+            });
+        });
+
+        // Bulk trash duplicates
+        $(document).on('click', '.slug-dupe-bulk-trash-btn', function() {
+            if (!slugDupeData) return;
+            var ids = [];
+            for (var i = 0; i < slugDupeData.groups.length; i++) {
+                var g = slugDupeData.groups[i];
+                if (g.type === 'true_duplicate') {
+                    for (var d = 0; d < g.duplicates.length; d++) {
+                        ids.push(g.duplicates[d].id);
+                    }
+                }
+            }
+            if (ids.length === 0) return;
+            if (!confirm('Trash ' + ids.length + ' true duplicate page(s)?\n\nPages with children will also be trashed.')) return;
+
+            var $btn = $(this);
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Trashing...');
+
+            $.post(ajaxurl, {
+                action: 'hozio_duplicate_slug_bulk',
+                nonce: nonce,
+                operation: 'trash_duplicates',
+                page_ids: ids
+            }, function(response) {
+                if (response.success) {
+                    var s = response.data.succeeded.length;
+                    var f = response.data.failed.length;
+                    var msg = s + ' trashed';
+                    if (f > 0) msg += ', ' + f + ' failed';
+                    alert(msg + '.');
+                    slugDupeAutoScan();
+                } else {
+                    alert('Bulk trash failed.');
+                }
+                $btn.prop('disabled', false);
+            }).fail(function() {
+                alert('Request failed.');
+                $btn.prop('disabled', false);
+            });
+        });
+
+        // Auto-scan on page load
+        slugDupeAutoScan();
+
         function renderUnassignedPages() {
             var $list = $('#hozio-unassigned-list');
             var $count = $('#hozio-unassigned-count');
@@ -3788,6 +4630,362 @@ function hozio_sitemap_layout_inline_styles() {
         .duplicate-remove:hover {
             background: #fef2f2;
             border-color: #f87171;
+        }
+
+        /* ========================================
+           DUPLICATE PAGE DETECTOR (SLUG DUPLICATES)
+           ======================================== */
+
+        /* Badge in section header */
+        .slug-dupe-count-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 7px;
+            background: #f59e0b;
+            color: #fff;
+            border-radius: 11px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Loading / status states */
+        .slug-dupe-loading {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #6b7280;
+            font-size: 13px;
+        }
+        @keyframes slugDupeSpin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .slug-dupe-spin {
+            animation: slugDupeSpin 1s linear infinite;
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+        }
+        .slug-dupe-clean {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #15803d;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .slug-dupe-clean .dashicons {
+            color: #22c55e;
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+        }
+        .slug-dupe-warning {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #92400e;
+            font-size: 13px;
+        }
+        .slug-dupe-warning .dashicons {
+            color: #f59e0b;
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Group card */
+        .slug-dupe-group {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            background: #fff;
+            overflow: hidden;
+        }
+
+        /* Group header */
+        .slug-dupe-group-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 7px 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .slug-dupe-slug-label {
+            font-size: 12px;
+            font-weight: 600;
+            background: #f3f4f6;
+            padding: 1px 6px;
+            border-radius: 3px;
+            color: #374151;
+        }
+        .slug-dupe-header-orphaned {
+            background: #fffbeb;
+            border-bottom-color: #fde68a;
+        }
+        .slug-dupe-header-true {
+            background: #fef2f2;
+            border-bottom-color: #fecaca;
+        }
+        .slug-dupe-parent-ctx {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-left: 6px;
+        }
+
+        /* Type badges */
+        .slug-dupe-type-badge {
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            flex-shrink: 0;
+        }
+        .slug-dupe-type-orphaned {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .slug-dupe-type-true {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Page rows inside groups — compact single-line */
+        .slug-dupe-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 13px;
+        }
+        .slug-dupe-row:last-child {
+            border-bottom: none;
+        }
+        .slug-dupe-row-original {
+            border-left: 3px solid #22c55e;
+            background: #fafffe;
+        }
+        .slug-dupe-row-duplicate {
+            border-left: 3px solid #f59e0b;
+        }
+        .slug-dupe-row-missing {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #92400e;
+            background: #fffbeb;
+            border-left: 3px solid #f59e0b;
+        }
+        .slug-dupe-row-missing .dashicons {
+            color: #f59e0b;
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+        }
+
+        /* Row info — title + inline metadata */
+        .slug-dupe-row-info {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+        .slug-dupe-row-title {
+            font-weight: 600;
+            color: #1f2937;
+            white-space: nowrap;
+        }
+        .slug-dupe-row-slug {
+            font-size: 11px;
+            color: #6b7280;
+            background: #f3f4f6;
+            padding: 1px 5px;
+            border-radius: 3px;
+        }
+        .slug-dupe-row-date {
+            font-size: 11px;
+            color: #9ca3af;
+        }
+        .slug-dupe-row-children {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            font-size: 11px;
+            color: #b45309;
+        }
+        .slug-dupe-row-children .dashicons {
+            font-size: 12px;
+            width: 12px;
+            height: 12px;
+            color: #f59e0b;
+        }
+
+        /* Status badges */
+        .slug-dupe-status-badge {
+            padding: 1px 6px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+        .slug-dupe-status-publish {
+            background: #dcfce7;
+            color: #15803d;
+        }
+        .slug-dupe-status-draft {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        .slug-dupe-status-trash {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+        .slug-dupe-status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .slug-dupe-status-private {
+            background: #ede9fe;
+            color: #6d28d9;
+        }
+        .slug-dupe-sitemap-badge {
+            padding: 1px 6px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 600;
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        /* Row actions — horizontal */
+        .slug-dupe-row-actions {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+
+        /* Icon-only link buttons (view, edit) */
+        .slug-dupe-link-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            background: #fff;
+            color: #9ca3af;
+            text-decoration: none;
+            transition: all 0.15s;
+        }
+        .slug-dupe-link-btn:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+            color: #374151;
+        }
+        .slug-dupe-link-btn .dashicons {
+            font-size: 13px;
+            width: 13px;
+            height: 13px;
+        }
+
+        /* Action buttons (fix, trash) */
+        .slug-dupe-action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 3px 10px;
+            border: 1px solid;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            background: #fff;
+            white-space: nowrap;
+            transition: all 0.15s;
+        }
+        .slug-dupe-action-btn .dashicons {
+            font-size: 13px;
+            width: 13px;
+            height: 13px;
+        }
+        .slug-dupe-fix-btn {
+            color: #15803d;
+            border-color: #bbf7d0;
+        }
+        .slug-dupe-fix-btn:hover {
+            background: #f0fdf4;
+            border-color: #22c55e;
+        }
+        .slug-dupe-trash-btn {
+            color: #dc2626;
+            border-color: #fecaca;
+        }
+        .slug-dupe-trash-btn:hover {
+            background: #fef2f2;
+            border-color: #f87171;
+        }
+
+        /* Blocked state */
+        .slug-dupe-blocked {
+            font-size: 11px;
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        /* Success / post-action states */
+        .slug-dupe-success {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            color: #15803d;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .slug-dupe-success .dashicons {
+            color: #22c55e;
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+        }
+        .slug-dupe-redirect-note {
+            font-size: 10px;
+            color: #9ca3af;
+            font-style: italic;
+        }
+        .slug-dupe-fixed {
+            opacity: 0.5;
+            background: #f0fdf4;
+        }
+        .slug-dupe-trashed {
+            opacity: 0.5;
+            background: #fef2f2;
+        }
+
+        /* Toolbar row for action buttons */
+        .slug-dupe-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+        .slug-dupe-toolbar .button .dashicons,
+        .slug-dupe-toolbar .slug-dupe-action-btn .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+            vertical-align: middle;
+            margin-top: -1px;
         }
 
         /* Highlight flash for Go-to navigation */
