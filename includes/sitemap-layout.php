@@ -27,11 +27,63 @@ add_action('admin_enqueue_scripts', 'hozio_sitemap_layout_admin_assets', 999);
 // ========================================
 add_action('save_post_page', function($post_id) {
     delete_transient('hozio_duplicate_slug_cache');
+    delete_metadata('user', 0, 'hozio_duplicate_banner_dismissed', '', true);
 }, 20);
 add_action('before_delete_post', function($post_id) {
     if (get_post_type($post_id) === 'page') {
         delete_transient('hozio_duplicate_slug_cache');
+        delete_metadata('user', 0, 'hozio_duplicate_banner_dismissed', '', true);
     }
+});
+
+// ========================================
+// ADMIN-WIDE DUPLICATE SLUG BANNER
+// ========================================
+add_action('admin_notices', function() {
+    if (!current_user_can('manage_options')) return;
+    // Don't show on the Layout Editor page itself
+    if (isset($_GET['page']) && $_GET['page'] === 'hozio-sitemap-settings' &&
+        isset($_GET['tab']) && $_GET['tab'] === 'layout') return;
+    // Check per-user dismiss
+    $dismissed = get_user_meta(get_current_user_id(), 'hozio_duplicate_banner_dismissed', true);
+    if ($dismissed) return;
+    // Try cached scan first (zero overhead), fallback to lightweight SQL
+    $count = 0;
+    $cached = get_transient('hozio_duplicate_slug_cache');
+    if ($cached !== false) {
+        if (!empty($cached['groups'])) {
+            foreach ($cached['groups'] as $group) {
+                foreach ($group['duplicates'] as $dupe) {
+                    if ($dupe['status'] === 'publish') { $count++; }
+                }
+            }
+        }
+    } else {
+        global $wpdb;
+        $count = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$wpdb->posts}
+             WHERE post_type = 'page' AND post_status = 'publish'
+             AND post_name REGEXP '-([2-9]|[0-9]{2,})$'"
+        );
+    }
+    if ($count <= 0) return;
+    $url = admin_url('admin.php?page=hozio-sitemap-settings&tab=layout');
+    $nonce = wp_create_nonce('hozio_dismiss_duplicate_banner');
+    ?>
+    <div class="notice notice-warning is-dismissible" id="hozio-duplicate-slug-banner" style="border-left-color: #f59e0b;">
+        <p><strong style="color: #92400e;">Hozio Pro &mdash; Duplicate Pages Detected:</strong>
+        <?php echo esc_html($count); ?> published page<?php echo $count !== 1 ? 's' : ''; ?> with duplicate slugs found.
+        <a href="<?php echo esc_url($url); ?>" style="font-weight: 600;">Review in Sitemap Layout Editor &rarr;</a></p>
+    </div>
+    <script>jQuery(function($){$('#hozio-duplicate-slug-banner').on('click','.notice-dismiss',function(){$.post(ajaxurl,{action:'hozio_dismiss_duplicate_banner',_wpnonce:'<?php echo esc_js($nonce); ?>'});});});</script>
+    <?php
+});
+
+// AJAX: dismiss the duplicate slug banner (per-user)
+add_action('wp_ajax_hozio_dismiss_duplicate_banner', function() {
+    check_ajax_referer('hozio_dismiss_duplicate_banner');
+    update_user_meta(get_current_user_id(), 'hozio_duplicate_banner_dismissed', 1);
+    wp_send_json_success();
 });
 
 // ========================================
@@ -353,6 +405,22 @@ add_action('wp_ajax_hozio_duplicate_slug_scan', function() {
     foreach ($all_pages as $p) {
         if ($p->post_status === 'trash') continue; // Don't show trashed pages
         if (preg_match('/^(.+)-([2-9]|\d{2,})$/', $p->post_name, $m)) {
+            // Verify the permalink actually contains the -N suffixed slug.
+            // WordPress allows hierarchical pages to share slugs across different parents,
+            // and permalink plugins may rewrite URLs without the suffix.
+            // If the URL doesn't contain the -N slug, it's not a real duplicate issue.
+            // Only check published pages — draft/pending pages return ?page_id=123 style URLs.
+            if ($p->post_status === 'publish') {
+                $check_permalink = get_permalink($p->ID);
+                if ($check_permalink) {
+                    $url_path = wp_parse_url($check_permalink, PHP_URL_PATH);
+                    if ($url_path && strpos($url_path, '/' . $p->post_name . '/') === false
+                        && !preg_match('#/' . preg_quote($p->post_name, '#') . '/?$#', $url_path)) {
+                        continue; // Permalink doesn't use the -N slug — not a real duplicate
+                    }
+                }
+            }
+
             $base_slug = $m[1];
             $suffix = (int)$m[2];
             $group_key = (int)$p->post_parent . ':' . $base_slug;
@@ -3174,9 +3242,10 @@ function hozio_sitemap_layout_page() {
             actionsHtml += '<button type="button" class="button button-small" id="slug-dupe-rescan"><span class="dashicons dashicons-update"></span> Re-scan</button>';
             actionsHtml += '<button type="button" class="button button-small" id="slug-dupe-toggle-details"><span class="dashicons dashicons-visibility"></span> View Details</button>';
 
-            // Count fixable and trashable
+            // Count fixable, trashable, and draftable
             var fixableCount = 0;
             var trashableCount = 0;
+            var draftableCount = 0;
             for (var i = 0; i < slugDupeData.groups.length; i++) {
                 var g = slugDupeData.groups[i];
                 if (g.type === 'orphaned' && g.slug_available) {
@@ -3185,14 +3254,21 @@ function hozio_sitemap_layout_page() {
                 if (g.type === 'true_duplicate') {
                     trashableCount += g.duplicates.length;
                 }
+                for (var dd = 0; dd < g.duplicates.length; dd++) {
+                    if (g.duplicates[dd].status === 'publish') { draftableCount++; }
+                }
             }
 
             if (fixableCount > 0) {
-                actionsHtml += '<button type="button" class="slug-dupe-action-btn slug-dupe-fix-btn slug-dupe-bulk-fix-btn">' +
+                actionsHtml += '<button type="button" class="slug-dupe-action-btn slug-dupe-bulk-fix-btn">' +
                     '<span class="dashicons dashicons-yes-alt"></span> Fix All Orphaned (' + fixableCount + ')</button>';
             }
+            if (draftableCount > 0) {
+                actionsHtml += '<button type="button" class="slug-dupe-action-btn slug-dupe-bulk-draft-btn">' +
+                    '<span class="dashicons dashicons-hidden"></span> Draft All (' + draftableCount + ')</button>';
+            }
             if (trashableCount > 0) {
-                actionsHtml += '<button type="button" class="slug-dupe-action-btn slug-dupe-trash-btn slug-dupe-bulk-trash-btn">' +
+                actionsHtml += '<button type="button" class="slug-dupe-action-btn slug-dupe-bulk-trash-btn">' +
                     '<span class="dashicons dashicons-trash"></span> Trash All (' + trashableCount + ')</button>';
             }
             actionsHtml += '</div>';
@@ -3453,16 +3529,22 @@ function hozio_sitemap_layout_page() {
         $(document).on('click', '.slug-dupe-bulk-fix-btn', function() {
             if (!slugDupeData) return;
             var ids = [];
+            var totalChildren = 0;
             for (var i = 0; i < slugDupeData.groups.length; i++) {
                 var g = slugDupeData.groups[i];
                 if (g.type === 'orphaned' && g.slug_available) {
                     for (var d = 0; d < g.duplicates.length; d++) {
                         ids.push(g.duplicates[d].id);
+                        totalChildren += (parseInt(g.duplicates[d].children_count) || 0);
                     }
                 }
             }
             if (ids.length === 0) return;
-            if (!confirm('Fix slugs for ' + ids.length + ' orphaned duplicate page(s)?\n\nEach page will have its -2, -3, etc. suffix removed. Old URLs will 404.')) return;
+            var confirmMsg = 'Fix slugs for ' + ids.length + ' orphaned duplicate page(s)?\n\nEach page will have its -2, -3, etc. suffix removed. Old URLs will 404.';
+            if (totalChildren > 0) {
+                confirmMsg += '\n\nWARNING: ' + totalChildren + ' child page(s) across these pages will have their URLs changed!';
+            }
+            if (!confirm(confirmMsg)) return;
 
             var $btn = $(this);
             $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Fixing...');
@@ -3494,16 +3576,22 @@ function hozio_sitemap_layout_page() {
         $(document).on('click', '.slug-dupe-bulk-trash-btn', function() {
             if (!slugDupeData) return;
             var ids = [];
+            var totalChildren = 0;
             for (var i = 0; i < slugDupeData.groups.length; i++) {
                 var g = slugDupeData.groups[i];
                 if (g.type === 'true_duplicate') {
                     for (var d = 0; d < g.duplicates.length; d++) {
                         ids.push(g.duplicates[d].id);
+                        totalChildren += (parseInt(g.duplicates[d].children_count) || 0);
                     }
                 }
             }
             if (ids.length === 0) return;
-            if (!confirm('Trash ' + ids.length + ' true duplicate page(s)?\n\nPages with children will also be trashed.')) return;
+            var confirmMsg = 'Trash ' + ids.length + ' true duplicate page(s)?';
+            if (totalChildren > 0) {
+                confirmMsg += '\n\nWARNING: ' + totalChildren + ' child page(s) across these pages will become orphaned!';
+            }
+            if (!confirm(confirmMsg)) return;
 
             var $btn = $(this);
             $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Trashing...');
@@ -3523,6 +3611,47 @@ function hozio_sitemap_layout_page() {
                     slugDupeAutoScan();
                 } else {
                     alert('Bulk trash failed.');
+                }
+                $btn.prop('disabled', false);
+            }).fail(function() {
+                alert('Request failed.');
+                $btn.prop('disabled', false);
+            });
+        });
+
+        // Bulk draft duplicates
+        $(document).on('click', '.slug-dupe-bulk-draft-btn', function() {
+            if (!slugDupeData) return;
+            var ids = [];
+            for (var i = 0; i < slugDupeData.groups.length; i++) {
+                var g = slugDupeData.groups[i];
+                for (var d = 0; d < g.duplicates.length; d++) {
+                    if (g.duplicates[d].status === 'publish') {
+                        ids.push(g.duplicates[d].id);
+                    }
+                }
+            }
+            if (ids.length === 0) { alert('No published duplicates to draft.'); return; }
+            if (!confirm('Set ' + ids.length + ' duplicate page(s) to draft?\n\nPages will be unpublished but not deleted.')) return;
+
+            var $btn = $(this);
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Drafting...');
+
+            $.post(ajaxurl, {
+                action: 'hozio_duplicate_slug_bulk',
+                nonce: nonce,
+                operation: 'draft_duplicates',
+                page_ids: ids
+            }, function(response) {
+                if (response.success) {
+                    var s = response.data.succeeded.length;
+                    var f = response.data.failed.length;
+                    var msg = s + ' drafted';
+                    if (f > 0) msg += ', ' + f + ' failed';
+                    alert(msg + '.');
+                    slugDupeAutoScan();
+                } else {
+                    alert('Bulk draft failed.');
                 }
                 $btn.prop('disabled', false);
             }).fail(function() {
