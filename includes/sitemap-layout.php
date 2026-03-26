@@ -644,6 +644,53 @@ add_action('wp_ajax_hozio_duplicate_slug_trash', function() {
     ));
 });
 
+// 6c2. Draft a duplicate page
+add_action('wp_ajax_hozio_duplicate_slug_draft', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $page_id = isset($_POST['page_id']) ? intval($_POST['page_id']) : 0;
+    if (!$page_id) {
+        wp_send_json_error('Missing page ID.');
+    }
+
+    $page = get_post($page_id);
+    if (!$page || $page->post_type !== 'page') {
+        wp_send_json_error('Page not found.');
+    }
+
+    // Verify slug matches -N pattern
+    if (!preg_match('/^(.+)-([2-9]|\d{2,})$/', $page->post_name)) {
+        wp_send_json_error('Page slug does not have a duplicate suffix.');
+    }
+
+    $result = wp_update_post(array(
+        'ID'          => $page_id,
+        'post_status' => 'draft',
+    ), true);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error('Failed to draft page: ' . $result->get_error_message());
+    }
+
+    // Remove from sitemap layout if present
+    $overrides = get_option('hozio_sitemap_layout_overrides', array());
+    $changed = false;
+    if (!empty($overrides['accordions'])) {
+        $changed = hozio_remove_page_from_accordions($overrides['accordions'], $page_id);
+    }
+    if ($changed) {
+        update_option('hozio_sitemap_layout_overrides', $overrides);
+    }
+
+    delete_transient('hozio_duplicate_slug_cache');
+
+    wp_send_json_success(array(
+        'page_id' => $page_id,
+        'status'  => 'draft',
+    ));
+});
+
 // Helper: recursively remove a page ID from accordions
 function hozio_remove_page_from_accordions(&$accordions, $page_id) {
     $changed = false;
@@ -670,7 +717,7 @@ add_action('wp_ajax_hozio_duplicate_slug_bulk', function() {
     $operation = isset($_POST['operation']) ? sanitize_text_field($_POST['operation']) : '';
     $page_ids = isset($_POST['page_ids']) && is_array($_POST['page_ids']) ? array_map('intval', $_POST['page_ids']) : array();
 
-    if (!in_array($operation, array('fix_orphaned', 'trash_duplicates'))) {
+    if (!in_array($operation, array('fix_orphaned', 'trash_duplicates', 'draft_duplicates'))) {
         wp_send_json_error('Invalid operation.');
     }
     if (empty($page_ids)) {
@@ -717,6 +764,13 @@ add_action('wp_ajax_hozio_duplicate_slug_bulk', function() {
                 continue;
             }
             $succeeded[] = array('id' => $pid, 'new_slug' => $clean_slug);
+        } elseif ($operation === 'draft_duplicates') {
+            $result = wp_update_post(array('ID' => $pid, 'post_status' => 'draft'), true);
+            if (is_wp_error($result)) {
+                $failed[] = array('id' => $pid, 'reason' => $result->get_error_message());
+                continue;
+            }
+            $succeeded[] = array('id' => $pid, 'status' => 'drafted');
         } else {
             // trash_duplicates
             $result = wp_trash_post($pid);
@@ -3189,7 +3243,7 @@ function hozio_sitemap_layout_page() {
                     var o = g.original;
                     html += '<div class="slug-dupe-row slug-dupe-row-original">';
                     html += '<div class="slug-dupe-row-info">';
-                    html += '<span class="slug-dupe-row-title">' + escHtml(o.title) + '</span>';
+                    html += '<span class="slug-dupe-row-title">' + escHtml(o.title) + '<span class="slug-dupe-row-url">' + escHtml(o.permalink) + '</span></span>';
                     html += '<span class="slug-dupe-status-badge slug-dupe-status-' + o.status + '">' + escHtml(o.status) + '</span>';
                     html += '<span class="slug-dupe-row-date">' + formatDate(o.modified) + '</span>';
                     if (o.children_count > 0) {
@@ -3212,7 +3266,7 @@ function hozio_sitemap_layout_page() {
                     var dp = g.duplicates[d];
                     html += '<div class="slug-dupe-row slug-dupe-row-duplicate" id="slug-dupe-row-' + dp.id + '">';
                     html += '<div class="slug-dupe-row-info">';
-                    html += '<span class="slug-dupe-row-title">' + escHtml(dp.title) + '</span>';
+                    html += '<span class="slug-dupe-row-title">' + escHtml(dp.title) + '<span class="slug-dupe-row-url">' + escHtml(dp.permalink) + '</span></span>';
                     html += '<code class="slug-dupe-row-slug">' + escHtml(dp.slug) + '</code>';
                     html += '<span class="slug-dupe-status-badge slug-dupe-status-' + dp.status + '">' + escHtml(dp.status) + '</span>';
                     if (dp.in_sitemap) {
@@ -3234,10 +3288,11 @@ function hozio_sitemap_layout_page() {
                         html += '<span class="slug-dupe-blocked">Slug taken</span>';
                     }
 
-                    if (isTrue) {
-                        html += '<button type="button" class="slug-dupe-action-btn slug-dupe-trash-btn" data-page-id="' + dp.id + '" data-title="' + escHtml(dp.title) + '" data-children="' + dp.children_count + '">';
-                        html += '<span class="dashicons dashicons-trash"></span> Trash</button>';
-                    }
+                    // Draft and Trash buttons for all duplicates
+                    html += '<button type="button" class="slug-dupe-action-btn slug-dupe-draft-btn" data-page-id="' + dp.id + '" data-title="' + escHtml(dp.title) + '">';
+                    html += '<span class="dashicons dashicons-hidden"></span> Draft</button>';
+                    html += '<button type="button" class="slug-dupe-action-btn slug-dupe-trash-btn" data-page-id="' + dp.id + '" data-title="' + escHtml(dp.title) + '" data-children="' + dp.children_count + '">';
+                    html += '<span class="dashicons dashicons-trash"></span> Trash</button>';
 
                     html += '</div>';
                     html += '</div>';
@@ -3359,6 +3414,38 @@ function hozio_sitemap_layout_page() {
             }).fail(function() {
                 alert('Request failed.');
                 $btn.prop('disabled', false).html('<span class="dashicons dashicons-trash"></span> Trash');
+            });
+        });
+
+        // Draft handler
+        $(document).on('click', '.slug-dupe-draft-btn', function() {
+            var $btn = $(this);
+            var pageId = $btn.data('page-id');
+            var title = $btn.data('title');
+
+            if (!confirm('Set "' + title + '" to draft? It will be unpublished but not deleted.')) return;
+
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Drafting...');
+
+            $.post(ajaxurl, {
+                action: 'hozio_duplicate_slug_draft',
+                nonce: nonce,
+                page_id: pageId
+            }, function(response) {
+                if (response.success) {
+                    var $row = $('#slug-dupe-row-' + pageId);
+                    $row.addClass('slug-dupe-drafted');
+                    $row.find('.slug-dupe-row-actions').html(
+                        '<span class="slug-dupe-success"><span class="dashicons dashicons-yes-alt"></span> Drafted</span>'
+                    );
+                    setTimeout(function() { slugDupeAutoScan(); }, 1500);
+                } else {
+                    alert('Draft failed: ' + (typeof response.data === 'string' ? response.data : 'Unknown error'));
+                    $btn.prop('disabled', false).html('<span class="dashicons dashicons-hidden"></span> Draft');
+                }
+            }).fail(function() {
+                alert('Request failed.');
+                $btn.prop('disabled', false).html('<span class="dashicons dashicons-hidden"></span> Draft');
             });
         });
 
@@ -4803,6 +4890,19 @@ function hozio_sitemap_layout_inline_styles() {
             font-weight: 600;
             color: #1f2937;
             white-space: nowrap;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+        .slug-dupe-row-url {
+            display: block;
+            font-size: 10px;
+            font-weight: 400;
+            color: #9ca3af;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 350px;
         }
         .slug-dupe-row-slug {
             font-size: 11px;
@@ -4934,6 +5034,18 @@ function hozio_sitemap_layout_inline_styles() {
         .slug-dupe-trash-btn:hover {
             background: #fef2f2;
             border-color: #f87171;
+        }
+        .slug-dupe-draft-btn {
+            color: #6b7280;
+            border-color: #d1d5db;
+        }
+        .slug-dupe-draft-btn:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+        }
+        .slug-dupe-drafted {
+            opacity: 0.5;
+            background: #f9fafb;
         }
 
         /* Blocked state */
