@@ -881,12 +881,34 @@ echo '</style>';
                         }
                     }
 
-                    // Filter out thank you page and noindex pages
-                    $all_pages = array_filter($all_pages, function($page) use ($noindex_ids) {
+                    // Build lookup of published page IDs and their parents (for ancestor validation)
+                    $published_ids = array();
+                    $parent_map = array();
+                    foreach ($all_pages as $page) {
+                        $published_ids[$page->ID] = true;
+                        $parent_map[$page->ID] = $page->post_parent;
+                    }
+
+                    // Filter out thank you page, noindex pages, and pages with trashed/unpublished ancestors
+                    $all_pages = array_filter($all_pages, function($page) use ($noindex_ids, $published_ids, $parent_map) {
                         if ($page->post_name === 'thank-you') {
                             return false;
                         }
-                        return !isset($noindex_ids[$page->ID]);
+                        if (isset($noindex_ids[$page->ID])) {
+                            return false;
+                        }
+                        // Skip pages whose parent chain includes a non-published page
+                        // (e.g., parent was trashed — child URLs will contain __trashed)
+                        $parent_id = $page->post_parent;
+                        $depth = 0;
+                        while ($parent_id && $depth < 10) {
+                            if (!isset($published_ids[$parent_id])) {
+                                return false; // Ancestor is not published (trashed, drafted, deleted)
+                            }
+                            $parent_id = isset($parent_map[$parent_id]) ? $parent_map[$parent_id] : 0;
+                            $depth++;
+                        }
+                        return true;
                     });
 
                     // Build children-by-parent lookup (replaces ~57 get_children queries with 0)
