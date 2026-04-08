@@ -3,7 +3,7 @@
 Plugin Name:     Hozio Pro
 Plugin URI:      https://github.com/Mtuozzo86/hozio-dynamic-tags
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.10
+Version:         4.11
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -14,7 +14,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.10');
+define('HOZIO_VERSION', '4.11');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -918,4 +918,23 @@ function hozio_ensure_taxonomy_rest_support() {
     }
 }
 
+add_action( 'init', function() {
+    $yoast_keys = [
+        '_yoast_wpseo_title',
+        '_yoast_wpseo_metadesc',
+    ];
+    foreach ( $yoast_keys as $key ) {
+        foreach ( [ 'post', 'page' ] as $post_type ) {
+            register_post_meta( $post_type, $key, [
+                'show_in_rest'      => true,
+                'single'            => true,
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+                'auth_callback'     => function() {
+                    return current_user_can( 'edit_posts' );
+                },
+            ] );
+        }
+    }
+} );
 
