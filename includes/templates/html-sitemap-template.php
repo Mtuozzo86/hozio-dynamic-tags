@@ -3,11 +3,40 @@
 Template Name: HTML Sitemap
 */
 
-// Check if dark mode is enabled
-$dark_mode_enabled = get_option('hozio_sitemap_dark_mode', '0') === '1';
+// Determine background mode (with backward compat for old dark_mode toggle)
+$bg_mode = get_option('hozio_sitemap_bg_mode', '');
+if ($bg_mode === '') {
+    $bg_mode = get_option('hozio_sitemap_dark_mode', '0') === '1' ? 'dark' : 'light';
+}
 
-// Set color variables based on dark mode setting
-if ($dark_mode_enabled) {
+// Set color variables based on background mode
+if ($bg_mode === 'custom') {
+    $custom_bg_hex = get_option('hozio_sitemap_custom_bg_color', '#f5f5dc');
+    // Auto-detect if custom color is light or dark using luminance
+    $r = hexdec(substr($custom_bg_hex, 1, 2));
+    $g = hexdec(substr($custom_bg_hex, 3, 2));
+    $b = hexdec(substr($custom_bg_hex, 5, 2));
+    $luminance = (0.299 * $r + 0.587 * $g + 0.114 * $b) / 255;
+    $is_dark = $luminance < 0.5;
+
+    $bg_color = $custom_bg_hex;
+    $text_color = $is_dark ? '#ffffff' : '#000000';
+    $border_color = $is_dark ? '#555555' : '#e0e0e0';
+    $border_light = $is_dark ? '#555555' : '#000000';
+    $desc_color = $is_dark ? '#cccccc' : '#666666';
+    $accordion_bg = sprintf('#%02x%02x%02x',
+        $is_dark ? min(255, $r + 26) : max(0, $r - 6),
+        $is_dark ? min(255, $g + 26) : max(0, $g - 6),
+        $is_dark ? min(255, $b + 26) : max(0, $b - 6)
+    );
+    $accordion_hover = sprintf('#%02x%02x%02x',
+        $is_dark ? min(255, $r + 42) : max(0, $r - 15),
+        $is_dark ? min(255, $g + 42) : max(0, $g - 15),
+        $is_dark ? min(255, $b + 42) : max(0, $b - 15)
+    );
+    $accordion_active = $accordion_hover;
+    $link_color = $is_dark ? '#ffffff' : '#000000';
+} elseif ($bg_mode === 'dark') {
     $bg_color = '#000000';
     $text_color = '#ffffff';
     $border_color = '#333333';
@@ -32,6 +61,32 @@ if ($dark_mode_enabled) {
 // Get custom link colors (these override Elementor global styles if set)
 $custom_link_color = get_option('hozio_sitemap_link_color', '');
 $custom_link_hover_color = get_option('hozio_sitemap_link_hover_color', '');
+
+// Determine if background is dark (for conditional styles throughout)
+$is_dark_bg = ($bg_mode === 'dark') || ($bg_mode === 'custom' && isset($is_dark) && $is_dark);
+
+// Custom border color override (applies to section borders, item dividers, and drawer lines)
+$custom_border_color = get_option('hozio_sitemap_border_color', '');
+if (!empty($custom_border_color)) {
+    $border_color = $custom_border_color;
+}
+
+// Badge colors for sub-section indicators (respects custom link color when set)
+if (!empty($custom_link_color)) {
+    $clr_r = hexdec(substr($custom_link_color, 1, 2));
+    $clr_g = hexdec(substr($custom_link_color, 3, 2));
+    $clr_b = hexdec(substr($custom_link_color, 5, 2));
+    $nested_badge_bg = "rgba({$clr_r},{$clr_g},{$clr_b}," . ($is_dark_bg ? '0.15' : '0.08') . ")";
+    $nested_badge_color = $custom_link_color;
+} else {
+    $nested_badge_bg = $is_dark_bg ? 'rgba(100,160,255,0.15)' : 'rgba(0,90,200,0.08)';
+    $nested_badge_color = $is_dark_bg ? '#8bb8ff' : '#0059c7';
+}
+$pages_badge_bg = $is_dark_bg ? 'rgba(160,160,160,0.15)' : 'rgba(0,0,0,0.05)';
+$pages_badge_color = $is_dark_bg ? '#aaaaaa' : '#555555';
+$drawer_line_color = !empty($custom_border_color) ? $border_color : ($is_dark_bg ? '#444444' : '#d0d0d0');
+$drawer_line_hover = !empty($custom_border_color) ? $border_color : ($is_dark_bg ? '#555555' : '#bbb');
+$drawer_label_color = $is_dark_bg ? '#888888' : '#999999';
 
 get_header();
 ?>
@@ -346,8 +401,8 @@ h3.section-title {
     gap: 5px !important;
     font-size: 12px !important;
     font-weight: 600 !important;
-    background: <?php echo $dark_mode_enabled ? 'rgba(100,160,255,0.15)' : 'rgba(0,90,200,0.08)'; ?> !important;
-    color: <?php echo $dark_mode_enabled ? '#8bb8ff' : '#0059c7'; ?> !important;
+    background: <?php echo $nested_badge_bg; ?> !important;
+    color: <?php echo $nested_badge_color; ?> !important;
     padding: 3px 12px !important;
     border-radius: 12px !important;
     margin-left: 0.75rem !important;
@@ -367,8 +422,8 @@ h3.section-title {
     gap: 5px !important;
     font-size: 12px !important;
     font-weight: 600 !important;
-    background: <?php echo $dark_mode_enabled ? 'rgba(160,160,160,0.15)' : 'rgba(0,0,0,0.05)'; ?> !important;
-    color: <?php echo $dark_mode_enabled ? '#aaaaaa' : '#555555'; ?> !important;
+    background: <?php echo $pages_badge_bg; ?> !important;
+    color: <?php echo $pages_badge_color; ?> !important;
     padding: 3px 12px !important;
     border-radius: 12px !important;
     margin-left: 0.5rem !important;
@@ -402,7 +457,7 @@ h3.section-title {
     color: <?php echo $link_color; ?> !important;
 }
 .sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-line {
-    border-color: <?php echo $dark_mode_enabled ? '#555555' : '#bbb'; ?> !important;
+    border-color: <?php echo $drawer_line_hover; ?> !important;
 }
 .sitemap-wrapper .pages-drawer-divider:hover .pages-drawer-chevron {
     color: <?php echo $link_color; ?> !important;
@@ -412,7 +467,7 @@ h3.section-title {
     flex: 1 !important;
     height: 0 !important;
     border: none !important;
-    border-top: 1px dashed <?php echo $dark_mode_enabled ? '#444444' : '#d0d0d0'; ?> !important;
+    border-top: 1px dashed <?php echo $drawer_line_color; ?> !important;
     transition: border-color 0.2s !important;
 }
 
@@ -422,7 +477,7 @@ h3.section-title {
     gap: 6px !important;
     font-size: 13px !important;
     font-weight: 500 !important;
-    color: <?php echo $dark_mode_enabled ? '#888888' : '#999999'; ?> !important;
+    color: <?php echo $drawer_label_color; ?> !important;
     white-space: nowrap !important;
     transition: color 0.2s !important;
     letter-spacing: 0.3px !important;
@@ -435,7 +490,7 @@ h3.section-title {
 
 .sitemap-wrapper .pages-drawer-chevron {
     flex-shrink: 0 !important;
-    color: <?php echo $dark_mode_enabled ? '#888888' : '#999999'; ?> !important;
+    color: <?php echo $drawer_label_color; ?> !important;
     transition: transform 0.3s ease, color 0.2s !important;
 }
 .sitemap-wrapper .pages-drawer-divider.collapsed .pages-drawer-chevron {
@@ -484,18 +539,18 @@ h3.section-title {
 
 .sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
     padding: 0.85rem 1.25rem !important;
-    background: <?php echo $dark_mode_enabled ? '#222222' : '#f0f0f0'; ?> !important;
+    background: <?php echo $is_dark_bg ? '#222222' : '#f0f0f0'; ?> !important;
     border-radius: 6px !important;
     border: none !important;
     box-shadow: none !important;
 }
 
 .sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:hover {
-    background: <?php echo $dark_mode_enabled ? '#2a2a2a' : '#e8e8e8'; ?> !important;
+    background: <?php echo $is_dark_bg ? '#2a2a2a' : '#e8e8e8'; ?> !important;
 }
 
 .sitemap-wrapper .sitemap-accordion-level-2 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header.active {
-    background: <?php echo $dark_mode_enabled ? '#2a2a2a' : '#e5e5e5'; ?> !important;
+    background: <?php echo $is_dark_bg ? '#2a2a2a' : '#e5e5e5'; ?> !important;
     border-radius: 6px 6px 0 0 !important;
 }
 
@@ -512,18 +567,18 @@ h3.section-title {
 
 .sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header {
     padding: 0.7rem 1.25rem !important;
-    background: <?php echo $dark_mode_enabled ? '#2a2a2a' : '#e8e8e8'; ?> !important;
+    background: <?php echo $is_dark_bg ? '#2a2a2a' : '#e8e8e8'; ?> !important;
     border-radius: 5px !important;
     border: none !important;
     box-shadow: none !important;
 }
 
 .sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header:hover {
-    background: <?php echo $dark_mode_enabled ? '#333333' : '#dedede'; ?> !important;
+    background: <?php echo $is_dark_bg ? '#333333' : '#dedede'; ?> !important;
 }
 
 .sitemap-wrapper .sitemap-accordion-level-3 > .sitemap-accordion-header.sitemap-accordion-header.sitemap-accordion-header.active {
-    background: <?php echo $dark_mode_enabled ? '#333333' : '#d8d8d8'; ?> !important;
+    background: <?php echo $is_dark_bg ? '#333333' : '#d8d8d8'; ?> !important;
     border-radius: 5px 5px 0 0 !important;
 }
 
@@ -881,12 +936,34 @@ echo '</style>';
                         }
                     }
 
-                    // Filter out thank you page and noindex pages
-                    $all_pages = array_filter($all_pages, function($page) use ($noindex_ids) {
+                    // Build lookup of published page IDs and their parents (for ancestor validation)
+                    $published_ids = array();
+                    $parent_map = array();
+                    foreach ($all_pages as $page) {
+                        $published_ids[$page->ID] = true;
+                        $parent_map[$page->ID] = $page->post_parent;
+                    }
+
+                    // Filter out thank you page, noindex pages, and pages with trashed/unpublished ancestors
+                    $all_pages = array_filter($all_pages, function($page) use ($noindex_ids, $published_ids, $parent_map) {
                         if ($page->post_name === 'thank-you') {
                             return false;
                         }
-                        return !isset($noindex_ids[$page->ID]);
+                        if (isset($noindex_ids[$page->ID])) {
+                            return false;
+                        }
+                        // Skip pages whose parent chain includes a non-published page
+                        // (e.g., parent was trashed — child URLs will contain __trashed)
+                        $parent_id = $page->post_parent;
+                        $depth = 0;
+                        while ($parent_id && $depth < 10) {
+                            if (!isset($published_ids[$parent_id])) {
+                                return false; // Ancestor is not published (trashed, drafted, deleted)
+                            }
+                            $parent_id = isset($parent_map[$parent_id]) ? $parent_map[$parent_id] : 0;
+                            $depth++;
+                        }
+                        return true;
                     });
 
                     // Build children-by-parent lookup (replaces ~57 get_children queries with 0)

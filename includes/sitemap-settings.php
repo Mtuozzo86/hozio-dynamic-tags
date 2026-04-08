@@ -40,14 +40,87 @@ function hozio_sitemap_color_picker_script() {
     ?>
     <script>
     jQuery(document).ready(function($) {
-        $('.hozio-color-picker').wpColorPicker({
+        // Initialize standard link color pickers
+        $('.hozio-color-picker').wpColorPicker();
+
+        // Luminance helper — determines if a color is light or dark
+        function getLuminance(hex) {
+            hex = hex.replace('#', '');
+            var r = parseInt(hex.substr(0, 2), 16) / 255;
+            var g = parseInt(hex.substr(2, 2), 16) / 255;
+            var b = parseInt(hex.substr(4, 2), 16) / 255;
+            return 0.299 * r + 0.587 * g + 0.114 * b;
+        }
+
+        // Lighten or darken a hex color by an amount
+        function adjustColor(hex, amount) {
+            hex = hex.replace('#', '');
+            var r = Math.min(255, Math.max(0, parseInt(hex.substr(0, 2), 16) + amount));
+            var g = Math.min(255, Math.max(0, parseInt(hex.substr(2, 2), 16) + amount));
+            var b = Math.min(255, Math.max(0, parseInt(hex.substr(4, 2), 16) + amount));
+            return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        }
+
+        // Update the custom preview card colors based on chosen background
+        function updateCustomPreview(color) {
+            if (!color || color.length < 7) return;
+            var isDark = getLuminance(color) < 0.5;
+            var textColor = isDark ? '#ffffff' : '#000000';
+            var subtextColor = isDark ? '#cccccc' : '#374151';
+            var titleColor = isDark ? '#9ca3af' : '#6b7280';
+            var sampleBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+            var borderColor = isDark ? adjustColor(color, 40) : adjustColor(color, -30);
+
+            $('#custom-preview-box').css({ 'background': color, 'border-color': borderColor });
+            $('#custom-preview-title').css('color', titleColor);
+            $('#custom-preview-sample').css('background', sampleBg);
+            $('#custom-preview-heading').css('color', textColor);
+            $('#custom-preview-text').css('color', subtextColor);
+        }
+
+        // Initialize the custom BG color picker with live preview callback
+        $('#hozio_sitemap_custom_bg_color').wpColorPicker({
             change: function(event, ui) {
-                // Optional: Add preview functionality here
+                updateCustomPreview(ui.color.toString());
             },
             clear: function() {
-                // Optional: Handle clear button
+                updateCustomPreview('#f5f5dc');
             }
         });
+
+        // Select a background mode (light, dark, or custom)
+        function selectMode(mode) {
+            $('#hozio_sitemap_bg_mode').val(mode);
+
+            // Update pill active states
+            $('.hozio-bg-pill').removeClass('active');
+            $('.hozio-bg-pill[data-mode="' + mode + '"]').addClass('active');
+
+            // Update preview card active states
+            $('.preview-box').removeClass('active-selection');
+            $('.preview-box[data-mode="' + mode + '"]').addClass('active-selection');
+
+            // Show/hide custom color picker
+            if (mode === 'custom') {
+                $('#hozio-custom-picker-row').addClass('visible');
+            } else {
+                $('#hozio-custom-picker-row').removeClass('visible');
+            }
+        }
+
+        // Pill button clicks
+        $('.hozio-bg-pill').on('click', function() {
+            selectMode($(this).data('mode'));
+        });
+
+        // Preview card clicks (also act as selectors)
+        $('.preview-box[data-mode]').on('click', function() {
+            selectMode($(this).data('mode'));
+        });
+
+        // Set custom preview colors on page load
+        var initialColor = $('#hozio_sitemap_custom_bg_color').val() || '#f5f5dc';
+        updateCustomPreview(initialColor);
     });
     </script>
     <?php
@@ -281,6 +354,92 @@ function hozio_sitemap_settings_inline_styles() {
             color: #1f2937;
         }
 
+        /* Background Mode Pill Selector */
+        .hozio-bg-mode-selector {
+            display: flex;
+            gap: 0;
+            background: #f3f4f6;
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 16px;
+            width: fit-content;
+        }
+
+        .hozio-bg-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #6b7280;
+            background: transparent;
+            border: 2px solid transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            white-space: nowrap;
+            line-height: 1;
+        }
+
+        .hozio-bg-pill:hover {
+            color: #374151;
+            background: rgba(255,255,255,0.6);
+        }
+
+        .hozio-bg-pill.active {
+            background: white;
+            color: var(--hozio-blue);
+            border-color: var(--hozio-blue);
+            box-shadow: 0 2px 8px rgba(0, 160, 227, 0.15);
+        }
+
+        .hozio-bg-pill .color-dot {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .hozio-bg-pill .color-dot.dot-light {
+            background: #ffffff;
+            border: 2px solid #d1d5db;
+        }
+
+        .hozio-bg-pill .color-dot.dot-dark {
+            background: #000000;
+            border: 2px solid #555;
+        }
+
+        .hozio-bg-pill .dashicons {
+            font-size: 18px;
+            width: 18px;
+            height: 18px;
+        }
+
+        .hozio-custom-picker-row {
+            display: none;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border: 1px dashed var(--hozio-blue);
+        }
+
+        .hozio-custom-picker-row.visible {
+            display: flex;
+        }
+
+        .hozio-custom-picker-label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #374151;
+            white-space: nowrap;
+        }
+
         /* Preview Styles */
         .hozio-dark-mode-preview {
             margin-top: 24px;
@@ -306,7 +465,7 @@ function hozio_sitemap_settings_inline_styles() {
 
         .preview-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 20px;
         }
 
@@ -314,6 +473,38 @@ function hozio_sitemap_settings_inline_styles() {
             border-radius: 8px;
             padding: 20px;
             border: 2px solid #e5e7eb;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .preview-box:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .preview-box.active-selection {
+            border-color: var(--hozio-blue) !important;
+            box-shadow: 0 0 0 3px rgba(0, 160, 227, 0.2);
+        }
+
+        .preview-badge {
+            display: none;
+            position: absolute;
+            top: -10px;
+            right: 12px;
+            background: var(--hozio-blue);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .preview-box.active-selection .preview-badge {
+            display: block;
         }
 
         .preview-box.light-mode {
@@ -429,9 +620,12 @@ function hozio_sitemap_settings_inline_styles() {
             margin: 20px 40px 0;
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 960px) {
             .preview-grid {
                 grid-template-columns: 1fr;
+            }
+            .hozio-bg-mode-selector {
+                flex-wrap: wrap;
             }
             .hozio-header {
                 padding: 30px 20px;
@@ -479,6 +673,14 @@ function hozio_sitemap_settings_page() {
     // Get current color values
     $link_color = get_option('hozio_sitemap_link_color', '');
     $link_hover_color = get_option('hozio_sitemap_link_hover_color', '');
+    $border_color_val = get_option('hozio_sitemap_border_color', '');
+
+    // Get background mode (with backward compat for old dark_mode toggle)
+    $bg_mode = get_option('hozio_sitemap_bg_mode', '');
+    if ($bg_mode === '') {
+        $bg_mode = get_option('hozio_sitemap_dark_mode', '0') === '1' ? 'dark' : 'light';
+    }
+    $custom_bg_color = get_option('hozio_sitemap_custom_bg_color', '#f5f5dc');
     ?>
     <div class="hozio-settings-wrapper">
         <div class="hozio-header">
@@ -505,36 +707,46 @@ function hozio_sitemap_settings_page() {
                 <?php wp_nonce_field('hozio_save_sitemap_settings_nonce', 'hozio_save_sitemap_settings_nonce_field'); ?>
                 <input type="hidden" name="action" value="hozio_save_sitemap_settings" />
 
-                <!-- Dark Mode Settings Section -->
+                <!-- Background Color Settings Section -->
                 <div class="hozio-section">
                     <div class="hozio-section-header">
                         <span class="dashicons dashicons-admin-appearance"></span>
                         <h2>Display Settings</h2>
                     </div>
 
-                    <div class="hozio-field">
-                        <div class="hozio-toggle-wrapper">
-                            <label class="hozio-toggle-switch">
-                                <input type="checkbox" name="hozio_sitemap_dark_mode" value="1" <?php checked(get_option('hozio_sitemap_dark_mode'), '1'); ?> />
-                                <span class="hozio-toggle-slider"></span>
-                            </label>
-                            <span class="hozio-toggle-label">Enable Dark Mode</span>
-                        </div>
-                        <p class="hozio-field-description">
-                            When enabled, the HTML sitemap will display with a dark theme featuring black backgrounds and white text.
-                            This provides better visibility for dark-themed websites and reduces eye strain in low-light conditions.
-                        </p>
+                    <input type="hidden" name="hozio_sitemap_bg_mode" id="hozio_sitemap_bg_mode" value="<?php echo esc_attr($bg_mode); ?>" />
+
+                    <div class="hozio-bg-mode-selector">
+                        <button type="button" class="hozio-bg-pill<?php echo $bg_mode === 'light' ? ' active' : ''; ?>" data-mode="light">
+                            <span class="color-dot dot-light"></span> Light
+                        </button>
+                        <button type="button" class="hozio-bg-pill<?php echo $bg_mode === 'dark' ? ' active' : ''; ?>" data-mode="dark">
+                            <span class="color-dot dot-dark"></span> Dark
+                        </button>
+                        <button type="button" class="hozio-bg-pill<?php echo $bg_mode === 'custom' ? ' active' : ''; ?>" data-mode="custom">
+                            <span class="dashicons dashicons-art"></span> Custom Color
+                        </button>
+                    </div>
+
+                    <p class="hozio-field-description" style="margin-top: 0; margin-bottom: 20px;">
+                        Choose the background color for your HTML sitemap. Text and accent colors automatically adjust for readability.
+                    </p>
+
+                    <div class="hozio-custom-picker-row<?php echo $bg_mode === 'custom' ? ' visible' : ''; ?>" id="hozio-custom-picker-row">
+                        <span class="hozio-custom-picker-label">Choose your color:</span>
+                        <input type="text" name="hozio_sitemap_custom_bg_color" id="hozio_sitemap_custom_bg_color" value="<?php echo esc_attr($custom_bg_color); ?>" class="hozio-bg-color-picker" />
                     </div>
 
                     <div class="hozio-dark-mode-preview">
                         <div class="preview-label">
                             <span class="dashicons dashicons-visibility"></span>
-                            Color Preview
+                            Live Preview
                         </div>
                         <div class="preview-grid">
                             <div class="preview-item">
-                                <div class="preview-box light-mode">
-                                    <div class="preview-title">Light Mode (Default)</div>
+                                <div class="preview-box light-mode<?php echo $bg_mode === 'light' ? ' active-selection' : ''; ?>" data-mode="light">
+                                    <span class="preview-badge">Active</span>
+                                    <div class="preview-title">Light</div>
                                     <div class="preview-sample">
                                         <div class="sample-heading">Pages Heading</div>
                                         <div class="sample-text">About Us &bull; Contact &bull; Services</div>
@@ -542,11 +754,22 @@ function hozio_sitemap_settings_page() {
                                 </div>
                             </div>
                             <div class="preview-item">
-                                <div class="preview-box dark-mode">
-                                    <div class="preview-title">Dark Mode</div>
+                                <div class="preview-box dark-mode<?php echo $bg_mode === 'dark' ? ' active-selection' : ''; ?>" data-mode="dark">
+                                    <span class="preview-badge">Active</span>
+                                    <div class="preview-title">Dark</div>
                                     <div class="preview-sample">
                                         <div class="sample-heading">Pages Heading</div>
                                         <div class="sample-text">About Us &bull; Contact &bull; Services</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="preview-item">
+                                <div class="preview-box custom-mode<?php echo $bg_mode === 'custom' ? ' active-selection' : ''; ?>" id="custom-preview-box" data-mode="custom" style="background: <?php echo esc_attr($custom_bg_color); ?>;">
+                                    <span class="preview-badge">Active</span>
+                                    <div class="preview-title" id="custom-preview-title">Custom</div>
+                                    <div class="preview-sample" id="custom-preview-sample">
+                                        <div class="sample-heading" id="custom-preview-heading">Pages Heading</div>
+                                        <div class="sample-text" id="custom-preview-text">About Us &bull; Contact &bull; Services</div>
                                     </div>
                                 </div>
                             </div>
@@ -554,16 +777,16 @@ function hozio_sitemap_settings_page() {
                     </div>
                 </div>
 
-                <!-- Link Color Customization Section -->
+                <!-- Color Customization Section -->
                 <div class="hozio-section">
                     <div class="hozio-section-header">
-                        <span class="dashicons dashicons-admin-links"></span>
-                        <h2>Link Colors</h2>
+                        <span class="dashicons dashicons-art"></span>
+                        <h2>Color Customization</h2>
                     </div>
 
                     <div class="hozio-info-text" style="margin-bottom: 24px;">
                         <span class="dashicons dashicons-info"></span>
-                        <span>By default, links will inherit colors from your Elementor global styles. Set custom colors below to override the global settings for the sitemap only.</span>
+                        <span>By default, links will inherit colors from your Elementor global styles and borders use the default theme color. Set custom colors below to override for the sitemap only.</span>
                     </div>
 
                     <!-- Link Color Field -->
@@ -591,6 +814,19 @@ function hozio_sitemap_settings_page() {
                             </p>
                         </div>
                     </div>
+
+                    <!-- Border & Divider Color Field -->
+                    <div class="hozio-color-field">
+                        <div class="hozio-color-input-wrapper">
+                            <label class="hozio-field-label">Border & Divider Color</label>
+                            <input type="text" name="hozio_sitemap_border_color" value="<?php echo esc_attr($border_color_val); ?>" class="hozio-color-picker" />
+                        </div>
+                        <div class="hozio-color-info">
+                            <p class="hozio-field-description" style="margin-top: 32px;">
+                                Set the color for section borders, item dividers, and drawer lines. Leave empty to use the default based on your background mode.
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="hozio-submit-wrapper">
@@ -615,8 +851,19 @@ function hozio_save_sitemap_settings() {
         wp_die('Unauthorized user');
     }
 
-    // Save dark mode setting
-    update_option('hozio_sitemap_dark_mode', isset($_POST['hozio_sitemap_dark_mode']) ? '1' : '0');
+    // Save background mode setting
+    $bg_mode = isset($_POST['hozio_sitemap_bg_mode']) ? sanitize_key($_POST['hozio_sitemap_bg_mode']) : 'light';
+    if (!in_array($bg_mode, array('light', 'dark', 'custom'))) {
+        $bg_mode = 'light';
+    }
+    update_option('hozio_sitemap_bg_mode', $bg_mode);
+
+    // Save custom background color
+    $custom_bg_color = isset($_POST['hozio_sitemap_custom_bg_color']) ? sanitize_hex_color($_POST['hozio_sitemap_custom_bg_color']) : '';
+    update_option('hozio_sitemap_custom_bg_color', $custom_bg_color ? $custom_bg_color : '#f5f5dc');
+
+    // Keep dark_mode in sync for backward compat
+    update_option('hozio_sitemap_dark_mode', $bg_mode === 'dark' ? '1' : '0');
 
     // Save link color (sanitize as hex color or empty)
     $link_color = isset($_POST['hozio_sitemap_link_color']) ? sanitize_hex_color($_POST['hozio_sitemap_link_color']) : '';
@@ -625,6 +872,10 @@ function hozio_save_sitemap_settings() {
     // Save link hover color (sanitize as hex color or empty)
     $link_hover_color = isset($_POST['hozio_sitemap_link_hover_color']) ? sanitize_hex_color($_POST['hozio_sitemap_link_hover_color']) : '';
     update_option('hozio_sitemap_link_hover_color', $link_hover_color);
+
+    // Save border color (sanitize as hex color or empty)
+    $border_color = isset($_POST['hozio_sitemap_border_color']) ? sanitize_hex_color($_POST['hozio_sitemap_border_color']) : '';
+    update_option('hozio_sitemap_border_color', $border_color);
 
     // Redirect back with success message
     wp_redirect(add_query_arg('settings-updated', 'true', admin_url('admin.php?page=hozio-sitemap-settings')));
