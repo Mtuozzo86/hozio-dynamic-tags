@@ -1296,13 +1296,45 @@ add_action('wp_ajax_hozio_town_acf_scan', function() {
         ),
     );
 
+    // Link fields (all-or-none toggle in UI, default off)
+    $links_to_check = array(
+        'hog_google_maps_link'           => 'Google Maps Link',
+        'hog_usps_link'                  => 'USPS Link',
+        'hog_pharmacy_link'              => 'Pharmacy Link',
+        'hog_weather_link'               => 'Weather Link',
+        'hog_county_and_state_wiki_link' => 'County & State Wiki Link',
+    );
+
+    // Individual "other" fields (each with own toggle in UI, default off)
+    $others_to_check = array(
+        'location'                 => 'Location',
+        'gmb_map'                  => 'GMB Map',
+        'reciprocal_links_section' => 'Reciprocal Links Section',
+        'reciprocal_links'         => 'Reciprocal Links',
+    );
+
+    // Build field-name → ACF group key map so JS can deep-link to the right metabox
+    $field_to_acf_group_key = array();
+    if (function_exists('acf_get_field_groups') && function_exists('acf_get_fields')) {
+        foreach (acf_get_field_groups(array('post_type' => 'page')) as $acf_grp) {
+            $acf_grp_fields = acf_get_fields($acf_grp['key']);
+            if (is_array($acf_grp_fields)) {
+                foreach ($acf_grp_fields as $acf_f) {
+                    if (!empty($acf_f['name'])) {
+                        $field_to_acf_group_key[$acf_f['name']] = $acf_grp['key'];
+                    }
+                }
+            }
+        }
+    }
+
     // Fetch only pages that have at least one town_taxonomies term
     $town_pages = get_posts(array(
         'post_type'              => 'page',
         'post_status'            => 'publish',
         'posts_per_page'         => -1,
         'no_found_rows'          => true,
-        'update_post_meta_cache' => true,  // Pre-loads all meta in one query; eliminates per-page meta queries below
+        'update_post_meta_cache' => false, // We fetch only needed fields below — avoids loading all ACF meta into memory
         'update_post_term_cache' => false,
         'tax_query'              => array(
             array(
@@ -1312,13 +1344,42 @@ add_action('wp_ajax_hozio_town_acf_scan', function() {
         ),
     ));
 
+    // Build flat list of only the field keys we need to check
+    $needed_keys = array();
+    foreach ($fields_to_check as $fields) {
+        foreach (array_keys($fields) as $k) {
+            $needed_keys[] = $k;
+        }
+    }
+    foreach (array_keys($links_to_check) as $k)  { $needed_keys[] = $k; }
+    foreach (array_keys($others_to_check) as $k) { $needed_keys[] = $k; }
+
+    // One targeted query: fetch only the 32 required ACF fields for all town pages at once
+    // This avoids loading all post meta (100-200 rows/page) into memory — fixes OOM on large sites
+    $meta_by_page = array();
+    if (!empty($town_pages)) {
+        global $wpdb;
+        $page_ids      = wp_list_pluck($town_pages, 'ID');
+        $id_ph         = implode(',', array_fill(0, count($page_ids), '%d'));
+        $key_ph        = implode(',', array_fill(0, count($needed_keys), '%s'));
+        $rows          = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ($id_ph) AND meta_key IN ($key_ph)",
+                array_merge($page_ids, $needed_keys)
+            )
+        );
+        foreach ($rows as $row) {
+            $meta_by_page[$row->post_id][$row->meta_key] = $row->meta_value;
+        }
+    }
+
     $result_pages = array();
     foreach ($town_pages as $page) {
-        $all_meta = get_post_meta($page->ID); // all meta keys, single DB query per page
-        $missing  = array();
+        $page_meta = isset($meta_by_page[$page->ID]) ? $meta_by_page[$page->ID] : array();
+        $missing   = array();
         foreach ($fields_to_check as $group_name => $fields) {
             foreach ($fields as $field_key => $field_label) {
-                $val      = isset($all_meta[$field_key]) ? $all_meta[$field_key][0] : '';
+                $val      = isset($page_meta[$field_key]) ? $page_meta[$field_key] : '';
                 $is_empty = ($val === '' || $val === null || $val === false || $val === '0');
                 if (!$is_empty && is_string($val)) {
                     $u = @unserialize($val);
@@ -1327,10 +1388,47 @@ add_action('wp_ajax_hozio_town_acf_scan', function() {
                     }
                 }
                 if ($is_empty) {
-                    $missing[] = array('name' => $field_key, 'label' => $field_label, 'group' => $group_name);
+                    $missing[] = array(
+                        'name'          => $field_key,
+                        'label'         => $field_label,
+                        'group'         => $group_name,
+                        'acf_group_key' => isset($field_to_acf_group_key[$field_key]) ? $field_to_acf_group_key[$field_key] : '',
+                        'type'          => 'content',
+                    );
                 }
             }
         }
+
+        // Check link fields
+        foreach ($links_to_check as $field_key => $field_label) {
+            $val      = isset($page_meta[$field_key]) ? $page_meta[$field_key] : '';
+            $is_empty = ($val === '' || $val === null || $val === false);
+            if ($is_empty) {
+                $missing[] = array(
+                    'name'          => $field_key,
+                    'label'         => $field_label,
+                    'group'         => 'Links',
+                    'acf_group_key' => isset($field_to_acf_group_key[$field_key]) ? $field_to_acf_group_key[$field_key] : '',
+                    'type'          => 'link',
+                );
+            }
+        }
+
+        // Check other fields
+        foreach ($others_to_check as $field_key => $field_label) {
+            $val      = isset($page_meta[$field_key]) ? $page_meta[$field_key] : '';
+            $is_empty = ($val === '' || $val === null || $val === false);
+            if ($is_empty) {
+                $missing[] = array(
+                    'name'          => $field_key,
+                    'label'         => $field_label,
+                    'group'         => $field_label,
+                    'acf_group_key' => isset($field_to_acf_group_key[$field_key]) ? $field_to_acf_group_key[$field_key] : '',
+                    'type'          => 'other',
+                );
+            }
+        }
+
         if (!empty($missing)) {
             $result_pages[] = array(
                 'id'             => $page->ID,
@@ -1352,6 +1450,48 @@ add_action('wp_ajax_hozio_town_acf_scan', function() {
     wp_send_json_success($response);
 });
 
+// Inject scroll + highlight JS on WP edit pages when hozio_highlight param is present
+add_action('admin_footer', function() {
+    $screen = get_current_screen();
+    if (!$screen || $screen->base !== 'post') return;
+    if (empty($_GET['hozio_highlight'])) return;
+    ?>
+    <style>
+    .acf-field.hozio-acf-highlight {
+        background: #fef3c7 !important;
+        border-left: 3px solid #f59e0b !important;
+        outline: 2px solid rgba(245,158,11,0.35);
+        animation: hozioHighlightPulse 1.1s ease-in-out 3;
+    }
+    @keyframes hozioHighlightPulse {
+        0%, 100% { outline-color: rgba(245,158,11,0.25); }
+        50%       { outline-color: rgba(245,158,11,0.7);  }
+    }
+    </style>
+    <script>
+    (function($) {
+        function doHozioHighlight() {
+            var params = new URLSearchParams(window.location.search);
+            var raw = params.get('hozio_highlight');
+            if (!raw) return;
+            var names = raw.split(',').map(function(s) { return s.trim(); });
+            var $first = null;
+            names.forEach(function(name) {
+                var $el = $('.acf-field[data-name="' + name + '"]');
+                if ($el.length) {
+                    $el.addClass('hozio-acf-highlight');
+                    if (!$first) $first = $el;
+                }
+            });
+            if ($first && $first[0]) {
+                $first[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+        $(window).on('load', function() { setTimeout(doHozioHighlight, 400); });
+    })(jQuery);
+    </script>
+    <?php
+});
 
 // 7. Import current auto-detection as overrides
 add_action('wp_ajax_hozio_sitemap_import_auto', function() {
@@ -2247,6 +2387,7 @@ function hozio_sitemap_layout_page() {
                             <span class="slug-dupe-loading"><span class="dashicons dashicons-update slug-dupe-spin"></span> Scanning town pages...</span>
                         </div>
                         <div id="hozio-town-acf-actions" style="margin-top: 10px; display: none;"></div>
+                        <div id="hozio-town-acf-filters" style="margin-top: 10px; display: none;"></div>
                         <div id="hozio-town-acf-results" style="margin-top: 12px;"></div>
                     </div>
 
@@ -4927,6 +5068,36 @@ function hozio_sitemap_layout_page() {
         // ========================================
         var townAcfData = null;
         var townAcfExpandedPages = {}; // { pageId: true }
+        var townAcfFilters = {
+            links:                          false,
+            other_location:                 false,
+            other_gmb_map:                  false,
+            other_reciprocal_links_section: false,
+            other_reciprocal_links:         false,
+        };
+
+        function getVisibleFields(fields) {
+            return fields.filter(function(mf) {
+                if (mf.type === 'content') return true;
+                if (mf.type === 'link')    return townAcfFilters.links;
+                if (mf.type === 'other')   return !!townAcfFilters['other_' + mf.name];
+                return false;
+            });
+        }
+
+        function makeMissingBadge(fields) {
+            var content = 0, links = 0, other = 0;
+            fields.forEach(function(f) {
+                if (f.type === 'content') content++;
+                else if (f.type === 'link')  links++;
+                else if (f.type === 'other') other++;
+            });
+            var parts = [];
+            if (content > 0) parts.push(content + ' field' + (content !== 1 ? 's' : ''));
+            if (links > 0)   parts.push(links   + ' link'  + (links   !== 1 ? 's' : ''));
+            if (other > 0)   parts.push(other   + ' other');
+            return (parts.length ? parts.join(', ') : '0 fields') + ' missing';
+        }
 
         function townAcfAutoScan(force) {
             var $status  = $('#hozio-town-acf-status');
@@ -4964,6 +5135,7 @@ function hozio_sitemap_layout_page() {
         function renderTownAcfResults() {
             var $status  = $('#hozio-town-acf-status');
             var $actions = $('#hozio-town-acf-actions');
+            var $filters = $('#hozio-town-acf-filters');
             var $results = $('#hozio-town-acf-results');
             var $count   = $('#hozio-town-acf-count');
             var d        = townAcfData;
@@ -4978,29 +5150,61 @@ function hozio_sitemap_layout_page() {
             if (d.total_pages === 0) {
                 $status.html('<span class="slug-dupe-clean"><span class="dashicons dashicons-info-outline"></span> No pages found with <code>town_taxonomies</code> terms.</span>');
                 $count.hide();
+                $filters.hide();
                 return;
             }
 
-            if (d.total_with_issues === 0) {
-                $status.html('<span class="slug-dupe-clean"><span class="dashicons dashicons-yes-alt"></span> All ' + d.total_pages + ' town page' + (d.total_pages !== 1 ? 's' : '') + ' have complete content. No missing fields.</span>');
+            // Render filter bar
+            var otherDefs = [
+                { key: 'other_location',                 label: 'Location' },
+                { key: 'other_gmb_map',                  label: 'GMB Map' },
+                { key: 'other_reciprocal_links_section', label: 'Reciprocal Links Section' },
+                { key: 'other_reciprocal_links',         label: 'Reciprocal Links' },
+            ];
+            var fb = '<div class="town-acf-filter-bar">';
+            fb += '<span class="town-acf-filter-label">Show:</span>';
+            fb += '<button class="town-acf-filter-btn is-locked" disabled>Content</button>';
+            fb += '<button class="town-acf-filter-btn' + (townAcfFilters.links ? ' is-active' : '') + '" data-filter="links">Links</button>';
+            otherDefs.forEach(function(o) {
+                fb += '<button class="town-acf-filter-btn' + (townAcfFilters[o.key] ? ' is-active' : '') + '" data-filter="' + o.key + '">' + o.label + '</button>';
+            });
+            var anyActive = townAcfFilters.links || otherDefs.some(function(o) { return townAcfFilters[o.key]; });
+            if (anyActive) {
+                fb += '<button id="town-acf-reset-filters" class="town-acf-reset-btn">Reset Filters</button>';
+            }
+            fb += '</div>';
+            $filters.html(fb).show();
+
+            // Count pages visible under current filters
+            var visiblePages = d.pages.filter(function(pg) {
+                return getVisibleFields(pg.missing_fields).length > 0;
+            });
+
+            if (visiblePages.length === 0) {
+                $status.html('<span class="slug-dupe-clean"><span class="dashicons dashicons-yes-alt"></span> All ' + d.total_pages + ' town page' + (d.total_pages !== 1 ? 's' : '') + ' have complete content for the selected filters.</span>');
                 $count.hide();
+                $results.empty();
                 return;
             }
 
-            $count.text(d.total_with_issues).show();
-            $status.html('<span class="slug-dupe-warning"><span class="dashicons dashicons-warning"></span> <strong>' + d.total_with_issues + '</strong> of <strong>' + d.total_pages + '</strong> town page' + (d.total_pages !== 1 ? 's' : '') + ' have missing ACF fields.</span>');
+            $count.text(visiblePages.length).show();
+            $status.html('<span class="slug-dupe-warning"><span class="dashicons dashicons-warning"></span> <strong>' + visiblePages.length + '</strong> of <strong>' + d.total_pages + '</strong> town page' + (d.total_pages !== 1 ? 's' : '') + ' have missing fields.</span>');
 
             var html = '';
-            for (var i = 0; i < d.pages.length; i++) {
-                var pg = d.pages[i];
+            for (var i = 0; i < visiblePages.length; i++) {
+                var pg = visiblePages[i];
+                var visibleFields = getVisibleFields(pg.missing_fields);
                 var expanded = !!townAcfExpandedPages[pg.id];
                 html += '<div class="town-acf-page-row" data-page-id="' + pg.id + '">';
                 html += '<div class="town-acf-page-row-header">';
                 html += '<span class="town-acf-page-title">' + escHtml(pg.title) + '</span>';
                 html += '<a href="' + escHtml(pg.permalink) + '" target="_blank" class="town-acf-page-url">' + escHtml(pg.permalink) + '</a>';
-                html += '<span class="town-acf-missing-badge"><span class="dashicons dashicons-warning"></span> ' + pg.missing_count + ' field' + (pg.missing_count !== 1 ? 's' : '') + ' missing</span>';
+                html += '<span class="town-acf-missing-badge"><span class="dashicons dashicons-warning"></span> ' + makeMissingBadge(visibleFields) + '</span>';
+                var allMissingNames = visibleFields.map(function(mf) { return mf.name; }).join(',');
+                var pencilUrl = adminUrl + 'post.php?post=' + pg.id + '&action=edit'
+                    + (allMissingNames ? '&hozio_highlight=' + encodeURIComponent(allMissingNames) : '');
                 html += '<div class="town-acf-page-row-actions">';
-                html += '<a href="' + escHtml(adminUrl + 'post.php?post=' + pg.id + '&action=edit') + '" target="_blank" class="slug-dupe-link-btn" title="Edit page"><span class="dashicons dashicons-edit"></span></a>';
+                html += '<a href="' + escHtml(pencilUrl) + '" target="_blank" class="slug-dupe-link-btn" title="Edit page"><span class="dashicons dashicons-edit"></span></a>';
                 html += '<button type="button" class="button button-small town-acf-toggle-btn" data-page-id="' + pg.id + '">';
                 html += expanded ? '<span class="dashicons dashicons-arrow-up-alt2"></span> Hide Fields' : '<span class="dashicons dashicons-arrow-down-alt2"></span> Show Fields';
                 html += '</button>';
@@ -5009,17 +5213,30 @@ function hozio_sitemap_layout_page() {
 
                 if (expanded) {
                     html += '<div class="town-acf-field-list">';
-                    // Group missing fields by section
-                    var grpMap = {}, grpOrder = [];
-                    for (var f = 0; f < pg.missing_fields.length; f++) {
-                        var mf = pg.missing_fields[f];
-                        if (!grpMap[mf.group]) { grpMap[mf.group] = []; grpOrder.push(mf.group); }
+                    // Group visible missing fields by section
+                    var grpMap = {}, grpOrder = [], grpKeys = {}, grpFieldNames = {};
+                    for (var f = 0; f < visibleFields.length; f++) {
+                        var mf = visibleFields[f];
+                        if (!grpMap[mf.group]) { grpMap[mf.group] = []; grpOrder.push(mf.group); grpFieldNames[mf.group] = []; }
                         grpMap[mf.group].push(mf.label);
+                        grpFieldNames[mf.group].push(mf.name);
+                        if (mf.acf_group_key && !grpKeys[mf.group]) {
+                            grpKeys[mf.group] = mf.acf_group_key;
+                        }
                     }
                     for (var gi = 0; gi < grpOrder.length; gi++) {
+                        var grpName = grpOrder[gi];
+                        var grpKey  = grpKeys[grpName] || '';
+                        var grpFields = grpFieldNames[grpName].join(',');
+                        var grpEditUrl = adminUrl + 'post.php?post=' + pg.id + '&action=edit'
+                            + (grpFields ? '&hozio_highlight=' + encodeURIComponent(grpFields) : '')
+                            + (grpKey ? '#acf-' + grpKey : '');
                         html += '<div class="town-acf-field-group">';
-                        html += '<span class="town-acf-group-label">' + escHtml(grpOrder[gi]) + ':</span> ';
-                        html += grpMap[grpOrder[gi]].map(function(l) { return '<span class="town-acf-field-name">' + escHtml(l) + '</span>'; }).join(', ');
+                        html += '<a href="' + escHtml(grpEditUrl) + '" target="_blank" class="town-acf-group-edit-link" title="Go to ' + escHtml(grpName) + ' in editor">';
+                        html += '<span class="town-acf-group-label">' + escHtml(grpName) + '</span>';
+                        html += '<span class="dashicons dashicons-arrow-right-alt2" style="font-size:11px;width:11px;height:11px;margin-left:3px;color:#9ca3af;vertical-align:middle;"></span>';
+                        html += '</a>: ';
+                        html += grpMap[grpName].map(function(l) { return '<span class="town-acf-field-name">' + escHtml(l) + '</span>'; }).join(', ');
                         html += '</div>';
                     }
                     html += '</div>';
@@ -5036,6 +5253,17 @@ function hozio_sitemap_layout_page() {
             } else {
                 townAcfExpandedPages[pid] = true;
             }
+            renderTownAcfResults();
+        });
+
+        $(document).on('click', '.town-acf-filter-btn:not(.is-locked)', function() {
+            var key = $(this).data('filter');
+            townAcfFilters[key] = !townAcfFilters[key];
+            renderTownAcfResults();
+        });
+
+        $(document).on('click', '#town-acf-reset-filters', function() {
+            Object.keys(townAcfFilters).forEach(function(k) { townAcfFilters[k] = false; });
             renderTownAcfResults();
         });
 
@@ -7366,6 +7594,63 @@ function hozio_sitemap_layout_inline_styles() {
             height: 13px;
             color: #d97706;
         }
+        .town-acf-filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 2px;
+        }
+        .town-acf-filter-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-right: 2px;
+        }
+        .town-acf-filter-btn {
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            padding: 2px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            color: #374151;
+            line-height: 1.6;
+        }
+        .town-acf-filter-btn:hover:not(.is-locked):not(.is-active) {
+            border-color: #7c3aed;
+            color: #7c3aed;
+        }
+        .town-acf-filter-btn.is-active {
+            background: #7c3aed;
+            border-color: #7c3aed;
+            color: #fff;
+        }
+        .town-acf-filter-btn.is-active:hover {
+            background: #6d28d9;
+            border-color: #6d28d9;
+            color: #fff;
+        }
+        .town-acf-filter-btn.is-locked {
+            background: #ede9fe;
+            border-color: #c4b5fd;
+            color: #6d28d9;
+            cursor: default;
+            opacity: 0.85;
+        }
+        .town-acf-reset-btn {
+            background: none;
+            border: none;
+            padding: 2px 6px;
+            font-size: 11px;
+            color: #9ca3af;
+            cursor: pointer;
+            margin-left: 4px;
+            text-decoration: underline;
+            line-height: 1.6;
+        }
+        .town-acf-reset-btn:hover {
+            color: #374151;
+        }
         .town-acf-page-row-actions {
             display: flex;
             align-items: center;
@@ -7391,6 +7676,14 @@ function hozio_sitemap_layout_inline_styles() {
             line-height: 1.6;
         }
         .town-acf-field-group:last-child { margin-bottom: 0; }
+        .town-acf-group-edit-link {
+            text-decoration: none;
+            color: inherit;
+        }
+        .town-acf-group-edit-link:hover .town-acf-group-label {
+            color: #5b21b6;
+            text-decoration: underline;
+        }
         .town-acf-group-label {
             font-weight: 600;
             color: #7c3aed;
