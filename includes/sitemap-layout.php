@@ -26,12 +26,21 @@ add_action('admin_enqueue_scripts', 'hozio_sitemap_layout_admin_assets', 999);
 // DUPLICATE SLUG CACHE INVALIDATION
 // ========================================
 add_action('save_post_page', function($post_id) {
+    // Skip auto-saves and revisions — they don't change live page slugs
+    if (wp_is_post_autosave($post_id) || wp_is_post_revision($post_id)) return;
     delete_transient('hozio_duplicate_slug_cache');
-    delete_metadata('user', 0, 'hozio_duplicate_banner_dismissed', '', true);
+    delete_transient('hozio_town_acf_cache');
+    // Only reset the per-user banner dismiss when the saved page itself has a -N duplicate slug.
+    // Resetting on every page save was unnecessarily dismissing banners for all admins constantly.
+    $saved_post = get_post($post_id);
+    if ($saved_post && preg_match('/^(.+)-([2-9]|\d{2,})$/', $saved_post->post_name)) {
+        delete_metadata('user', 0, 'hozio_duplicate_banner_dismissed', '', true);
+    }
 }, 20);
 add_action('before_delete_post', function($post_id) {
     if (get_post_type($post_id) === 'page') {
         delete_transient('hozio_duplicate_slug_cache');
+        delete_transient('hozio_town_acf_cache');
         delete_metadata('user', 0, 'hozio_duplicate_banner_dismissed', '', true);
     }
 });
@@ -480,17 +489,73 @@ add_action('wp_ajax_hozio_duplicate_slug_scan', function() {
         hozio_collect_page_ids_from_accordions($overrides['accordions'], $sitemap_ids);
     }
 
+    // ACF fields to check on each page in a duplicate group
+    $acf_fields = array(
+        'hog_hero_image'                                    => array('label' => 'Hero Image',              'group' => 'HOG Hero'),
+        'hog_hero_seo_heading'                              => array('label' => 'SEO Heading',             'group' => 'HOG Hero'),
+        'hog_hero_section_headline:'                        => array('label' => 'Section Headline',        'group' => 'HOG Hero'),
+        'hog_hero_body'                                     => array('label' => 'Body',                    'group' => 'HOG Hero'),
+        'hog_outcomes_image'                                => array('label' => 'Outcomes Image',          'group' => 'HOG Outcomes'),
+        'hog_outcomes_seo_heading'                          => array('label' => 'SEO Heading',             'group' => 'HOG Outcomes'),
+        'hog_outcomes_section_headline'                     => array('label' => 'Section Headline',        'group' => 'HOG Outcomes'),
+        'hog_outcomes_body'                                 => array('label' => 'Body',                    'group' => 'HOG Outcomes'),
+        'hog_about_us_image'                                => array('label' => 'About Us Image',          'group' => 'HOG About Us'),
+        'hog_about_us_seo_heading'                          => array('label' => 'SEO Heading',             'group' => 'HOG About Us'),
+        'hog_about_us_section_headline'                     => array('label' => 'Section Headline',        'group' => 'HOG About Us'),
+        'hog_about_us_body'                                 => array('label' => 'Body',                    'group' => 'HOG About Us'),
+        'hog_how_it_works_image'                            => array('label' => 'Image',                   'group' => 'HOG How It Works'),
+        'hog_how_it_works_seo_heading'                      => array('label' => 'SEO Heading',             'group' => 'HOG How It Works'),
+        'hog_how_it_works_section_headline'                 => array('label' => 'Section Headline',        'group' => 'HOG How It Works'),
+        'hog_how_it_works_body'                             => array('label' => 'Body',                    'group' => 'HOG How It Works'),
+        'hog_service_related_info_image'                    => array('label' => 'Image',                   'group' => 'HOG Service Info'),
+        'hog_service-related_information_seo_heading'       => array('label' => 'SEO Heading',             'group' => 'HOG Service Info'),
+        'hog_service-related_information_section_headline'  => array('label' => 'Section Headline',        'group' => 'HOG Service Info'),
+        'hog_service-related_information_body'              => array('label' => 'Body',                    'group' => 'HOG Service Info'),
+        'new_hog_faq_question_1'                            => array('label' => 'FAQ Question 1',          'group' => 'FAQs'),
+        'new_hog_faq_answer_1'                              => array('label' => 'FAQ Answer 1',            'group' => 'FAQs'),
+        'new_hog_faq_question_2'                            => array('label' => 'FAQ Question 2',          'group' => 'FAQs'),
+        'new_hog_faq_answer_2'                              => array('label' => 'FAQ Answer 2',            'group' => 'FAQs'),
+        'new_hog_faq_question_3'                            => array('label' => 'FAQ Question 3',          'group' => 'FAQs'),
+        'new_hog_faq_answer_3'                              => array('label' => 'FAQ Answer 3',            'group' => 'FAQs'),
+        'new_hog_faq_question_4'                            => array('label' => 'FAQ Question 4',          'group' => 'FAQs'),
+        'new_hog_faq_answer_4'                              => array('label' => 'FAQ Answer 4',            'group' => 'FAQs'),
+        'new_hog_faq_question_5'                            => array('label' => 'FAQ Question 5',          'group' => 'FAQs'),
+        'new_hog_faq_answer_5'                              => array('label' => 'FAQ Answer 5',            'group' => 'FAQs'),
+        'new_hog_faq_question_6'                            => array('label' => 'FAQ Question 6',          'group' => 'FAQs'),
+        'new_hog_faq_answer_6'                              => array('label' => 'FAQ Answer 6',            'group' => 'FAQs'),
+        'hog_google_maps_link'                              => array('label' => 'Google Maps Link',        'group' => 'Links'),
+        'hog_usps_link'                                     => array('label' => 'USPS Link',               'group' => 'Links'),
+        'hog_pharmacy_link'                                 => array('label' => 'Pharmacy Link',           'group' => 'Links'),
+        'hog_weather_link'                                  => array('label' => 'Weather Link',            'group' => 'Links'),
+        'hog_county_and_state_wiki_link'                    => array('label' => 'County & State Wiki',     'group' => 'Links'),
+        'location'                                          => array('label' => 'Location',                'group' => 'Other'),
+        'gmb_map'                                           => array('label' => 'GMB Map',                 'group' => 'Other'),
+        'header__button_text'                               => array('label' => 'Header Button Text',      'group' => 'Other'),
+        'reciprocal_links_section'                          => array('label' => 'Reciprocal Links Section','group' => 'Other'),
+        'reciprocal_links'                                  => array('label' => 'Reciprocal Links',        'group' => 'Other'),
+    );
+
     // Helper to build page info
-    $build_page_info = function($p) use ($children_counts, $sitemap_ids, $by_id) {
+    $build_page_info = function($p) use ($children_counts, $sitemap_ids, $by_id, $acf_fields) {
+        $all_meta = get_post_meta($p->ID);
+        $missing  = array();
+        foreach ($acf_fields as $field_name => $field_info) {
+            $raw = isset($all_meta[$field_name]) ? $all_meta[$field_name][0] : null;
+            if ($raw === null || $raw === '' || $raw === '0' || $raw === false) {
+                $missing[] = array('label' => $field_info['label'], 'group' => $field_info['group']);
+            }
+        }
         return array(
-            'id'             => (int)$p->ID,
-            'title'          => $p->post_title ? $p->post_title : '(Untitled)',
-            'slug'           => $p->post_name,
-            'status'         => $p->post_status,
-            'permalink'      => get_permalink($p->ID),
-            'modified'       => $p->post_modified,
-            'children_count' => isset($children_counts[(int)$p->ID]) ? $children_counts[(int)$p->ID] : 0,
-            'in_sitemap'     => in_array((int)$p->ID, $sitemap_ids),
+            'id'                 => (int)$p->ID,
+            'title'              => $p->post_title ? $p->post_title : '(Untitled)',
+            'slug'               => $p->post_name,
+            'status'             => $p->post_status,
+            'permalink'          => get_permalink($p->ID),
+            'modified'           => $p->post_modified,
+            'children_count'     => isset($children_counts[(int)$p->ID]) ? $children_counts[(int)$p->ID] : 0,
+            'in_sitemap'         => in_array((int)$p->ID, $sitemap_ids),
+            'missing_acf_count'  => count($missing),
+            'missing_acf_fields' => $missing,
         );
     };
 
@@ -552,10 +617,30 @@ add_action('wp_ajax_hozio_duplicate_slug_scan', function() {
         return strcmp($a['base_slug'], $b['base_slug']);
     });
 
+    // Split into active vs. ignored groups
+    $ignore_list = get_option('hozio_duplicate_ignore_groups', array());
+    $active_groups = array();
+    $ignored_groups_out = array();
+    foreach ($groups as $grp) {
+        $gk = $grp['parent_id'] . ':' . $grp['base_slug'];
+        if (in_array($gk, $ignore_list)) {
+            $ignored_groups_out[] = $grp;
+        } else {
+            $active_groups[] = $grp;
+        }
+    }
+
+    // Recount total_duplicates for active groups only
+    $active_total_dupes = 0;
+    foreach ($active_groups as $grp) {
+        $active_total_dupes += count($grp['duplicates']);
+    }
+
     $result = array(
-        'groups'           => $groups,
-        'total_duplicates' => $total_duplicates,
-        'total_groups'     => count($groups),
+        'groups'           => $active_groups,
+        'ignored_groups'   => $ignored_groups_out,
+        'total_duplicates' => $active_total_dupes,
+        'total_groups'     => count($active_groups),
     );
 
     set_transient('hozio_duplicate_slug_cache', $result, 12 * HOUR_IN_SECONDS);
@@ -796,6 +881,17 @@ add_action('wp_ajax_hozio_duplicate_slug_bulk', function() {
     $succeeded = array();
     $failed = array();
 
+    // Pre-load all page objects into the WP object cache in a single query.
+    // Without this, each get_post() inside the loop is a separate DB round-trip.
+    get_posts(array(
+        'post_type'              => 'any',
+        'post__in'               => $page_ids,
+        'posts_per_page'         => -1,
+        'no_found_rows'          => true,
+        'update_post_meta_cache' => false,
+        'update_post_term_cache' => false,
+    ));
+
     foreach ($page_ids as $pid) {
         $page = get_post($pid);
         if (!$page || $page->post_type !== 'page') {
@@ -857,6 +953,405 @@ add_action('wp_ajax_hozio_duplicate_slug_bulk', function() {
         'failed'    => $failed,
     ));
 });
+
+// 6e. Ignore a duplicate group
+add_action('wp_ajax_hozio_duplicate_slug_ignore_group', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+    $group_key = isset($_POST['group_key']) ? sanitize_text_field($_POST['group_key']) : '';
+    if (!$group_key) wp_send_json_error('Missing group_key.');
+    $ignore_list = get_option('hozio_duplicate_ignore_groups', array());
+    if (!in_array($group_key, $ignore_list)) {
+        $ignore_list[] = $group_key;
+        update_option('hozio_duplicate_ignore_groups', $ignore_list);
+    }
+    delete_transient('hozio_duplicate_slug_cache');
+    wp_send_json_success(array('group_key' => $group_key));
+});
+
+// 6f. Unignore a duplicate group
+add_action('wp_ajax_hozio_duplicate_slug_unignore_group', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+    $group_key = isset($_POST['group_key']) ? sanitize_text_field($_POST['group_key']) : '';
+    if (!$group_key) wp_send_json_error('Missing group_key.');
+    $ignore_list = get_option('hozio_duplicate_ignore_groups', array());
+    $ignore_list = array_values(array_filter($ignore_list, function($k) use ($group_key) { return $k !== $group_key; }));
+    update_option('hozio_duplicate_ignore_groups', $ignore_list);
+    delete_transient('hozio_duplicate_slug_cache');
+    wp_send_json_success(array('group_key' => $group_key));
+});
+
+// 6g. Promote a duplicate to primary (trash original, rename duplicate to clean slug)
+add_action('wp_ajax_hozio_duplicate_slug_promote', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $duplicate_id        = isset($_POST['duplicate_id'])        ? intval($_POST['duplicate_id'])        : 0;
+    $original_id         = isset($_POST['original_id'])         ? intval($_POST['original_id'])         : 0;
+    $confirm_children    = isset($_POST['confirm_children'])    && $_POST['confirm_children'] === '1';
+    $other_duplicate_ids = array();
+    if (!empty($_POST['other_duplicate_ids'])) {
+        foreach (explode(',', $_POST['other_duplicate_ids']) as $oid) {
+            $oid = intval(trim($oid));
+            if ($oid > 0) $other_duplicate_ids[] = $oid;
+        }
+    }
+
+    if (!$duplicate_id || !$original_id) wp_send_json_error('Missing page IDs.');
+
+    $dupe_page = get_post($duplicate_id);
+    $orig_page = get_post($original_id);
+
+    if (!$dupe_page || $dupe_page->post_type !== 'page') wp_send_json_error('Duplicate page not found.');
+    if (!$orig_page || $orig_page->post_type !== 'page') wp_send_json_error('Original page not found.');
+
+    // Validate duplicate slug has -N pattern
+    if (!preg_match('/^(.+)-([2-9]|\d{2,})$/', $dupe_page->post_name, $m)) {
+        wp_send_json_error('Duplicate page does not have a -N slug pattern.');
+    }
+    $base_slug = $m[1];
+
+    // Check for children on the original
+    $children = get_posts(array(
+        'post_type'      => 'page',
+        'post_status'    => 'publish',
+        'post_parent'    => $original_id,
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+    ));
+
+    if (!empty($children) && !$confirm_children) {
+        $child_info = array();
+        foreach (array_slice($children, 0, 10) as $cid) {
+            $child_info[] = array('id' => $cid, 'title' => get_the_title($cid));
+        }
+        wp_send_json_error(array(
+            'code'           => 'has_children',
+            'children_count' => count($children),
+            'children'       => $child_info,
+            'message'        => 'The original page "' . $orig_page->post_title . '" has ' . count($children) . ' child page(s).',
+        ));
+    }
+
+    // Step 1: Trash the original (WP appends __trashed to its slug, freeing the base slug)
+    $trash_result = wp_trash_post($original_id);
+    if (!$trash_result) {
+        wp_send_json_error('Failed to trash the original page.');
+    }
+
+    // Step 2: Rename the duplicate to the clean base slug
+    $update_result = wp_update_post(array(
+        'ID'        => $duplicate_id,
+        'post_name' => $base_slug,
+    ), true);
+
+    if (is_wp_error($update_result)) {
+        wp_send_json_error('Failed to rename slug: ' . $update_result->get_error_message());
+    }
+
+    // Step 3: Verify WP didn't re-suffix the slug
+    $updated_page = get_post($duplicate_id);
+    if ($updated_page->post_name !== $base_slug) {
+        wp_send_json_error('Slug rename was overridden by WordPress. Got "' . $updated_page->post_name . '" instead of "' . $base_slug . '". The original has been trashed — manually fix the slug.');
+    }
+
+    // Step 4: Trash any remaining duplicates in the group
+    foreach ($other_duplicate_ids as $other_id) {
+        $other_page = get_post($other_id);
+        if ($other_page && $other_page->post_type === 'page') {
+            wp_trash_post($other_id);
+        }
+    }
+
+    delete_transient('hozio_duplicate_slug_cache');
+
+    wp_send_json_success(array(
+        'duplicate_id'  => $duplicate_id,
+        'new_slug'      => $base_slug,
+        'new_permalink' => get_permalink($duplicate_id),
+        'trashed_title' => $orig_page->post_title,
+        'had_children'  => !empty($children),
+    ));
+});
+
+
+// 6h. Smart bulk: per-group "keep one, action the rest" with optional slug rename
+add_action('wp_ajax_hozio_duplicate_slug_bulk_smart', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $operation = isset($_POST['operation']) ? sanitize_text_field($_POST['operation']) : '';
+    if (!in_array($operation, array('trash', 'draft'))) {
+        wp_send_json_error('Invalid operation.');
+    }
+
+    $decisions_raw = isset($_POST['decisions']) ? wp_unslash($_POST['decisions']) : '[]';
+    $decisions = json_decode($decisions_raw, true);
+    if (!is_array($decisions)) {
+        wp_send_json_error('Invalid decisions payload.');
+    }
+
+    $succeeded       = array();
+    $failed          = array();
+    $already_trashed = array();
+
+    // Pre-load all referenced page objects into WP object cache in a single query.
+    // Each get_post() in the nested loops below will then be a cache hit, not a DB query.
+    $all_needed_ids = array();
+    foreach ($decisions as $dec) {
+        if (!empty($dec['promote_id'])) {
+            $all_needed_ids[] = intval($dec['promote_id']);
+        }
+        if (!empty($dec['action_ids']) && is_array($dec['action_ids'])) {
+            foreach ($dec['action_ids'] as $aid) {
+                $all_needed_ids[] = intval($aid);
+            }
+        }
+    }
+    if (!empty($all_needed_ids)) {
+        get_posts(array(
+            'post_type'              => 'any',
+            'post__in'               => array_unique($all_needed_ids),
+            'posts_per_page'         => -1,
+            'no_found_rows'          => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
+        ));
+    }
+
+    foreach ($decisions as $dec) {
+        $promote_id  = isset($dec['promote_id'])  ? intval($dec['promote_id'])          : 0;
+        $rename_slug = isset($dec['rename_slug']) ? sanitize_title($dec['rename_slug']) : '';
+        $action_ids  = isset($dec['action_ids']) && is_array($dec['action_ids'])
+                       ? array_map('intval', $dec['action_ids']) : array();
+
+        if (!$promote_id && empty($action_ids)) continue;
+
+        // Step 1: If a rename is needed (a -N page is promoted to clean slug), free the clean slug
+        if ($rename_slug && $promote_id) {
+            $promote_page = get_post($promote_id);
+            if (!$promote_page || $promote_page->post_type !== 'page') {
+                $failed[] = array('id' => $promote_id, 'reason' => 'Promote page not found');
+                continue;
+            }
+            // Trash whichever action_id currently holds the clean slug (the "original")
+            foreach ($action_ids as $aid) {
+                $ap = get_post($aid);
+                if ($ap && $ap->post_name === $rename_slug && $ap->post_status !== 'trash') {
+                    if (wp_trash_post($aid)) {
+                        $already_trashed[] = $aid;
+                        $succeeded[] = array('id' => $aid, 'action' => 'trashed_blocker');
+                    } else {
+                        $failed[] = array('id' => $aid, 'reason' => 'Could not trash slug blocker');
+                    }
+                    break;
+                }
+            }
+            // Rename promote_id to the clean slug
+            $update = wp_update_post(array('ID' => $promote_id, 'post_name' => $rename_slug), true);
+            if (is_wp_error($update)) {
+                $failed[] = array('id' => $promote_id, 'reason' => 'Rename failed: ' . $update->get_error_message());
+            } else {
+                $updated = get_post($promote_id);
+                if ($updated->post_name !== $rename_slug) {
+                    $failed[] = array('id' => $promote_id, 'reason' => 'WP overrode slug to "' . $updated->post_name . '"');
+                } else {
+                    $succeeded[] = array('id' => $promote_id, 'action' => 'promoted', 'new_slug' => $rename_slug);
+                }
+            }
+        }
+
+        // Step 2: Apply the bulk operation to the remaining action_ids
+        foreach ($action_ids as $aid) {
+            if (in_array($aid, $already_trashed)) continue;
+            $ap = get_post($aid);
+            if (!$ap || $ap->post_status === 'trash') continue;
+
+            if ($operation === 'trash') {
+                if (wp_trash_post($aid)) {
+                    $succeeded[] = array('id' => $aid, 'action' => 'trashed');
+                } else {
+                    $failed[] = array('id' => $aid, 'reason' => 'Trash failed');
+                }
+            } else {
+                $result = wp_update_post(array('ID' => $aid, 'post_status' => 'draft'), true);
+                if (!is_wp_error($result)) {
+                    $succeeded[] = array('id' => $aid, 'action' => 'drafted');
+                } else {
+                    $failed[] = array('id' => $aid, 'reason' => $result->get_error_message());
+                }
+            }
+        }
+    }
+
+    delete_transient('hozio_duplicate_slug_cache');
+    wp_send_json_success(array('succeeded' => $succeeded, 'failed' => $failed));
+});
+
+
+// 6i. Bulk action on hand-selected pages (no slug-pattern checks needed)
+add_action('wp_ajax_hozio_duplicate_slug_action_selected', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $operation = isset($_POST['operation']) ? sanitize_text_field($_POST['operation']) : '';
+    if (!in_array($operation, array('trash', 'draft'))) {
+        wp_send_json_error('Invalid operation.');
+    }
+
+    $ids_raw = isset($_POST['page_ids']) ? sanitize_text_field($_POST['page_ids']) : '';
+    $ids     = array_filter(array_map('intval', explode(',', $ids_raw)));
+    if (empty($ids)) {
+        wp_send_json_error('No page IDs provided.');
+    }
+
+    $succeeded = array();
+    $failed    = array();
+
+    foreach ($ids as $id) {
+        $page = get_post($id);
+        if (!$page || $page->post_type !== 'page') {
+            $failed[] = array('id' => $id, 'reason' => 'Page not found');
+            continue;
+        }
+        if ($operation === 'trash') {
+            if (wp_trash_post($id)) {
+                $succeeded[] = array('id' => $id, 'action' => 'trashed');
+            } else {
+                $failed[] = array('id' => $id, 'reason' => 'Trash failed');
+            }
+        } else {
+            $result = wp_update_post(array('ID' => $id, 'post_status' => 'draft'), true);
+            if (!is_wp_error($result)) {
+                $succeeded[] = array('id' => $id, 'action' => 'drafted');
+            } else {
+                $failed[] = array('id' => $id, 'reason' => $result->get_error_message());
+            }
+        }
+    }
+
+    delete_transient('hozio_duplicate_slug_cache');
+    wp_send_json_success(array('succeeded' => $succeeded, 'failed' => $failed));
+});
+
+
+// 6j. Town Page ACF Content Checker
+add_action('wp_ajax_hozio_town_acf_scan', function() {
+    check_ajax_referer('hozio_sitemap_layout_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $force  = isset($_POST['force']) && $_POST['force'] === '1';
+    $cached = $force ? false : get_transient('hozio_town_acf_cache');
+    if ($cached !== false) {
+        wp_send_json_success($cached);
+        return;
+    }
+
+    // The 32 ACF fields to check, grouped by section
+    $fields_to_check = array(
+        'HOG Hero' => array(
+            'hog_hero_image'             => 'Hero Image',
+            'hog_hero_seo_heading'       => 'SEO Heading',
+            'hog_hero_section_headline:' => 'Section Headline',
+            'hog_hero_body'              => 'Body',
+        ),
+        'HOG Outcomes' => array(
+            'hog_outcomes_image'            => 'Image',
+            'hog_outcomes_seo_heading'      => 'SEO Heading',
+            'hog_outcomes_section_headline' => 'Section Headline',
+            'hog_outcomes_body'             => 'Body',
+        ),
+        'HOG About Us' => array(
+            'hog_about_us_image'            => 'Image',
+            'hog_about_us_seo_heading'      => 'SEO Heading',
+            'hog_about_us_section_headline' => 'Section Headline',
+            'hog_about_us_body'             => 'Body',
+        ),
+        'HOG How It Works' => array(
+            'hog_how_it_works_image'            => 'Image',
+            'hog_how_it_works_seo_heading'      => 'SEO Heading',
+            'hog_how_it_works_section_headline' => 'Section Headline',
+            'hog_how_it_works_body'             => 'Body',
+        ),
+        'HOG Service Info' => array(
+            'hog_service_related_info_image'                   => 'Image',
+            'hog_service-related_information_seo_heading'      => 'SEO Heading',
+            'hog_service-related_information_section_headline' => 'Section Headline',
+            'hog_service-related_information_body'             => 'Body',
+        ),
+        'FAQs' => array(
+            'new_hog_faq_question_1' => 'Question 1',
+            'new_hog_faq_answer_1'   => 'Answer 1',
+            'new_hog_faq_question_2' => 'Question 2',
+            'new_hog_faq_answer_2'   => 'Answer 2',
+            'new_hog_faq_question_3' => 'Question 3',
+            'new_hog_faq_answer_3'   => 'Answer 3',
+            'new_hog_faq_question_4' => 'Question 4',
+            'new_hog_faq_answer_4'   => 'Answer 4',
+            'new_hog_faq_question_5' => 'Question 5',
+            'new_hog_faq_answer_5'   => 'Answer 5',
+            'new_hog_faq_question_6' => 'Question 6',
+            'new_hog_faq_answer_6'   => 'Answer 6',
+        ),
+    );
+
+    // Fetch only pages that have at least one town_taxonomies term
+    $town_pages = get_posts(array(
+        'post_type'              => 'page',
+        'post_status'            => 'publish',
+        'posts_per_page'         => -1,
+        'no_found_rows'          => true,
+        'update_post_meta_cache' => true,  // Pre-loads all meta in one query; eliminates per-page meta queries below
+        'update_post_term_cache' => false,
+        'tax_query'              => array(
+            array(
+                'taxonomy' => 'town_taxonomies',
+                'operator' => 'EXISTS',
+            ),
+        ),
+    ));
+
+    $result_pages = array();
+    foreach ($town_pages as $page) {
+        $all_meta = get_post_meta($page->ID); // all meta keys, single DB query per page
+        $missing  = array();
+        foreach ($fields_to_check as $group_name => $fields) {
+            foreach ($fields as $field_key => $field_label) {
+                $val      = isset($all_meta[$field_key]) ? $all_meta[$field_key][0] : '';
+                $is_empty = ($val === '' || $val === null || $val === false || $val === '0');
+                if (!$is_empty && is_string($val)) {
+                    $u = @unserialize($val);
+                    if ($u !== false && empty($u)) {
+                        $is_empty = true;
+                    }
+                }
+                if ($is_empty) {
+                    $missing[] = array('name' => $field_key, 'label' => $field_label, 'group' => $group_name);
+                }
+            }
+        }
+        if (!empty($missing)) {
+            $result_pages[] = array(
+                'id'             => $page->ID,
+                'title'          => $page->post_title,
+                'permalink'      => get_permalink($page->ID),
+                'missing_count'  => count($missing),
+                'missing_fields' => $missing,
+            );
+        }
+    }
+
+    $response = array(
+        'pages'             => $result_pages,
+        'total_pages'       => count($town_pages),
+        'total_with_issues' => count($result_pages),
+    );
+
+    set_transient('hozio_town_acf_cache', $response, 12 * HOUR_IN_SECONDS);
+    wp_send_json_success($response);
+});
+
 
 // 7. Import current auto-detection as overrides
 add_action('wp_ajax_hozio_sitemap_import_auto', function() {
@@ -1723,7 +2218,59 @@ function hozio_sitemap_layout_page() {
                             <span class="slug-dupe-loading"><span class="dashicons dashicons-update slug-dupe-spin"></span> Checking for duplicates...</span>
                         </div>
                         <div id="hozio-slug-dupe-actions" style="margin-top: 10px; display: none;"></div>
+                        <div id="slug-dupe-select-bar" style="margin-top:8px; padding:8px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:5px;">
+                            <span class="dashicons dashicons-yes" style="color:#2271b1;"></span>
+                            <span class="slug-dupe-select-count" style="font-size:13px; font-weight:600; color:#1e40af;"></span>
+                            <button type="button" class="button button-small slug-dupe-select-op-btn" id="slug-dupe-select-draft-btn" data-operation="draft" style="color:#374151;">
+                                <span class="dashicons dashicons-hidden"></span> Draft Selected
+                            </button>
+                            <button type="button" class="button button-small slug-dupe-select-op-btn" id="slug-dupe-select-trash-btn" data-operation="trash" style="color:#dc2626; border-color:#fecaca;">
+                                <span class="dashicons dashicons-trash"></span> Trash Selected
+                            </button>
+                        </div>
                         <div id="hozio-slug-dupe-results" style="margin-top: 12px;"></div>
+                        <div id="hozio-ignored-groups-section" style="margin-top: 16px; display: none;"></div>
+                    </div>
+
+
+                    <!-- Section 3.8: Town Page ACF Content Checker -->
+                    <div class="hozio-section" style="border-left-color: #7c3aed; margin-top: 16px;">
+                        <div class="hozio-section-header">
+                            <span class="dashicons dashicons-forms" style="color: #7c3aed;"></span>
+                            <h2>Town Page Content Checker</h2>
+                            <span id="hozio-town-acf-count" class="town-acf-count-badge" style="display: none;">0</span>
+                        </div>
+                        <p class="hozio-field-description" style="margin-bottom: 12px;">
+                            Scans published pages with <code>town_taxonomies</code> terms for missing ACF content fields.
+                        </p>
+                        <div id="hozio-town-acf-status">
+                            <span class="slug-dupe-loading"><span class="dashicons dashicons-update slug-dupe-spin"></span> Scanning town pages...</span>
+                        </div>
+                        <div id="hozio-town-acf-actions" style="margin-top: 10px; display: none;"></div>
+                        <div id="hozio-town-acf-results" style="margin-top: 12px;"></div>
+                    </div>
+
+                    <!-- Make Primary confirmation modal -->
+                    <div id="hozio-promote-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:99999; align-items:center; justify-content:center;">
+                        <div id="hozio-promote-modal" style="background:#fff; border-radius:8px; padding:28px 32px; max-width:520px; width:90%; box-shadow:0 8px 40px rgba(0,0,0,0.25); position:relative;">
+                            <h3 style="margin:0 0 12px; font-size:17px; display:flex; align-items:center; gap:8px;"><span style="color:#f59e0b; font-size:20px;">&#9888;</span> Make This Page the Primary URL?</h3>
+                            <p style="margin:0 0 8px; color:#374151; font-size:14px;">This will:</p>
+                            <ul id="hozio-promote-actions-list" style="margin:0 0 16px 20px; color:#374151; font-size:14px; line-height:1.7;"></ul>
+                            <div id="hozio-promote-children-warning" style="display:none; background:#fef3c7; border:1px solid #f59e0b; border-radius:4px; padding:8px 12px; margin-bottom:16px; font-size:13px; color:#92400e;">
+                                <span class="dashicons dashicons-warning"></span> <strong id="hozio-promote-orig-title2"></strong> has <span id="hozio-promote-children-count"></span> child page(s). They will remain but their parent will be trashed.
+                            </div>
+                            <p style="margin:0 0 20px; color:#6b7280; font-size:13px;">Trashed pages can be restored from WordPress Trash, but their URLs will be different.</p>
+                            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                                <button type="button" id="hozio-promote-cancel" class="button">Cancel</button>
+                                <button type="button" id="hozio-promote-confirm" class="button button-primary" style="background:#ef4444; border-color:#ef4444;">Yes, Make This Page Primary</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bulk Smart Modal -->
+                    <div id="bulk-smart-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:99999; align-items:center; justify-content:center;">
+                        <div id="bulk-smart-modal" style="background:#fff; border-radius:8px; max-width:640px; width:94%; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,0.25); overflow:hidden;">
+                        </div>
                     </div>
 
                     <!-- Section 4: Unassigned Pages -->
@@ -3189,8 +3736,40 @@ function hozio_sitemap_layout_page() {
         // ========================================
         var slugDupeData = null;
         var slugDupeDetailsVisible = false;
+        var slugDupeIgnoredGroups = [];
+        var slugDupeShowDrafts = false;
+        var slugDupeIgnoredVisible = false;
+        var slugDupeSelectMode = false;
+        var slugDupeSelected = {}; // { pageId: true }
 
-        function slugDupeAutoScan() {
+        function getFilteredSlugDupeData() {
+            if (!slugDupeData) return null;
+            if (slugDupeShowDrafts) return slugDupeData;
+            var filtered = { groups: [], ignored_groups: slugDupeData.ignored_groups, total_duplicates: 0, total_groups: 0 };
+            for (var i = 0; i < slugDupeData.groups.length; i++) {
+                var g = slugDupeData.groups[i];
+                var visibleDupes = [];
+                for (var d = 0; d < g.duplicates.length; d++) {
+                    if (g.duplicates[d].status !== 'draft' && g.duplicates[d].status !== 'pending') {
+                        visibleDupes.push(g.duplicates[d]);
+                    }
+                }
+                if (visibleDupes.length > 0) {
+                    var filteredGroup = {};
+                    for (var k in g) { if (g.hasOwnProperty(k)) filteredGroup[k] = g[k]; }
+                    filteredGroup.duplicates = visibleDupes;
+                    filtered.groups.push(filteredGroup);
+                    filtered.total_duplicates += visibleDupes.length;
+                }
+            }
+            filtered.total_groups = filtered.groups.length;
+            return filtered;
+        }
+
+        // forceRefresh defaults to true so all post-action calls work unchanged.
+        // Pass false only for the initial page load to allow the 12-hour transient to serve the result.
+        function slugDupeAutoScan(forceRefresh) {
+            var doForce = (forceRefresh !== false);
             var $status = $('#hozio-slug-dupe-status');
             var $actions = $('#hozio-slug-dupe-actions');
             var $results = $('#hozio-slug-dupe-results');
@@ -3201,17 +3780,22 @@ function hozio_sitemap_layout_page() {
             $results.empty();
             $count.hide();
             slugDupeDetailsVisible = false;
+            slugDupeSelectMode = false;
+            slugDupeSelected = {};
+            $('#slug-dupe-select-bar').removeClass('visible');
+            $('#hozio-slug-dupe-results').removeClass('slug-dupe-select-mode-active');
 
             $.post(ajaxurl, {
                 action: 'hozio_duplicate_slug_scan',
                 nonce: nonce,
-                force: '1'
+                force: doForce ? '1' : '0'
             }, function(response) {
                 if (!response.success) {
                     $status.html('<span style="color: #dc2626;">Scan failed: ' + escHtml(String(response.data || 'Unknown error')) + '</span>');
                     return;
                 }
                 slugDupeData = response.data;
+                slugDupeIgnoredGroups = response.data.ignored_groups || [];
                 renderSlugDupeStatus();
             }).fail(function() {
                 $status.html('<span style="color: #dc2626;">Request failed. <a href="#" id="slug-dupe-retry">Retry</a></span>');
@@ -3223,31 +3807,69 @@ function hozio_sitemap_layout_page() {
             slugDupeAutoScan();
         });
 
+        $(document).on('change', '#slug-dupe-show-drafts-toggle', function() {
+            // Draft filter is applied client-side by getFilteredSlugDupeData() — no server round-trip needed.
+            slugDupeShowDrafts = $(this).is(':checked');
+            renderSlugDupeStatus();
+            if (slugDupeDetailsVisible) {
+                renderSlugDupeDetails();
+            }
+        });
+
+        $(document).on('click', '#slug-dupe-show-ignored', function() {
+            slugDupeIgnoredVisible = !slugDupeIgnoredVisible;
+            $(this).toggleClass('active', slugDupeIgnoredVisible);
+            var $sec = $('#hozio-ignored-groups-section');
+            if (slugDupeIgnoredVisible) {
+                $sec.slideDown(150);
+            } else {
+                $sec.slideUp(150);
+            }
+        });
+
         function renderSlugDupeStatus() {
             var $status = $('#hozio-slug-dupe-status');
             var $actions = $('#hozio-slug-dupe-actions');
             var $count = $('#hozio-slug-dupe-count');
+            var fd = getFilteredSlugDupeData();
 
-            if (!slugDupeData || slugDupeData.total_groups === 0) {
+            var draftToggleHtml = '<label class="slug-dupe-draft-toggle-label">' +
+                '<input type="checkbox" id="slug-dupe-show-drafts-toggle"' + (slugDupeShowDrafts ? ' checked' : '') + '>' +
+                '<span class="slug-dupe-draft-toggle-track"><span class="slug-dupe-draft-toggle-thumb"></span></span>' +
+                '<span class="slug-dupe-draft-toggle-text">Show drafts</span>' +
+                '</label>';
+
+            if (!fd || fd.total_groups === 0) {
                 $status.html('<span class="slug-dupe-clean"><span class="dashicons dashicons-yes-alt"></span> No duplicate slugs found.</span>');
                 $count.hide();
-                $actions.html('<button type="button" class="button button-small" id="slug-dupe-rescan"><span class="dashicons dashicons-update"></span> Re-scan</button>').show();
+                var nodupeToolbar = '<div class="slug-dupe-toolbar"><button type="button" class="button button-small" id="slug-dupe-rescan"><span class="dashicons dashicons-update"></span> Re-scan</button>' + draftToggleHtml;
+                if (slugDupeIgnoredGroups && slugDupeIgnoredGroups.length > 0) {
+                    nodupeToolbar += '<button type="button" class="button button-small slug-dupe-show-ignored-btn' + (slugDupeIgnoredVisible ? ' active' : '') + '" id="slug-dupe-show-ignored"><span class="dashicons dashicons-hidden"></span> View Ignored Groups (' + slugDupeIgnoredGroups.length + ')</button>';
+                }
+                nodupeToolbar += '</div>';
+                $actions.html(nodupeToolbar).show();
+                renderIgnoredGroups();
                 return;
             }
 
-            $count.text(slugDupeData.total_duplicates).show();
-            $status.html('<span class="slug-dupe-warning"><span class="dashicons dashicons-warning"></span> Found <strong>' + slugDupeData.total_duplicates + '</strong> duplicate page' + (slugDupeData.total_duplicates !== 1 ? 's' : '') + ' in <strong>' + slugDupeData.total_groups + '</strong> group' + (slugDupeData.total_groups !== 1 ? 's' : '') + '.</span>');
+            $count.text(fd.total_duplicates).show();
+            $status.html('<span class="slug-dupe-warning"><span class="dashicons dashicons-warning"></span> Found <strong>' + fd.total_duplicates + '</strong> duplicate page' + (fd.total_duplicates !== 1 ? 's' : '') + ' in <strong>' + fd.total_groups + '</strong> group' + (fd.total_groups !== 1 ? 's' : '') + '.</span>');
 
             var actionsHtml = '<div class="slug-dupe-toolbar">';
             actionsHtml += '<button type="button" class="button button-small" id="slug-dupe-rescan"><span class="dashicons dashicons-update"></span> Re-scan</button>';
-            actionsHtml += '<button type="button" class="button button-small" id="slug-dupe-toggle-details"><span class="dashicons dashicons-visibility"></span> View Details</button>';
+            actionsHtml += '<button type="button" class="button button-small' + (slugDupeDetailsVisible ? ' slug-dupe-btn-active' : '') + '" id="slug-dupe-toggle-details"><span class="dashicons ' + (slugDupeDetailsVisible ? 'dashicons-hidden' : 'dashicons-visibility') + '"></span> ' + (slugDupeDetailsVisible ? 'Hide Details' : 'View Details') + '</button>';
+            actionsHtml += '<button type="button" class="button button-small' + (slugDupeSelectMode ? ' slug-dupe-btn-active' : '') + '" id="slug-dupe-toggle-select"><span class="dashicons dashicons-yes"></span> ' + (slugDupeSelectMode ? 'Exit Select' : 'Select Items') + '</button>';
+            if (slugDupeIgnoredGroups && slugDupeIgnoredGroups.length > 0) {
+                actionsHtml += '<button type="button" class="button button-small slug-dupe-show-ignored-btn' + (slugDupeIgnoredVisible ? ' active' : '') + '" id="slug-dupe-show-ignored"><span class="dashicons dashicons-hidden"></span> View Ignored Groups (' + slugDupeIgnoredGroups.length + ')</button>';
+            }
+            actionsHtml += draftToggleHtml;
 
-            // Count fixable, trashable, and draftable
+            // Count fixable, trashable, and draftable from filtered data
             var fixableCount = 0;
             var trashableCount = 0;
             var draftableCount = 0;
-            for (var i = 0; i < slugDupeData.groups.length; i++) {
-                var g = slugDupeData.groups[i];
+            for (var i = 0; i < fd.groups.length; i++) {
+                var g = fd.groups[i];
                 if (g.type === 'orphaned' && g.slug_available) {
                     fixableCount += g.duplicates.length;
                 }
@@ -3265,15 +3887,16 @@ function hozio_sitemap_layout_page() {
             }
             if (draftableCount > 0) {
                 actionsHtml += '<button type="button" class="slug-dupe-action-btn slug-dupe-bulk-draft-btn">' +
-                    '<span class="dashicons dashicons-hidden"></span> Draft All (' + draftableCount + ')</button>';
+                    '<span class="dashicons dashicons-hidden"></span> Draft All Duplicates (' + draftableCount + ')</button>';
             }
             if (trashableCount > 0) {
                 actionsHtml += '<button type="button" class="slug-dupe-action-btn slug-dupe-bulk-trash-btn">' +
-                    '<span class="dashicons dashicons-trash"></span> Trash All (' + trashableCount + ')</button>';
+                    '<span class="dashicons dashicons-trash"></span> Trash All Duplicates (' + trashableCount + ')</button>';
             }
             actionsHtml += '</div>';
 
             $actions.html(actionsHtml).show();
+            renderIgnoredGroups();
         }
 
         // Toggle details view
@@ -3283,101 +3906,308 @@ function hozio_sitemap_layout_page() {
             if (slugDupeDetailsVisible) {
                 $btn.find('.dashicons').removeClass('dashicons-visibility').addClass('dashicons-hidden');
                 $btn.contents().last().replaceWith(' Hide Details');
+                $btn.addClass('slug-dupe-btn-active');
                 renderSlugDupeDetails();
             } else {
                 $btn.find('.dashicons').removeClass('dashicons-hidden').addClass('dashicons-visibility');
                 $btn.contents().last().replaceWith(' View Details');
+                $btn.removeClass('slug-dupe-btn-active');
                 $('#hozio-slug-dupe-results').empty();
             }
         });
 
-        function renderSlugDupeDetails() {
-            var $results = $('#hozio-slug-dupe-results');
-            if (!slugDupeData || slugDupeData.total_groups === 0) {
-                $results.empty();
+        // ---- Select mode ----
+        function updateSelectBar() {
+            var ids = Object.keys(slugDupeSelected).filter(function(k) { return slugDupeSelected[k]; });
+            var $bar = $('#slug-dupe-select-bar');
+            if (!slugDupeSelectMode || ids.length === 0) {
+                $bar.removeClass('visible');
                 return;
             }
+            $bar.find('.slug-dupe-select-count').text(ids.length + ' page' + (ids.length !== 1 ? 's' : '') + ' selected');
+            $bar.addClass('visible');
+        }
 
-            var html = '';
-            for (var i = 0; i < slugDupeData.groups.length; i++) {
-                var g = slugDupeData.groups[i];
-                var isTrue = g.type === 'true_duplicate';
-                var typeLabel = isTrue ? 'Duplicate' : 'Orphaned';
-                var typeClass = isTrue ? 'true' : 'orphaned';
-                var parentCtx = g.parent_title ? ' <span class="slug-dupe-parent-ctx">in ' + escHtml(g.parent_title) + '</span>' : '';
+        $(document).on('click', '#slug-dupe-toggle-select', function() {
+            slugDupeSelectMode = !slugDupeSelectMode;
+            slugDupeSelected = {};
+            // Force details visible when entering select mode
+            if (slugDupeSelectMode && !slugDupeDetailsVisible) {
+                slugDupeDetailsVisible = true;
+                renderSlugDupeDetails();
+            }
+            // Re-render status bar to update button label
+            var $btn = $(this);
+            if (slugDupeSelectMode) {
+                $btn.addClass('slug-dupe-btn-active').html('<span class="dashicons dashicons-no"></span> Exit Select');
+                $('#hozio-slug-dupe-results').addClass('slug-dupe-select-mode-active');
+            } else {
+                $btn.removeClass('slug-dupe-btn-active').html('<span class="dashicons dashicons-yes"></span> Select Items');
+                $('#hozio-slug-dupe-results').removeClass('slug-dupe-select-mode-active');
+                $('#slug-dupe-select-bar').removeClass('visible');
+            }
+        });
 
-                html += '<div class="slug-dupe-group">';
+        $(document).on('change', '.slug-dupe-row-checkbox', function() {
+            var pid = $(this).data('page-id');
+            if ($(this).is(':checked')) {
+                slugDupeSelected[pid] = true;
+            } else {
+                delete slugDupeSelected[pid];
+            }
+            updateSelectBar();
+        });
 
-                // Group header
-                html += '<div class="slug-dupe-group-header slug-dupe-header-' + typeClass + '">';
-                html += '<code class="slug-dupe-slug-label">/' + escHtml(g.base_slug) + '/</code>' + parentCtx;
-                html += '<span class="slug-dupe-type-badge slug-dupe-type-' + typeClass + '">' + typeLabel + '</span>';
-                html += '</div>';
-
-                // Original page row (if exists)
-                if (g.original) {
-                    var o = g.original;
-                    html += '<div class="slug-dupe-row slug-dupe-row-original">';
-                    html += '<div class="slug-dupe-row-info">';
-                    html += '<span class="slug-dupe-row-title">' + escHtml(o.title) + '<span class="slug-dupe-row-url">' + escHtml(o.permalink) + '</span></span>';
-                    html += '<span class="slug-dupe-status-badge slug-dupe-status-' + o.status + '">' + escHtml(o.status) + '</span>';
-                    html += '<span class="slug-dupe-row-date">' + formatDate(o.modified) + '</span>';
-                    if (o.children_count > 0) {
-                        html += '<span class="slug-dupe-row-children">' + o.children_count + ' child' + (o.children_count !== 1 ? 'ren' : '') + '</span>';
-                    }
-                    html += '</div>';
-                    html += '<div class="slug-dupe-row-actions">';
-                    html += '<a href="' + escHtml(o.permalink) + '" target="_blank" class="slug-dupe-link-btn" title="View"><span class="dashicons dashicons-external"></span></a>';
-                    html += '<a href="' + escHtml(adminUrl + 'post.php?post=' + o.id + '&action=edit') + '" target="_blank" class="slug-dupe-link-btn" title="Edit"><span class="dashicons dashicons-edit"></span></a>';
-                    html += '</div>';
-                    html += '</div>';
+        // Inject the selection action bar (once, after page elements exist)
+        $(document).on('click', '#slug-dupe-select-trash-btn, #slug-dupe-select-draft-btn', function() {
+            var op = $(this).data('operation');
+            var ids = Object.keys(slugDupeSelected).filter(function(k) { return slugDupeSelected[k]; });
+            if (!ids.length) return;
+            var label = op === 'trash' ? 'trash' : 'draft';
+            if (!confirm('Are you sure you want to ' + label + ' these ' + ids.length + ' page' + (ids.length !== 1 ? 's' : '') + '?\n\nThis action cannot be auto-undone.')) return;
+            var $btn = $(this).prop('disabled', true);
+            $.post(ajaxurl, {
+                action: 'hozio_duplicate_slug_action_selected',
+                nonce: nonce,
+                operation: op,
+                page_ids: ids.join(',')
+            }, function(response) {
+                $btn.prop('disabled', false);
+                if (response.success) {
+                    var s = response.data.succeeded.length;
+                    var f = response.data.failed.length;
+                    var msg = s + ' page' + (s !== 1 ? 's' : '') + ' ' + label + 'ed';
+                    if (f > 0) msg += ', ' + f + ' failed';
+                    slugDupeSelectMode = false;
+                    slugDupeSelected = {};
+                    $('#slug-dupe-select-bar').removeClass('visible');
+                    $('#hozio-slug-dupe-status').html('<span class="slug-dupe-clean"><span class="dashicons dashicons-yes-alt"></span> ' + escHtml(msg) + '</span>');
+                    setTimeout(function() { slugDupeAutoScan(); }, 1200);
                 } else {
-                    html += '<div class="slug-dupe-row slug-dupe-row-missing">';
-                    html += '<span class="dashicons dashicons-info-outline"></span> No original page &mdash; slug can be claimed';
-                    html += '</div>';
+                    alert('Action failed: ' + (typeof response.data === 'string' ? response.data : 'Unknown error'));
+                }
+            }).fail(function() {
+                $btn.prop('disabled', false);
+                alert('Request failed. Please try again.');
+            });
+        });
+
+        // Build the ACF missing-fields badge + click-popover for a page object
+        function buildAcfBadgeHtml(pg) {
+            if (!pg || !pg.missing_acf_count) return '';
+            var cnt = pg.missing_acf_count;
+            var fields = pg.missing_acf_fields || [];
+            // Group fields by section
+            var grps = {}, grpOrder = [];
+            for (var i = 0; i < fields.length; i++) {
+                var f = fields[i];
+                if (!grps[f.group]) { grps[f.group] = []; grpOrder.push(f.group); }
+                grps[f.group].push(f.label);
+            }
+            var popHtml = '<div class="acf-missing-popover" id="acf-pop-' + pg.id + '">';
+            popHtml += '<div class="acf-missing-popover-title">' + cnt + ' Missing ACF Field' + (cnt !== 1 ? 's' : '') + '</div>';
+            for (var gi = 0; gi < grpOrder.length; gi++) {
+                popHtml += '<div class="acf-missing-popover-group"><span class="acf-group-label">' + escHtml(grpOrder[gi]) + ':</span> ' + grps[grpOrder[gi]].map(function(l) { return escHtml(l); }).join(', ') + '</div>';
+            }
+            popHtml += '</div>';
+            return '<div class="acf-missing-wrap">' +
+                '<button type="button" class="acf-missing-badge" data-page-id="' + pg.id + '">' +
+                '<span class="dashicons dashicons-warning"></span> ' + cnt +
+                '</button>' + popHtml + '</div>';
+        }
+
+        // Toggle ACF popover on badge click — fixed positioning escapes all stacking contexts
+        $(document).on('click', '.acf-missing-badge', function(e) {
+            e.stopPropagation();
+            var pid = $(this).data('page-id');
+            var $pop = $('#acf-pop-' + pid);
+            var wasOpen = $pop.is(':visible');
+            $('.acf-missing-popover').hide();
+            if (!wasOpen) {
+                var rect = this.getBoundingClientRect();
+                var popWidth = 300;
+                var popMaxH = 260;
+                var left = rect.right - popWidth;
+                if (left < 4) left = 4;
+                // Flip above the badge if not enough space below
+                var top;
+                if (rect.bottom + 4 + popMaxH > window.innerHeight) {
+                    top = Math.max(4, rect.top - popMaxH - 4);
+                } else {
+                    top = rect.bottom + 4;
+                }
+                $pop.css({ top: top + 'px', left: left + 'px', right: 'auto' }).show();
+            }
+        });
+
+        // Close ACF popover when clicking outside or scrolling
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('.acf-missing-wrap').length) {
+                $('.acf-missing-popover').hide();
+            }
+        });
+        $(window).on('scroll.acfPop', function() {
+            $('.acf-missing-popover').hide();
+        });
+
+        function buildGroupHtml(g, showIgnoreBtn, unignoreKey) {
+            var isTrue = g.type === 'true_duplicate';
+            var typeLabel = isTrue ? 'Duplicate' : 'Orphaned';
+            var typeClass = isTrue ? 'true' : 'orphaned';
+            var parentCtx = g.parent_title ? ' <span class="slug-dupe-parent-ctx">in ' + escHtml(g.parent_title) + '</span>' : '';
+            var groupKey = g.parent_id + ':' + g.base_slug;
+
+            var html = '<div class="slug-dupe-group' + (unignoreKey ? ' slug-dupe-group--ignored' : '') + '">';
+
+            // Group header
+            html += '<div class="slug-dupe-group-header slug-dupe-header-' + typeClass + '">';
+            html += '<code class="slug-dupe-slug-label">/' + escHtml(g.base_slug) + '/</code>' + parentCtx;
+            html += '<span class="slug-dupe-type-badge slug-dupe-type-' + typeClass + '">' + typeLabel + '</span>';
+            if (unignoreKey) {
+                html += '<span class="slug-dupe-ignored-badge">IGNORED</span>';
+            }
+            if (showIgnoreBtn) {
+                html += '<button type="button" class="slug-dupe-ignore-btn" data-group-key="' + escHtml(groupKey) + '" title="Mark this group as intentional and hide from active results" style="margin-left:auto; font-size:12px; padding:2px 8px; cursor:pointer;">';
+                html += '<span class="dashicons dashicons-dismiss" style="font-size:14px; margin-top:1px;"></span> Ignore Group</button>';
+            } else if (unignoreKey) {
+                html += '<button type="button" class="slug-dupe-unignore-btn button button-small" data-group-key="' + escHtml(unignoreKey) + '" style="margin-left:auto;">Unignore</button>';
+            }
+            html += '</div>';
+
+            // Original page row (if exists)
+            if (g.original) {
+                var o = g.original;
+                html += '<div class="slug-dupe-row slug-dupe-row-original" data-page-id="' + o.id + '">';
+                html += '<label class="slug-dupe-select-cb" title="Select for bulk action"><input type="checkbox" class="slug-dupe-row-checkbox" data-page-id="' + o.id + '"' + (slugDupeSelected[o.id] ? ' checked' : '') + '></label>';
+                html += '<div class="slug-dupe-row-info">';
+                html += '<span class="slug-dupe-row-title">' + escHtml(o.title) + '<span class="slug-dupe-row-url">' + escHtml(o.permalink) + '</span></span>';
+                html += '<span class="slug-dupe-status-badge slug-dupe-status-' + o.status + '">' + escHtml(o.status) + '</span>';
+                html += '<span class="slug-dupe-row-date">' + formatDate(o.modified) + '</span>';
+                if (o.children_count > 0) {
+                    html += '<span class="slug-dupe-row-children">' + o.children_count + ' child' + (o.children_count !== 1 ? 'ren' : '') + '</span>';
+                }
+                html += '</div>';
+                html += '<div class="slug-dupe-row-actions">';
+                html += buildAcfBadgeHtml(o);
+                html += '<a href="' + escHtml(o.permalink) + '" target="_blank" class="slug-dupe-link-btn" title="View"><span class="dashicons dashicons-external"></span></a>';
+                html += '<a href="' + escHtml(adminUrl + 'post.php?post=' + o.id + '&action=edit') + '" target="_blank" class="slug-dupe-link-btn" title="Edit"><span class="dashicons dashicons-edit"></span></a>';
+                html += '</div>';
+                html += '</div>';
+            } else {
+                html += '<div class="slug-dupe-row slug-dupe-row-missing">';
+                html += '<span class="dashicons dashicons-info-outline"></span> No original page &mdash; slug can be claimed';
+                html += '</div>';
+            }
+
+            // Duplicate page rows
+            for (var d = 0; d < g.duplicates.length; d++) {
+                var dp = g.duplicates[d];
+                html += '<div class="slug-dupe-row slug-dupe-row-duplicate" id="slug-dupe-row-' + dp.id + '" data-page-id="' + dp.id + '">';
+                html += '<label class="slug-dupe-select-cb" title="Select for bulk action"><input type="checkbox" class="slug-dupe-row-checkbox" data-page-id="' + dp.id + '"' + (slugDupeSelected[dp.id] ? ' checked' : '') + '></label>';
+                html += '<div class="slug-dupe-row-info">';
+                html += '<span class="slug-dupe-row-title">' + escHtml(dp.title) + '<span class="slug-dupe-row-url">' + escHtml(dp.permalink) + '</span></span>';
+                html += '<code class="slug-dupe-row-slug">' + escHtml(dp.slug) + '</code>';
+                html += '<span class="slug-dupe-status-badge slug-dupe-status-' + dp.status + '">' + escHtml(dp.status) + '</span>';
+                if (dp.in_sitemap) {
+                    html += '<span class="slug-dupe-sitemap-badge">In Sitemap</span>';
+                }
+                html += '<span class="slug-dupe-row-date">' + formatDate(dp.modified) + '</span>';
+                if (dp.children_count > 0) {
+                    html += '<span class="slug-dupe-row-children"><span class="dashicons dashicons-warning"></span> ' + dp.children_count + ' child' + (dp.children_count !== 1 ? 'ren' : '') + '</span>';
+                }
+                html += '</div>';
+                html += '<div class="slug-dupe-row-actions">';
+                html += buildAcfBadgeHtml(dp);
+                html += '<a href="' + escHtml(dp.permalink) + '" target="_blank" class="slug-dupe-link-btn" title="View"><span class="dashicons dashicons-external"></span></a>';
+                html += '<a href="' + escHtml(adminUrl + 'post.php?post=' + dp.id + '&action=edit') + '" target="_blank" class="slug-dupe-link-btn" title="Edit"><span class="dashicons dashicons-edit"></span></a>';
+
+                if (!isTrue && g.slug_available) {
+                    html += '<button type="button" class="slug-dupe-action-btn slug-dupe-fix-btn" data-page-id="' + dp.id + '" data-old-slug="' + escHtml(dp.slug) + '" data-new-slug="' + escHtml(g.clean_slug) + '" data-children="' + dp.children_count + '" title="' + escHtml(dp.slug) + ' → ' + escHtml(g.clean_slug) + '">';
+                    html += '<span class="dashicons dashicons-yes-alt"></span> Fix</button>';
+                } else if (!isTrue && !g.slug_available) {
+                    html += '<span class="slug-dupe-blocked">Slug taken</span>';
                 }
 
-                // Duplicate page rows
-                for (var d = 0; d < g.duplicates.length; d++) {
-                    var dp = g.duplicates[d];
-                    html += '<div class="slug-dupe-row slug-dupe-row-duplicate" id="slug-dupe-row-' + dp.id + '">';
-                    html += '<div class="slug-dupe-row-info">';
-                    html += '<span class="slug-dupe-row-title">' + escHtml(dp.title) + '<span class="slug-dupe-row-url">' + escHtml(dp.permalink) + '</span></span>';
-                    html += '<code class="slug-dupe-row-slug">' + escHtml(dp.slug) + '</code>';
-                    html += '<span class="slug-dupe-status-badge slug-dupe-status-' + dp.status + '">' + escHtml(dp.status) + '</span>';
-                    if (dp.in_sitemap) {
-                        html += '<span class="slug-dupe-sitemap-badge">In Sitemap</span>';
+                // Make Primary button — only for true_duplicate groups with a published original
+                if (isTrue && g.original && g.original.status === 'publish' && showIgnoreBtn) {
+                    var otherDupeIds = [];
+                    var otherDupes = [];
+                    for (var od = 0; od < g.duplicates.length; od++) {
+                        if (g.duplicates[od].id !== dp.id) {
+                            otherDupeIds.push(g.duplicates[od].id);
+                            otherDupes.push({ id: g.duplicates[od].id, title: g.duplicates[od].title, slug: g.duplicates[od].slug });
+                        }
                     }
-                    html += '<span class="slug-dupe-row-date">' + formatDate(dp.modified) + '</span>';
-                    if (dp.children_count > 0) {
-                        html += '<span class="slug-dupe-row-children"><span class="dashicons dashicons-warning"></span> ' + dp.children_count + ' child' + (dp.children_count !== 1 ? 'ren' : '') + '</span>';
-                    }
-                    html += '</div>';
-                    html += '<div class="slug-dupe-row-actions">';
-                    html += '<a href="' + escHtml(dp.permalink) + '" target="_blank" class="slug-dupe-link-btn" title="View"><span class="dashicons dashicons-external"></span></a>';
-                    html += '<a href="' + escHtml(adminUrl + 'post.php?post=' + dp.id + '&action=edit') + '" target="_blank" class="slug-dupe-link-btn" title="Edit"><span class="dashicons dashicons-edit"></span></a>';
+                    html += '<button type="button" class="slug-dupe-action-btn slug-dupe-promote-btn"' +
+                        ' data-duplicate-id="' + dp.id + '"' +
+                        ' data-original-id="' + g.original.id + '"' +
+                        ' data-orig-title="' + escHtml(g.original.title) + '"' +
+                        ' data-orig-slug="' + escHtml(g.original.slug) + '"' +
+                        ' data-dupe-slug="' + escHtml(dp.slug) + '"' +
+                        ' data-clean-slug="' + escHtml(g.clean_slug) + '"' +
+                        ' data-orig-children="' + g.original.children_count + '"' +
+                        ' data-other-dupe-ids=\'' + JSON.stringify(otherDupeIds) + '\'' +
+                        ' data-other-dupes=\'' + JSON.stringify(otherDupes).replace(/'/g, '&#39;') + '\'' +
+                        ' title="Promote this page to the primary URL">';
+                    html += '<span class="dashicons dashicons-star-filled"></span> Make Primary</button>';
+                }
 
-                    if (!isTrue && g.slug_available) {
-                        html += '<button type="button" class="slug-dupe-action-btn slug-dupe-fix-btn" data-page-id="' + dp.id + '" data-old-slug="' + escHtml(dp.slug) + '" data-new-slug="' + escHtml(g.clean_slug) + '" data-children="' + dp.children_count + '" title="' + escHtml(dp.slug) + ' → ' + escHtml(g.clean_slug) + '">';
-                        html += '<span class="dashicons dashicons-yes-alt"></span> Fix</button>';
-                    } else if (!isTrue && !g.slug_available) {
-                        html += '<span class="slug-dupe-blocked">Slug taken</span>';
-                    }
-
-                    // Draft and Trash buttons for all duplicates
+                // Draft and Trash buttons for all duplicates
+                if (showIgnoreBtn) {
                     html += '<button type="button" class="slug-dupe-action-btn slug-dupe-draft-btn" data-page-id="' + dp.id + '" data-title="' + escHtml(dp.title) + '">';
                     html += '<span class="dashicons dashicons-hidden"></span> Draft</button>';
                     html += '<button type="button" class="slug-dupe-action-btn slug-dupe-trash-btn" data-page-id="' + dp.id + '" data-title="' + escHtml(dp.title) + '" data-children="' + dp.children_count + '">';
                     html += '<span class="dashicons dashicons-trash"></span> Trash</button>';
-
-                    html += '</div>';
-                    html += '</div>';
                 }
 
-                html += '</div>'; // end group
+                html += '</div>';
+                html += '</div>';
             }
 
-            $results.html(html);
+            html += '</div>'; // end group
+            return html;
+        }
+
+        function renderSlugDupeDetails() {
+            var $results = $('#hozio-slug-dupe-results');
+            var $ignoredSection = $('#hozio-ignored-groups-section');
+            var fd = getFilteredSlugDupeData();
+
+            if (!fd || fd.total_groups === 0) {
+                $results.empty();
+            } else {
+                var html = '';
+                for (var i = 0; i < fd.groups.length; i++) {
+                    html += buildGroupHtml(fd.groups[i], true);
+                }
+                $results.html(html);
+            }
+
+            // Render ignored groups section
+            renderIgnoredGroups();
+        }
+
+        function renderIgnoredGroups() {
+            var $sec = $('#hozio-ignored-groups-section');
+            if (!slugDupeIgnoredGroups || slugDupeIgnoredGroups.length === 0) {
+                $sec.hide().empty();
+                slugDupeIgnoredVisible = false;
+                return;
+            }
+
+            var html = '<div class="slug-dupe-ignored-section-header"><span class="dashicons dashicons-hidden"></span> Ignored Groups (' + slugDupeIgnoredGroups.length + ') &mdash; These groups are marked intentional and hidden from active results.</div>';
+            for (var i = 0; i < slugDupeIgnoredGroups.length; i++) {
+                var g = slugDupeIgnoredGroups[i];
+                var groupKey = g.parent_id + ':' + g.base_slug;
+                html += buildGroupHtml(g, false, groupKey);
+            }
+            $sec.html(html);
+
+            if (slugDupeIgnoredVisible) {
+                $sec.show();
+            } else {
+                $sec.hide();
+            }
         }
 
         function formatDate(dateStr) {
@@ -3572,96 +4402,645 @@ function hozio_sitemap_layout_page() {
             });
         });
 
-        // Bulk trash duplicates
-        $(document).on('click', '.slug-dupe-bulk-trash-btn', function() {
-            if (!slugDupeData) return;
-            var ids = [];
-            var totalChildren = 0;
-            for (var i = 0; i < slugDupeData.groups.length; i++) {
-                var g = slugDupeData.groups[i];
-                if (g.type === 'true_duplicate') {
-                    for (var d = 0; d < g.duplicates.length; d++) {
-                        ids.push(g.duplicates[d].id);
-                        totalChildren += (parseInt(g.duplicates[d].children_count) || 0);
+        // Bulk trash / draft — open smart selection modal
+        $(document).on('click', '.slug-dupe-bulk-trash-btn', function() { openBulkModal('trash'); });
+        $(document).on('click', '.slug-dupe-bulk-draft-btn', function() { openBulkModal('draft'); });
+
+        // ========================================
+        // BULK SMART MODAL
+        // ========================================
+        var $bulkModalOverlay = $('#bulk-smart-modal-overlay');
+
+        function detectSuffixes(groups) {
+            var nums = {};
+            for (var gi = 0; gi < groups.length; gi++) {
+                var dups = groups[gi].duplicates || [];
+                for (var di = 0; di < dups.length; di++) {
+                    var permalink = dups[di].permalink || '';
+                    var slugMatch = permalink.replace(/\/$/, '').match(/\/([^\/]+)$/);
+                    if (slugMatch) {
+                        var sm = slugMatch[1].match(/-(\d+)$/);
+                        if (sm) nums[parseInt(sm[1])] = true;
                     }
                 }
             }
-            if (ids.length === 0) return;
-            var confirmMsg = 'Trash ' + ids.length + ' true duplicate page(s)?';
-            if (totalChildren > 0) {
-                confirmMsg += '\n\nWARNING: ' + totalChildren + ' child page(s) across these pages will become orphaned!';
+            return Object.keys(nums).map(Number).sort(function(a, b) { return a - b; });
+        }
+
+        function openBulkModal(operation) {
+            if (!slugDupeData || !slugDupeData.groups || !slugDupeData.groups.length) return;
+            var groups = slugDupeData.groups;
+            var ignoredGroups = slugDupeData.ignored_groups || [];
+            var opLabel = operation === 'trash' ? 'Trash' : 'Draft';
+            var opColor = operation === 'trash' ? '#ef4444' : '#6b7280';
+            var opIcon  = operation === 'trash' ? 'dashicons-trash' : 'dashicons-hidden';
+
+            var html = '';
+
+            // Header
+            html += '<div class="bulk-modal-header">';
+            html += '<h3 style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">';
+            html += '<span class="dashicons ' + opIcon + '" style="color:' + opColor + '; font-size:20px; width:20px; height:20px;"></span>';
+            html += opLabel + ' Duplicates</h3>';
+            html += '<button type="button" id="bulk-modal-close" class="bulk-modal-x-close">&times;</button>';
+            html += '</div>';
+
+            // Pattern selection bar
+            var suffixes = detectSuffixes(groups);
+            html += '<div class="bulk-pattern-bar">';
+            html += '<span class="bulk-pattern-label">Select:</span>';
+            html += '<button type="button" class="bulk-pattern-btn" data-select-mode="originals">All Originals</button>';
+            html += '<button type="button" class="bulk-pattern-btn" data-select-mode="duplicates">All Duplicates</button>';
+            for (var si = 0; si < suffixes.length; si++) {
+                html += '<button type="button" class="bulk-pattern-btn" data-select-mode="suffix" data-suffix="' + suffixes[si] + '">All -' + suffixes[si] + 's</button>';
             }
-            if (!confirm(confirmMsg)) return;
+            html += '</div>';
 
-            var $btn = $(this);
-            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Trashing...');
+            // Subtitle
+            html += '<p class="bulk-modal-subtitle"><strong>Checked pages</strong> will be <strong>' + opLabel.toLowerCase() + 'ed</strong>. ';
+            html += 'Unchecked pages survive. Leave a group fully unchecked to skip it. ';
+            html += 'If you trash the original page, pick which duplicate takes over its URL.</p>';
 
+            // Scrollable groups
+            html += '<div class="bulk-modal-groups-wrap">';
+            for (var i = 0; i < groups.length; i++) {
+                var g = groups[i];
+                var typeClass = g.type === 'true_duplicate' ? 'true' : 'orphaned';
+                var typeLabel = g.type === 'true_duplicate' ? 'Duplicate' : 'Orphaned';
+                html += '<div class="bulk-modal-group" data-group-index="' + i + '" data-clean-slug="' + escHtml(g.base_slug) + '" data-group-type="' + escHtml(g.type) + '">';
+                html += '<div class="bulk-modal-group-header">';
+                html += '<code style="font-size:12px; font-weight:600; background:#f3f4f6; padding:1px 6px; border-radius:3px;">/' + escHtml(g.base_slug) + '/</code>';
+                if (g.parent_title) html += ' <span style="font-size:11px; color:#9ca3af;">in ' + escHtml(g.parent_title) + '</span>';
+                html += '<span class="slug-dupe-type-badge slug-dupe-type-' + typeClass + '">' + typeLabel + '</span>';
+                html += '<button type="button" class="bulk-modal-skip-btn">Skip group</button>';
+                html += '</div>';
+
+                // Build all pages: original first, then duplicates
+                var pages = [];
+                if (g.original) pages.push({ pg: g.original, isOriginal: true });
+                for (var d = 0; d < g.duplicates.length; d++) pages.push({ pg: g.duplicates[d], isOriginal: false });
+
+                for (var pi = 0; pi < pages.length; pi++) {
+                    var item = pages[pi];
+                    var pg   = item.pg;
+                    var isOrig = item.isOriginal;
+                    var isDupe = !isOrig;
+                    // Default: true_duplicate → check all -N pages, leave original unchecked
+                    //          orphaned (no original) → leave first page unchecked, check rest
+                    var isChecked;
+                    if (g.type === 'true_duplicate') {
+                        isChecked = isDupe;
+                    } else {
+                        isChecked = pi > 0;
+                    }
+                    // Extract slug from permalink for suffix filtering
+                    var pageSlug = '';
+                    var slugFromPermalink = (pg.permalink || '').replace(/\/$/, '').match(/\/([^\/]+)$/);
+                    if (slugFromPermalink) pageSlug = slugFromPermalink[1];
+
+                    html += '<label class="bulk-modal-page-row ' + (isChecked ? 'is-actioned' : 'is-kept') + '" data-page-id="' + pg.id + '" data-is-duplicate="' + (isDupe ? '1' : '0') + '" data-slug="' + escHtml(pageSlug) + '">';
+                    html += '<input type="checkbox" class="bulk-modal-cb" data-page-id="' + pg.id + '" data-is-duplicate="' + (isDupe ? '1' : '0') + '"' + (isChecked ? ' checked' : '') + '>';
+                    html += '<div class="bulk-modal-page-info">';
+                    html += '<span class="bulk-modal-page-title">' + escHtml(pg.title) + '</span>';
+                    html += '<span class="slug-dupe-status-badge slug-dupe-status-' + pg.status + '">' + escHtml(pg.status) + '</span>';
+                    if (isOrig) html += '<span class="bulk-modal-original-label">Original</span>';
+                    if (pg.in_sitemap) html += '<span class="slug-dupe-sitemap-badge" style="font-size:10px;">In Sitemap</span>';
+                    if (pg.missing_acf_count > 0) html += '<span class="bulk-modal-acf-warn">&#9888; ' + pg.missing_acf_count + ' missing ACF</span>';
+                    if (pg.children_count > 0) html += '<span class="bulk-modal-children-warn"><span class="dashicons dashicons-warning"></span>' + pg.children_count + ' child' + (pg.children_count !== 1 ? 'ren' : '') + '</span>';
+                    html += '<span class="bulk-modal-page-url">' + escHtml(pg.permalink) + '</span>';
+                    html += '</div>';
+                    html += '<span class="bulk-modal-action-label"></span>';
+                    html += '</label>';
+                }
+
+                // Pick Primary section — shown when original is checked for a true_duplicate group
+                if (g.type === 'true_duplicate' && g.duplicates.length > 0) {
+                    html += '<div class="bulk-promote-section" style="display:none;">';
+                    html += '<div class="bulk-promote-label"><span class="dashicons dashicons-admin-home"></span> Which page should take over <code>/' + escHtml(g.base_slug) + '/</code>?</div>';
+                    html += '<div class="bulk-promote-options">';
+                    for (var qi = 0; qi < g.duplicates.length; qi++) {
+                        var ppg = g.duplicates[qi];
+                        html += '<label class="bulk-promote-option">';
+                        html += '<input type="radio" class="bulk-promote-radio" name="bulk-promote-' + i + '" value="' + ppg.id + '">';
+                        html += ' ' + escHtml(ppg.title) + ' <span style="color:#9ca3af; font-size:11px;">' + escHtml(ppg.permalink) + '</span>';
+                        html += '</label>';
+                    }
+                    html += '</div></div>';
+                }
+
+                // Warning div (can't-check-all message)
+                html += '<div class="bulk-modal-group-warn" style="display:none;"></div>';
+                html += '</div>'; // end group
+            }
+
+            // Ignored groups toggle
+            if (ignoredGroups.length > 0) {
+                html += '<div class="bulk-modal-ignored-toggle" id="bulk-modal-ignored-toggle">';
+                html += '<span class="dashicons dashicons-arrow-right-alt2"></span> Show ' + ignoredGroups.length + ' ignored group' + (ignoredGroups.length !== 1 ? 's' : '');
+                html += '</div>';
+                html += '<div id="bulk-modal-ignored-list" style="display:none;">';
+                for (var ii = 0; ii < ignoredGroups.length; ii++) {
+                    var ig = ignoredGroups[ii];
+                    html += '<div class="bulk-modal-ignored-row">';
+                    html += '<code style="font-size:12px;">/' + escHtml(ig.base_slug || '') + '/</code>';
+                    if (ig.parent_title) html += ' <span style="font-size:11px; color:#9ca3af;">in ' + escHtml(ig.parent_title) + '</span>';
+                    html += '<span class="bulk-modal-ignored-badge">Ignored</span>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
+            html += '</div>'; // end groups-wrap
+
+            // Footer
+            html += '<div class="bulk-modal-footer">';
+            html += '<button type="button" class="button" id="bulk-modal-cancel">Cancel</button>';
+            html += '<button type="button" class="button button-primary bulk-modal-confirm-btn" id="bulk-modal-confirm" data-operation="' + operation + '" style="background:' + opColor + '; border-color:' + opColor + ';">';
+            html += '<span class="dashicons ' + opIcon + '"></span> <span id="bulk-modal-confirm-label">Confirm</span>';
+            html += '</button>';
+            html += '</div>';
+
+            $('#bulk-smart-modal').html(html);
+            $bulkModalOverlay.css('display', 'flex');
+            updateBulkModalSummary();
+        }
+
+        function updateBulkModalSummary() {
+            var totalAction = 0;
+            var needsPrimary = false;
+            var op = $('#bulk-modal-confirm').data('operation');
+            var opVerb = op === 'trash' ? 'Trash' : 'Draft';
+
+            $('.bulk-modal-group').each(function() {
+                var $group = $(this);
+                var $allCbs = $group.find('.bulk-modal-cb');
+                var groupType = $group.data('group-type');
+
+                // Update row visual states
+                $allCbs.each(function() {
+                    var $cb = $(this);
+                    var $row = $cb.closest('.bulk-modal-page-row');
+                    var $lbl = $row.find('.bulk-modal-action-label');
+                    if ($cb.is(':checked')) {
+                        $row.addClass('is-actioned').removeClass('is-kept');
+                        totalAction++;
+                        $lbl.text(opVerb);
+                    } else {
+                        $row.addClass('is-kept').removeClass('is-actioned');
+                        $lbl.text('Keeping');
+                    }
+                });
+
+                // Skipped group styling (all unchecked)
+                var isSkipped = $allCbs.filter(':checked').length === 0;
+                $group.toggleClass('bulk-modal-skipped', isSkipped);
+                $group.find('.bulk-modal-skip-btn').text(isSkipped ? 'Reset defaults' : 'Skip group');
+
+                // Pick Primary: show when original is checked (true_duplicate only)
+                var $origCb = $group.find('.bulk-modal-cb[data-is-duplicate="0"]');
+                var $pickSection = $group.find('.bulk-promote-section');
+                if (groupType === 'true_duplicate' && $origCb.length && $origCb.is(':checked') && $pickSection.length) {
+                    // Show only options for currently surviving (unchecked) -N pages
+                    var $survivors = $group.find('.bulk-modal-cb[data-is-duplicate="1"]:not(:checked)');
+                    $pickSection.find('.bulk-promote-option').each(function() {
+                        var radioVal = String($(this).find('.bulk-promote-radio').val());
+                        var stillSurviving = $survivors.filter('[data-page-id="' + radioVal + '"]').length > 0;
+                        $(this).toggle(stillSurviving);
+                        if (!stillSurviving) $(this).find('.bulk-promote-radio').prop('checked', false);
+                    });
+                    $pickSection.show();
+                    // Auto-select sole survivor
+                    if ($survivors.length === 1 && !$pickSection.find('.bulk-promote-radio:checked').length) {
+                        $pickSection.find('.bulk-promote-radio[value="' + $survivors.data('page-id') + '"]').prop('checked', true);
+                    }
+                    if (!$pickSection.find('.bulk-promote-radio:checked').length) {
+                        needsPrimary = true;
+                    }
+                } else if ($pickSection.length) {
+                    $pickSection.hide();
+                    $pickSection.find('.bulk-promote-radio').prop('checked', false);
+                }
+            });
+
+            var lbl, disabled;
+            if (totalAction === 0) {
+                lbl = opVerb + ' (check pages below)';
+                disabled = true;
+            } else if (needsPrimary) {
+                lbl = 'Pick primary page first \u2191';
+                disabled = true;
+            } else {
+                lbl = opVerb + ' ' + totalAction + ' page' + (totalAction !== 1 ? 's' : '');
+                disabled = false;
+            }
+            $('#bulk-modal-confirm-label').text(lbl);
+            $('#bulk-modal-confirm').prop('disabled', disabled);
+        }
+
+        function executeBulkSmart() {
+            var op = $('#bulk-modal-confirm').data('operation');
+            var decisions = [];
+            $('.bulk-modal-group').each(function() {
+                var $group = $(this);
+                var cleanSlug = $group.data('clean-slug');
+                var actionIds = [];
+                $group.find('.bulk-modal-cb:checked').each(function() {
+                    actionIds.push(parseInt($(this).data('page-id')));
+                });
+                if (!actionIds.length) return; // skip group
+                var promoteId = null;
+                var $pr = $group.find('.bulk-promote-radio:checked');
+                if ($pr.length) {
+                    promoteId = parseInt($pr.val());
+                }
+                decisions.push({
+                    action_ids: actionIds,
+                    promote_id: promoteId,
+                    rename_slug: promoteId ? cleanSlug : null
+                });
+            });
+            if (!decisions.length) return;
+            var $btn = $('#bulk-modal-confirm');
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Processing...');
             $.post(ajaxurl, {
-                action: 'hozio_duplicate_slug_bulk',
+                action: 'hozio_duplicate_slug_bulk_smart',
                 nonce: nonce,
-                operation: 'trash_duplicates',
-                page_ids: ids
+                operation: op,
+                decisions: JSON.stringify(decisions)
             }, function(response) {
+                $bulkModalOverlay.hide();
                 if (response.success) {
                     var s = response.data.succeeded.length;
                     var f = response.data.failed.length;
-                    var msg = s + ' trashed';
+                    var msg = s + ' page' + (s !== 1 ? 's' : '') + ' processed';
                     if (f > 0) msg += ', ' + f + ' failed';
-                    alert(msg + '.');
+                    $('#hozio-slug-dupe-status').html('<span class="slug-dupe-clean"><span class="dashicons dashicons-yes-alt"></span> ' + escHtml(msg) + '</span>');
+                    setTimeout(function() { slugDupeAutoScan(); }, 1500);
+                } else {
+                    alert('Bulk operation failed: ' + (typeof response.data === 'string' ? response.data : 'Unknown error'));
+                    slugDupeAutoScan();
+                }
+            }).fail(function() {
+                $bulkModalOverlay.hide();
+                alert('Request failed. Please try again.');
+            });
+        }
+
+        // Bulk modal event handlers
+        $(document).on('click', '#bulk-modal-close, #bulk-modal-cancel', function() { $bulkModalOverlay.hide(); });
+        $bulkModalOverlay.on('click', function(e) { if ($(e.target).is($bulkModalOverlay)) $bulkModalOverlay.hide(); });
+        $(document).on('click', '#bulk-modal-confirm', function() { executeBulkSmart(); });
+
+        // Checkbox change — with can't-check-all guard
+        $(document).on('change', '.bulk-modal-cb', function() {
+            var $cb = $(this);
+            var $group = $cb.closest('.bulk-modal-group');
+            var $allCbs = $group.find('.bulk-modal-cb');
+            if ($cb.is(':checked') && $allCbs.filter(':not(:checked)').length === 0) {
+                $cb.prop('checked', false);
+                var $warn = $group.find('.bulk-modal-group-warn');
+                $warn.html('<span class="dashicons dashicons-warning" style="color:#f59e0b; font-size:14px; width:14px; height:14px;"></span> At least one page per group must remain.').show();
+                setTimeout(function() { $warn.fadeOut(200); }, 3000);
+                return;
+            }
+            updateBulkModalSummary();
+        });
+
+        // Promote radio change
+        $(document).on('change', '.bulk-promote-radio', function() { updateBulkModalSummary(); });
+
+        // Skip group button (toggles between skip and reset defaults)
+        $(document).on('click', '.bulk-modal-skip-btn', function() {
+            var $btn = $(this);
+            var $group = $btn.closest('.bulk-modal-group');
+            var groupType = $group.data('group-type');
+            if ($group.hasClass('bulk-modal-skipped')) {
+                // Restore defaults
+                var pageIndex = 0;
+                $group.find('.bulk-modal-cb').each(function() {
+                    var isDupe = $(this).data('is-duplicate') === 1 || $(this).data('is-duplicate') === '1';
+                    var isChecked = (groupType === 'true_duplicate') ? isDupe : (pageIndex > 0);
+                    $(this).prop('checked', isChecked);
+                    pageIndex++;
+                });
+            } else {
+                $group.find('.bulk-modal-cb').prop('checked', false);
+            }
+            updateBulkModalSummary();
+        });
+
+        // Pattern selection buttons
+        $(document).on('click', '.bulk-pattern-btn', function() {
+            var mode = $(this).data('select-mode');
+            var suffix = $(this).data('suffix');
+            $('.bulk-modal-group').each(function() {
+                var $group = $(this);
+                var $allCbs = $group.find('.bulk-modal-cb');
+                if (mode === 'originals') {
+                    $allCbs.filter('[data-is-duplicate="0"]').prop('checked', true);
+                    $allCbs.filter('[data-is-duplicate="1"]').prop('checked', false);
+                } else if (mode === 'duplicates') {
+                    $allCbs.filter('[data-is-duplicate="1"]').prop('checked', true);
+                    $allCbs.filter('[data-is-duplicate="0"]').prop('checked', false);
+                } else if (mode === 'suffix') {
+                    $allCbs.each(function() {
+                        var $cb = $(this);
+                        var isDupe = $cb.data('is-duplicate') === 1 || $cb.data('is-duplicate') === '1';
+                        if (!isDupe) return; // leave originals untouched
+                        var pageSlug = $cb.closest('.bulk-modal-page-row').data('slug') || '';
+                        var m = String(pageSlug).match(/-(\d+)$/);
+                        if (m && parseInt(m[1]) === suffix) {
+                            $cb.prop('checked', true);
+                        } else {
+                            $cb.prop('checked', false); // uncheck non-matching -N pages
+                        }
+                    });
+                }
+                // Guard: ensure at least one unchecked per group
+                if ($allCbs.filter(':not(:checked)').length === 0) {
+                    $allCbs.last().prop('checked', false);
+                }
+            });
+            updateBulkModalSummary();
+        });
+
+        // Ignored groups toggle in modal
+        $(document).on('click', '#bulk-modal-ignored-toggle', function() {
+            var $list = $('#bulk-modal-ignored-list');
+            var $icon = $(this).find('.dashicons');
+            if ($list.is(':visible')) {
+                $list.slideUp(150);
+                $icon.removeClass('dashicons-arrow-down-alt2').addClass('dashicons-arrow-right-alt2');
+            } else {
+                $list.slideDown(150);
+                $icon.removeClass('dashicons-arrow-right-alt2').addClass('dashicons-arrow-down-alt2');
+            }
+        });
+
+        // Ignore group handler
+        $(document).on('click', '.slug-dupe-ignore-btn', function() {
+            var $btn = $(this);
+            var groupKey = $btn.data('group-key');
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span>');
+            $.post(ajaxurl, {
+                action: 'hozio_duplicate_slug_ignore_group',
+                nonce: nonce,
+                group_key: groupKey
+            }, function(response) {
+                if (response.success) {
                     slugDupeAutoScan();
                 } else {
-                    alert('Bulk trash failed.');
+                    alert('Ignore failed: ' + (typeof response.data === 'string' ? response.data : 'Unknown error'));
+                    $btn.prop('disabled', false).html('<span class="dashicons dashicons-dismiss" style="font-size:14px; margin-top:1px;"></span> Ignore Group');
                 }
-                $btn.prop('disabled', false);
             }).fail(function() {
                 alert('Request failed.');
-                $btn.prop('disabled', false);
+                $btn.prop('disabled', false).html('<span class="dashicons dashicons-dismiss" style="font-size:14px; margin-top:1px;"></span> Ignore Group');
             });
         });
 
-        // Bulk draft duplicates
-        $(document).on('click', '.slug-dupe-bulk-draft-btn', function() {
-            if (!slugDupeData) return;
-            var ids = [];
-            for (var i = 0; i < slugDupeData.groups.length; i++) {
-                var g = slugDupeData.groups[i];
-                for (var d = 0; d < g.duplicates.length; d++) {
-                    if (g.duplicates[d].status === 'publish') {
-                        ids.push(g.duplicates[d].id);
+        // Unignore group handler
+        $(document).on('click', '.slug-dupe-unignore-btn', function() {
+            var $btn = $(this);
+            var groupKey = $btn.data('group-key');
+            $btn.prop('disabled', true).text('...');
+            $.post(ajaxurl, {
+                action: 'hozio_duplicate_slug_unignore_group',
+                nonce: nonce,
+                group_key: groupKey
+            }, function(response) {
+                if (response.success) {
+                    slugDupeAutoScan();
+                } else {
+                    alert('Unignore failed: ' + (typeof response.data === 'string' ? response.data : 'Unknown error'));
+                    $btn.prop('disabled', false).text('Unignore');
+                }
+            }).fail(function() {
+                alert('Request failed.');
+                $btn.prop('disabled', false).text('Unignore');
+            });
+        });
+
+        // Make Primary — open modal
+        var $promoteOverlay = $('#hozio-promote-modal-overlay');
+        var currentPromoteData = null;
+
+        $(document).on('click', '.slug-dupe-promote-btn', function() {
+            var $btn = $(this);
+            var otherDupeIds = [];
+            var otherDupes = [];
+            try { otherDupeIds = JSON.parse($btn.attr('data-other-dupe-ids') || '[]'); } catch(e) {}
+            try { otherDupes = JSON.parse($btn.attr('data-other-dupes') || '[]'); } catch(e) {}
+            currentPromoteData = {
+                duplicateId:    $btn.data('duplicate-id'),
+                originalId:     $btn.data('original-id'),
+                origTitle:      $btn.data('orig-title'),
+                origSlug:       $btn.data('orig-slug'),
+                dupeSlug:       $btn.data('dupe-slug'),
+                cleanSlug:      $btn.data('clean-slug'),
+                origChildren:   parseInt($btn.data('orig-children')) || 0,
+                confirmChildren: false,
+                otherDupeIds:   otherDupeIds,
+                otherDupes:     otherDupes
+            };
+
+            // Build the dynamic actions list
+            var listHtml = '';
+            // Original page trashed
+            listHtml += '<li>Trash <strong>' + escHtml(currentPromoteData.origTitle) + '</strong>';
+            listHtml += ' (<code>/' + escHtml(currentPromoteData.origSlug) + '/</code>) &mdash; original</li>';
+            // Each other duplicate trashed
+            for (var oi = 0; oi < otherDupes.length; oi++) {
+                listHtml += '<li>Trash <strong>' + escHtml(otherDupes[oi].title) + '</strong>';
+                listHtml += ' (<code>/' + escHtml(otherDupes[oi].slug) + '/</code>) &mdash; duplicate</li>';
+            }
+            // This page gets the clean URL
+            listHtml += '<li>Give <strong>this page</strong> the URL <code>/' + escHtml(currentPromoteData.cleanSlug) + '/</code>';
+            listHtml += ' (was <code>/' + escHtml(currentPromoteData.dupeSlug) + '/</code>)</li>';
+            $('#hozio-promote-actions-list').html(listHtml);
+
+            $('#hozio-promote-orig-title2').text(currentPromoteData.origTitle);
+            if (currentPromoteData.origChildren > 0) {
+                $('#hozio-promote-children-count').text(currentPromoteData.origChildren);
+                $('#hozio-promote-children-warning').show();
+            } else {
+                $('#hozio-promote-children-warning').hide();
+            }
+
+            $promoteOverlay.css('display', 'flex');
+        });
+
+        $('#hozio-promote-cancel').on('click', function() {
+            $promoteOverlay.hide();
+            currentPromoteData = null;
+        });
+
+        $promoteOverlay.on('click', function(e) {
+            if ($(e.target).is($promoteOverlay)) {
+                $promoteOverlay.hide();
+                currentPromoteData = null;
+            }
+        });
+
+        $('#hozio-promote-confirm').on('click', function() {
+            if (!currentPromoteData) return;
+            var $btn = $(this);
+            $btn.prop('disabled', true).text('Promoting...');
+
+            $.post(ajaxurl, {
+                action:              'hozio_duplicate_slug_promote',
+                nonce:               nonce,
+                duplicate_id:        currentPromoteData.duplicateId,
+                original_id:         currentPromoteData.originalId,
+                confirm_children:    currentPromoteData.confirmChildren ? '1' : '0',
+                other_duplicate_ids: currentPromoteData.otherDupeIds.join(',')
+            }, function(response) {
+                $btn.prop('disabled', false).text('Yes, Make This Page Primary');
+                if (response.success) {
+                    $promoteOverlay.hide();
+                    var d = response.data;
+                    var msg = '<span class="dashicons dashicons-yes-alt"></span> Promoted! New URL: <a href="' + escHtml(d.new_permalink) + '" target="_blank">' + escHtml(d.new_permalink) + '</a>';
+                    $('#hozio-slug-dupe-status').html('<span class="slug-dupe-clean">' + msg + '</span>');
+                    setTimeout(function() { slugDupeAutoScan(); }, 2000);
+                } else {
+                    if (response.data && response.data.code === 'has_children') {
+                        currentPromoteData.confirmChildren = true;
+                        $('#hozio-promote-children-count').text(response.data.children_count);
+                        $('#hozio-promote-children-warning').show();
+                        alert('This page has ' + response.data.children_count + ' child page(s). Click "Yes, Make This Page Primary" again to confirm.');
+                    } else {
+                        alert('Promote failed: ' + (typeof response.data === 'string' ? response.data : (response.data && response.data.message ? response.data.message : 'Unknown error')));
                     }
                 }
-            }
-            if (ids.length === 0) { alert('No published duplicates to draft.'); return; }
-            if (!confirm('Set ' + ids.length + ' duplicate page(s) to draft?\n\nPages will be unpublished but not deleted.')) return;
-
-            var $btn = $(this);
-            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update slug-dupe-spin"></span> Drafting...');
-
-            $.post(ajaxurl, {
-                action: 'hozio_duplicate_slug_bulk',
-                nonce: nonce,
-                operation: 'draft_duplicates',
-                page_ids: ids
-            }, function(response) {
-                if (response.success) {
-                    var s = response.data.succeeded.length;
-                    var f = response.data.failed.length;
-                    var msg = s + ' drafted';
-                    if (f > 0) msg += ', ' + f + ' failed';
-                    alert(msg + '.');
-                    slugDupeAutoScan();
-                } else {
-                    alert('Bulk draft failed.');
-                }
-                $btn.prop('disabled', false);
             }).fail(function() {
-                alert('Request failed.');
-                $btn.prop('disabled', false);
+                $btn.prop('disabled', false).text('Yes, Make This Page Primary');
+                alert('Request failed. Please try again.');
             });
         });
 
-        // Auto-scan on page load
-        slugDupeAutoScan();
+        // Auto-scan on page load — pass false to use the 12-hour transient cache if available.
+        // Only force a fresh scan after data-changing actions (fix, trash, draft, promote, etc.).
+        slugDupeAutoScan(false);
+
+        // ========================================
+        // TOWN PAGE ACF CONTENT CHECKER
+        // ========================================
+        var townAcfData = null;
+        var townAcfExpandedPages = {}; // { pageId: true }
+
+        function townAcfAutoScan(force) {
+            var $status  = $('#hozio-town-acf-status');
+            var $actions = $('#hozio-town-acf-actions');
+            var $results = $('#hozio-town-acf-results');
+            var $count   = $('#hozio-town-acf-count');
+
+            $status.html('<span class="slug-dupe-loading"><span class="dashicons dashicons-update slug-dupe-spin"></span> Scanning town pages...</span>');
+            $actions.hide().empty();
+            $results.empty();
+            $count.hide();
+            townAcfExpandedPages = {};
+
+            $.post(ajaxurl, {
+                action: 'hozio_town_acf_scan',
+                nonce:  nonce,
+                force:  force ? '1' : '0'
+            }, function(response) {
+                if (!response.success) {
+                    $status.html('<span style="color:#dc2626;">Scan failed: ' + escHtml(String(response.data || 'Unknown error')) + '</span>');
+                    return;
+                }
+                townAcfData = response.data;
+                renderTownAcfResults();
+            }).fail(function() {
+                $status.html('<span style="color:#dc2626;">Request failed. <a href="#" id="town-acf-retry">Retry</a></span>');
+            });
+        }
+
+        $(document).on('click', '#town-acf-retry, #town-acf-rescan', function(e) {
+            e.preventDefault();
+            townAcfAutoScan(true);
+        });
+
+        function renderTownAcfResults() {
+            var $status  = $('#hozio-town-acf-status');
+            var $actions = $('#hozio-town-acf-actions');
+            var $results = $('#hozio-town-acf-results');
+            var $count   = $('#hozio-town-acf-count');
+            var d        = townAcfData;
+
+            if (!d) return;
+
+            var actionsHtml = '<div class="slug-dupe-toolbar">';
+            actionsHtml += '<button type="button" class="button button-small" id="town-acf-rescan"><span class="dashicons dashicons-update"></span> Re-scan</button>';
+            actionsHtml += '</div>';
+            $actions.html(actionsHtml).show();
+
+            if (d.total_pages === 0) {
+                $status.html('<span class="slug-dupe-clean"><span class="dashicons dashicons-info-outline"></span> No pages found with <code>town_taxonomies</code> terms.</span>');
+                $count.hide();
+                return;
+            }
+
+            if (d.total_with_issues === 0) {
+                $status.html('<span class="slug-dupe-clean"><span class="dashicons dashicons-yes-alt"></span> All ' + d.total_pages + ' town page' + (d.total_pages !== 1 ? 's' : '') + ' have complete content. No missing fields.</span>');
+                $count.hide();
+                return;
+            }
+
+            $count.text(d.total_with_issues).show();
+            $status.html('<span class="slug-dupe-warning"><span class="dashicons dashicons-warning"></span> <strong>' + d.total_with_issues + '</strong> of <strong>' + d.total_pages + '</strong> town page' + (d.total_pages !== 1 ? 's' : '') + ' have missing ACF fields.</span>');
+
+            var html = '';
+            for (var i = 0; i < d.pages.length; i++) {
+                var pg = d.pages[i];
+                var expanded = !!townAcfExpandedPages[pg.id];
+                html += '<div class="town-acf-page-row" data-page-id="' + pg.id + '">';
+                html += '<div class="town-acf-page-row-header">';
+                html += '<span class="town-acf-page-title">' + escHtml(pg.title) + '</span>';
+                html += '<a href="' + escHtml(pg.permalink) + '" target="_blank" class="town-acf-page-url">' + escHtml(pg.permalink) + '</a>';
+                html += '<span class="town-acf-missing-badge"><span class="dashicons dashicons-warning"></span> ' + pg.missing_count + ' field' + (pg.missing_count !== 1 ? 's' : '') + ' missing</span>';
+                html += '<div class="town-acf-page-row-actions">';
+                html += '<a href="' + escHtml(adminUrl + 'post.php?post=' + pg.id + '&action=edit') + '" target="_blank" class="slug-dupe-link-btn" title="Edit page"><span class="dashicons dashicons-edit"></span></a>';
+                html += '<button type="button" class="button button-small town-acf-toggle-btn" data-page-id="' + pg.id + '">';
+                html += expanded ? '<span class="dashicons dashicons-arrow-up-alt2"></span> Hide Fields' : '<span class="dashicons dashicons-arrow-down-alt2"></span> Show Fields';
+                html += '</button>';
+                html += '</div>';
+                html += '</div>'; // end row-header
+
+                if (expanded) {
+                    html += '<div class="town-acf-field-list">';
+                    // Group missing fields by section
+                    var grpMap = {}, grpOrder = [];
+                    for (var f = 0; f < pg.missing_fields.length; f++) {
+                        var mf = pg.missing_fields[f];
+                        if (!grpMap[mf.group]) { grpMap[mf.group] = []; grpOrder.push(mf.group); }
+                        grpMap[mf.group].push(mf.label);
+                    }
+                    for (var gi = 0; gi < grpOrder.length; gi++) {
+                        html += '<div class="town-acf-field-group">';
+                        html += '<span class="town-acf-group-label">' + escHtml(grpOrder[gi]) + ':</span> ';
+                        html += grpMap[grpOrder[gi]].map(function(l) { return '<span class="town-acf-field-name">' + escHtml(l) + '</span>'; }).join(', ');
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                }
+                html += '</div>'; // end page-row
+            }
+            $results.html(html);
+        }
+
+        $(document).on('click', '.town-acf-toggle-btn', function() {
+            var pid = $(this).data('page-id');
+            if (townAcfExpandedPages[pid]) {
+                delete townAcfExpandedPages[pid];
+            } else {
+                townAcfExpandedPages[pid] = true;
+            }
+            renderTownAcfResults();
+        });
+
+        // Auto-scan town pages on load
+        townAcfAutoScan(false);
 
         function renderUnassignedPages() {
             var $list = $('#hozio-unassigned-list');
@@ -5229,6 +6608,228 @@ function hozio_sitemap_layout_inline_styles() {
             margin-top: -1px;
         }
 
+        /* Active state for View Details button */
+        .slug-dupe-btn-active,
+        .slug-dupe-btn-active:hover {
+            background: #2271b1 !important;
+            border-color: #135e96 !important;
+            color: #fff !important;
+            font-weight: 600;
+        }
+
+        /* Ignored groups toolbar button */
+        .slug-dupe-show-ignored-btn {
+            background: #fff8f0;
+            border-color: #d97706;
+            color: #92400e;
+        }
+        .slug-dupe-show-ignored-btn:hover {
+            background: #fef3c7;
+            border-color: #b45309;
+            color: #78350f;
+        }
+        .slug-dupe-show-ignored-btn.active,
+        .slug-dupe-show-ignored-btn.active:hover {
+            background: #d97706 !important;
+            border-color: #b45309 !important;
+            color: #fff !important;
+            font-weight: 600;
+        }
+
+        /* Ignored section header label */
+        .slug-dupe-ignored-section-header {
+            margin: 18px 0 8px;
+            padding: 7px 12px;
+            background: #fef3c7;
+            border: 1px solid #fcd34d;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #78350f;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .slug-dupe-ignored-section-header .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+        }
+
+        /* Ignored group card styling */
+        .slug-dupe-group--ignored {
+            opacity: 0.75;
+            border: 2px dashed #d97706 !important;
+            background: #fffbf0;
+        }
+        .slug-dupe-group--ignored .slug-dupe-group-header {
+            background: #fef3c7 !important;
+            border-bottom-color: #fcd34d !important;
+        }
+
+        /* IGNORED badge inside group header */
+        .slug-dupe-ignored-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 6px;
+            background: #d97706;
+            color: #fff;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            margin-left: 6px;
+        }
+
+        /* Draft toggle switch in toolbar */
+        .slug-dupe-draft-toggle-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #6b7280;
+            cursor: pointer;
+            margin-left: 4px;
+            user-select: none;
+        }
+        .slug-dupe-draft-toggle-label input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+        .slug-dupe-draft-toggle-track {
+            position: relative;
+            display: inline-block;
+            width: 30px;
+            height: 17px;
+            background: #ccc;
+            border-radius: 17px;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        .slug-dupe-draft-toggle-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 13px;
+            height: 13px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        #slug-dupe-show-drafts-toggle:checked + .slug-dupe-draft-toggle-track {
+            background: #2271b1;
+        }
+        #slug-dupe-show-drafts-toggle:checked + .slug-dupe-draft-toggle-track .slug-dupe-draft-toggle-thumb {
+            transform: translateX(13px);
+        }
+        .slug-dupe-draft-toggle-text {
+            color: #6b7280;
+        }
+
+        /* Ignore group button */
+        .slug-dupe-ignore-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            background: #f9fafb;
+            color: #6b7280;
+            white-space: nowrap;
+            transition: all 0.15s;
+        }
+        .slug-dupe-ignore-btn:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+            color: #374151;
+        }
+        .slug-dupe-ignore-btn .dashicons {
+            font-size: 13px;
+            width: 13px;
+            height: 13px;
+        }
+
+        /* Make Primary button */
+        .slug-dupe-promote-btn {
+            color: #1d4ed8;
+            border-color: #bfdbfe;
+        }
+        .slug-dupe-promote-btn:hover {
+            background: #eff6ff;
+            border-color: #3b82f6;
+        }
+
+        /* ACF missing-fields badge + popover */
+        .acf-missing-wrap {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+        .acf-missing-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 7px;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            line-height: 1.4;
+            white-space: nowrap;
+        }
+        .acf-missing-badge:hover {
+            background: #fde68a;
+            border-color: #f59e0b;
+        }
+        .acf-missing-badge .dashicons {
+            font-size: 13px;
+            width: 13px;
+            height: 13px;
+            color: #d97706;
+        }
+        .acf-missing-popover {
+            display: none;
+            position: fixed;
+            z-index: 999999;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            box-shadow: 0 4px 20px rgba(0,0,0,.18);
+            padding: 10px 12px;
+            width: 300px;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .acf-missing-popover-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #92400e;
+            margin-bottom: 7px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #fef3c7;
+        }
+        .acf-missing-popover-group {
+            font-size: 12px;
+            color: #374151;
+            margin-bottom: 4px;
+            line-height: 1.5;
+        }
+        .acf-missing-popover-group:last-child { margin-bottom: 0; }
+        .acf-group-label {
+            font-weight: 600;
+            color: #6b7280;
+        }
+
         /* Highlight flash for Go-to navigation */
         @keyframes highlightFlash {
             0% { background-color: #fef08a; box-shadow: 0 0 0 3px #facc15; }
@@ -5330,6 +6931,477 @@ function hozio_sitemap_layout_inline_styles() {
                 padding: 12px 16px;
                 font-size: 14px;
             }
+        }
+
+        /* ========================================
+           BULK SMART MODAL
+           ======================================== */
+        .bulk-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #fafbfc;
+            border-radius: 8px 8px 0 0;
+            flex-shrink: 0;
+        }
+        .bulk-modal-x-close {
+            background: none;
+            border: none;
+            font-size: 22px;
+            cursor: pointer;
+            color: #9ca3af;
+            padding: 0 4px;
+            line-height: 1;
+            border-radius: 4px;
+        }
+        .bulk-modal-x-close:hover { background: #f3f4f6; color: #374151; }
+        .bulk-modal-subtitle {
+            margin: 0;
+            padding: 9px 20px;
+            font-size: 13px;
+            color: #6b7280;
+            border-bottom: 1px solid #e5e7eb;
+            background: #fff;
+            flex-shrink: 0;
+        }
+        .bulk-modal-groups-wrap {
+            overflow-y: auto;
+            flex: 1;
+            padding: 12px 16px;
+            background: #f9fafb;
+        }
+        .bulk-modal-group {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .bulk-modal-group-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .bulk-modal-page-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 9px 12px;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+        .bulk-modal-page-row:last-of-type { border-bottom: none; }
+        .bulk-modal-page-row:hover { background: #f9fafb; }
+        .bulk-modal-page-row.is-kept {
+            background: #f0fdf4;
+            border-left: 3px solid #22c55e;
+        }
+        .bulk-modal-page-row.is-actioned {
+            background: #fef2f2;
+            border-left: 3px solid #f87171;
+            opacity: 0.85;
+        }
+        .bulk-modal-cb {
+            flex-shrink: 0;
+            cursor: pointer;
+            margin-top: 2px;
+            width: 15px;
+            height: 15px;
+        }
+        .bulk-modal-page-info {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            min-width: 0;
+        }
+        .bulk-modal-page-title {
+            font-weight: 600;
+            color: #1f2937;
+            font-size: 13px;
+        }
+        .bulk-modal-original-label {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 5px;
+            background: #dcfce7;
+            color: #15803d;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        .bulk-modal-page-url {
+            font-size: 11px;
+            color: #9ca3af;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .bulk-modal-acf-warn {
+            font-size: 11px;
+            color: #92400e;
+        }
+        .bulk-modal-children-warn {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            font-size: 11px;
+            color: #b45309;
+        }
+        .bulk-modal-children-warn .dashicons {
+            font-size: 12px;
+            width: 12px;
+            height: 12px;
+        }
+        .bulk-modal-action-label {
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 600;
+            color: #9ca3af;
+            min-width: 90px;
+            text-align: right;
+            align-self: center;
+        }
+        .bulk-modal-page-row.is-kept .bulk-modal-action-label { color: #15803d; }
+        .bulk-modal-page-row.is-actioned .bulk-modal-action-label { color: #dc2626; }
+        .bulk-modal-group-warn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: #fef3c7;
+            border-top: 1px solid #fcd34d;
+            font-size: 12px;
+            color: #92400e;
+        }
+        .bulk-modal-group-warn .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+        }
+        .bulk-modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 14px 20px;
+            border-top: 1px solid #e5e7eb;
+            background: #fafbfc;
+            border-radius: 0 0 8px 8px;
+            flex-shrink: 0;
+        }
+        .bulk-modal-footer .button {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .bulk-modal-confirm-btn {
+            color: #fff !important;
+        }
+        .bulk-modal-confirm-btn .dashicons {
+            font-size: 15px;
+            width: 15px;
+            height: 15px;
+        }
+        /* Pattern bar */
+        .bulk-pattern-bar {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 8px 16px;
+            background: #f3f4f6;
+            border-bottom: 1px solid #e5e7eb;
+            flex-shrink: 0;
+        }
+        .bulk-pattern-label {
+            font-size: 11px;
+            color: #6b7280;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .bulk-pattern-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 9px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #fff;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            cursor: pointer;
+            color: #374151;
+            transition: background 0.1s, border-color 0.1s;
+        }
+        .bulk-pattern-btn:hover {
+            background: #e5e7eb;
+            border-color: #9ca3af;
+        }
+        /* Skip group button */
+        .bulk-modal-skip-btn {
+            margin-left: auto;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 11px;
+            color: #9ca3af;
+            padding: 2px 4px;
+            border-radius: 3px;
+            text-decoration: underline;
+        }
+        .bulk-modal-skip-btn:hover { color: #6b7280; }
+        /* Skipped group */
+        .bulk-modal-group.bulk-modal-skipped {
+            opacity: 0.55;
+            border-color: #d1d5db;
+        }
+        .bulk-modal-group.bulk-modal-skipped .bulk-modal-group-header {
+            background: #f3f4f6;
+        }
+        /* Pick Primary section */
+        .bulk-promote-section {
+            border-top: 1px solid #fcd34d;
+            background: #fffbeb;
+            padding: 8px 12px 10px;
+            border-left: 3px solid #f59e0b;
+        }
+        .bulk-promote-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #92400e;
+            margin-bottom: 6px;
+        }
+        .bulk-promote-label .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+            color: #f59e0b;
+        }
+        .bulk-promote-options {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .bulk-promote-option {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            font-size: 12px;
+            color: #374151;
+            cursor: pointer;
+            padding: 3px 4px;
+            border-radius: 3px;
+        }
+        .bulk-promote-option:hover { background: #fef3c7; }
+        .bulk-promote-radio { cursor: pointer; flex-shrink: 0; }
+        /* Ignored groups section in modal */
+        .bulk-modal-ignored-toggle {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 8px 16px;
+            font-size: 12px;
+            color: #9ca3af;
+            cursor: pointer;
+            border-top: 1px solid #e5e7eb;
+        }
+        .bulk-modal-ignored-toggle:hover { color: #6b7280; }
+        .bulk-modal-ignored-toggle .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+        }
+        .bulk-modal-ignored-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border-top: 1px solid #f3f4f6;
+            background: #fafbfc;
+        }
+        .bulk-modal-ignored-badge {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 1px 5px;
+            background: #e5e7eb;
+            color: #6b7280;
+            border-radius: 3px;
+            margin-left: auto;
+        }
+
+        /* ---- Row-select checkboxes ---- */
+        .slug-dupe-select-cb {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            width: 28px;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+        .slug-dupe-select-cb input[type="checkbox"] {
+            margin: 0;
+            cursor: pointer;
+            width: 14px;
+            height: 14px;
+        }
+        .slug-dupe-select-mode-active .slug-dupe-select-cb {
+            display: flex;
+        }
+        .slug-dupe-select-mode-active .slug-dupe-row {
+            cursor: default;
+        }
+        .slug-dupe-select-mode-active .slug-dupe-row-original,
+        .slug-dupe-select-mode-active .slug-dupe-row-duplicate {
+            display: flex;
+            align-items: center;
+        }
+        .slug-dupe-select-mode-active .slug-dupe-row-info {
+            flex: 1;
+        }
+        /* Highlight selected rows */
+        .slug-dupe-row:has(.slug-dupe-row-checkbox:checked) {
+            background: #eff6ff;
+            outline: 1px solid #93c5fd;
+        }
+
+        /* Selection action bar */
+        #slug-dupe-select-bar {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        #slug-dupe-select-bar.visible {
+            display: flex;
+        }
+        .slug-dupe-select-op-btn .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+            vertical-align: middle;
+            margin-top: -1px;
+        }
+
+        /* Town ACF count badge */
+        .town-acf-count-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 6px;
+            background: #7c3aed;
+            color: #fff;
+            border-radius: 11px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        /* Town ACF page rows */
+        .town-acf-page-row {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .town-acf-page-row-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 14px;
+            background: #fafbfc;
+            border-bottom: 1px solid transparent;
+            flex-wrap: wrap;
+        }
+        .town-acf-page-row:has(.town-acf-field-list) .town-acf-page-row-header {
+            border-bottom-color: #e5e7eb;
+        }
+        .town-acf-page-title {
+            font-weight: 600;
+            font-size: 13px;
+            color: #111827;
+            flex-shrink: 0;
+        }
+        .town-acf-page-url {
+            font-size: 12px;
+            color: #6b7280;
+            text-decoration: none;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+        .town-acf-page-url:hover { color: #2271b1; text-decoration: underline; }
+        .town-acf-missing-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 8px;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .town-acf-missing-badge .dashicons {
+            font-size: 13px;
+            width: 13px;
+            height: 13px;
+            color: #d97706;
+        }
+        .town-acf-page-row-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+        .town-acf-toggle-btn .dashicons {
+            font-size: 13px;
+            width: 13px;
+            height: 13px;
+            vertical-align: middle;
+            margin-top: -1px;
+        }
+        .town-acf-field-list {
+            padding: 10px 14px 10px 20px;
+            background: #fff;
+        }
+        .town-acf-field-group {
+            font-size: 12px;
+            color: #374151;
+            margin-bottom: 5px;
+            line-height: 1.6;
+        }
+        .town-acf-field-group:last-child { margin-bottom: 0; }
+        .town-acf-group-label {
+            font-weight: 600;
+            color: #7c3aed;
+        }
+        .town-acf-field-name {
+            background: #f3f0ff;
+            color: #5b21b6;
+            border-radius: 3px;
+            padding: 0 4px;
+            font-family: monospace;
+            font-size: 11px;
         }
     </style>
     <?php
