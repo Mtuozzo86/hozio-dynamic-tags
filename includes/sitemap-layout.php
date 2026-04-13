@@ -30,6 +30,8 @@ add_action('save_post_page', function($post_id) {
     if (wp_is_post_autosave($post_id) || wp_is_post_revision($post_id)) return;
     delete_transient('hozio_duplicate_slug_cache');
     delete_transient('hozio_town_acf_cache');
+    delete_transient('hozio_town_acf_missing_content_count');
+    delete_metadata('user', 0, 'hozio_town_acf_banner_dismissed', '', true);
     // Only reset the per-user banner dismiss when the saved page itself has a -N duplicate slug.
     // Resetting on every page save was unnecessarily dismissing banners for all admins constantly.
     $saved_post = get_post($post_id);
@@ -41,7 +43,9 @@ add_action('before_delete_post', function($post_id) {
     if (get_post_type($post_id) === 'page') {
         delete_transient('hozio_duplicate_slug_cache');
         delete_transient('hozio_town_acf_cache');
+        delete_transient('hozio_town_acf_missing_content_count');
         delete_metadata('user', 0, 'hozio_duplicate_banner_dismissed', '', true);
+        delete_metadata('user', 0, 'hozio_town_acf_banner_dismissed', '', true);
     }
 });
 
@@ -93,6 +97,118 @@ add_action('wp_ajax_hozio_dismiss_duplicate_banner', function() {
     check_ajax_referer('hozio_dismiss_duplicate_banner');
     update_user_meta(get_current_user_id(), 'hozio_duplicate_banner_dismissed', 1);
     wp_send_json_success();
+});
+
+// ========================================
+// ADMIN-WIDE TOWN ACF CONTENT BANNER
+// ========================================
+add_action('admin_notices', function() {
+    if (!current_user_can('manage_options')) return;
+    // Don't show on the Layout Editor tab itself
+    if (isset($_GET['page']) && $_GET['page'] === 'hozio-sitemap-settings' &&
+        isset($_GET['tab']) && $_GET['tab'] === 'layout') return;
+    $dismissed = get_user_meta(get_current_user_id(), 'hozio_town_acf_banner_dismissed', true);
+    if ($dismissed) return;
+    $count = get_transient('hozio_town_acf_missing_content_count');
+    if ($count === false || (int)$count <= 0) return;
+    $count = (int)$count;
+    $url   = admin_url('admin.php?page=hozio-sitemap-settings&tab=layout');
+    $nonce = wp_create_nonce('hozio_dismiss_town_acf_banner');
+    ?>
+    <div class="notice notice-warning is-dismissible" id="hozio-town-acf-banner" style="border-left-color: #7c3aed;">
+        <p><strong style="color: #5b21b6;">Hozio Pro &mdash; Town Page Content Issues:</strong>
+        <?php echo esc_html($count); ?> town page<?php echo $count !== 1 ? 's' : ''; ?> have missing ACF content fields.
+        <a href="<?php echo esc_url($url); ?>" style="font-weight: 600;">Review in Sitemap Layout Editor &rarr;</a></p>
+    </div>
+    <script>jQuery(function($){$('#hozio-town-acf-banner').on('click','.notice-dismiss',function(){$.post(ajaxurl,{action:'hozio_dismiss_town_acf_banner',_wpnonce:'<?php echo esc_js($nonce); ?>'});});});</script>
+    <?php
+});
+
+// AJAX: dismiss the town ACF content banner (per-user)
+add_action('wp_ajax_hozio_dismiss_town_acf_banner', function() {
+    check_ajax_referer('hozio_dismiss_town_acf_banner');
+    update_user_meta(get_current_user_id(), 'hozio_town_acf_banner_dismissed', 1);
+    wp_send_json_success();
+});
+
+// ========================================
+// TOWN ACF BACKGROUND SCAN (WP-CRON)
+// Runs twice daily so the banner populates without requiring a manual scan.
+// Only fires when the transient is absent — no work done when cache is fresh.
+// NOTE: Add wp_clear_scheduled_hook('hozio_town_acf_background_scan') to the
+// plugin deactivation hook in hozio-dynamic-tags.php to clean up on uninstall.
+// ========================================
+add_action('init', function() {
+    if (!wp_next_scheduled('hozio_town_acf_background_scan')) {
+        wp_schedule_event(time(), 'twicedaily', 'hozio_town_acf_background_scan');
+    }
+});
+
+add_action('hozio_town_acf_background_scan', function() {
+    // Already fresh — nothing to do
+    if (get_transient('hozio_town_acf_missing_content_count') !== false) return;
+
+    // The 32 content-type ACF field keys (matches AJAX scan — excludes links/other)
+    $content_fields = array(
+        'hog_hero_image', 'hog_hero_seo_heading', 'hog_hero_section_headline:', 'hog_hero_body',
+        'hog_outcomes_image', 'hog_outcomes_seo_heading', 'hog_outcomes_section_headline', 'hog_outcomes_body',
+        'hog_about_us_image', 'hog_about_us_seo_heading', 'hog_about_us_section_headline', 'hog_about_us_body',
+        'hog_how_it_works_image', 'hog_how_it_works_seo_heading', 'hog_how_it_works_section_headline', 'hog_how_it_works_body',
+        'hog_service_related_info_image', 'hog_service-related_information_seo_heading',
+        'hog_service-related_information_section_headline', 'hog_service-related_information_body',
+        'new_hog_faq_question_1', 'new_hog_faq_answer_1', 'new_hog_faq_question_2', 'new_hog_faq_answer_2',
+        'new_hog_faq_question_3', 'new_hog_faq_answer_3', 'new_hog_faq_question_4', 'new_hog_faq_answer_4',
+        'new_hog_faq_question_5', 'new_hog_faq_answer_5', 'new_hog_faq_question_6', 'new_hog_faq_answer_6',
+    );
+
+    $town_page_ids = get_posts(array(
+        'post_type'              => 'page',
+        'post_status'            => 'publish',
+        'posts_per_page'         => -1,
+        'no_found_rows'          => true,
+        'update_post_meta_cache' => false,
+        'update_post_term_cache' => false,
+        'fields'                 => 'ids',
+        'tax_query'              => array(
+            array('taxonomy' => 'town_taxonomies', 'operator' => 'EXISTS'),
+        ),
+    ));
+
+    if (empty($town_page_ids)) {
+        set_transient('hozio_town_acf_missing_content_count', 0, 13 * HOUR_IN_SECONDS);
+        return;
+    }
+
+    global $wpdb;
+    $id_ph  = implode(',', array_fill(0, count($town_page_ids), '%d'));
+    $key_ph = implode(',', array_fill(0, count($content_fields), '%s'));
+
+    // Fetch only filled (non-empty) values — rows absent from result = missing field
+    $rows = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT post_id, meta_key FROM {$wpdb->postmeta}
+             WHERE post_id IN ($id_ph) AND meta_key IN ($key_ph)
+             AND meta_value != '' AND meta_value != '0'",
+            array_merge($town_page_ids, $content_fields)
+        )
+    );
+
+    $filled = array();
+    foreach ($rows as $row) {
+        $filled[$row->post_id][$row->meta_key] = true;
+    }
+
+    $count = 0;
+    foreach ($town_page_ids as $pid) {
+        foreach ($content_fields as $field_key) {
+            if (empty($filled[$pid][$field_key])) {
+                $count++;
+                break; // one missing field per page is enough
+            }
+        }
+    }
+
+    set_transient('hozio_town_acf_missing_content_count', $count, 13 * HOUR_IN_SECONDS);
 });
 
 // ========================================
@@ -1445,6 +1561,18 @@ add_action('wp_ajax_hozio_town_acf_scan', function() {
         'total_pages'       => count($town_pages),
         'total_with_issues' => count($result_pages),
     );
+
+    // Count pages with at least one content-type missing field (for admin banner)
+    $content_missing_count = 0;
+    foreach ($result_pages as $rp) {
+        foreach ($rp['missing_fields'] as $mf) {
+            if ($mf['type'] === 'content') {
+                $content_missing_count++;
+                break; // one per page is enough
+            }
+        }
+    }
+    set_transient('hozio_town_acf_missing_content_count', $content_missing_count, 12 * HOUR_IN_SECONDS);
 
     set_transient('hozio_town_acf_cache', $response, 12 * HOUR_IN_SECONDS);
     wp_send_json_success($response);

@@ -9,6 +9,46 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 // ══════════════════════════════════════════════════════════
+// 0. CUSTOM LEADS TABLE (wp_hozio_leads)
+// ══════════════════════════════════════════════════════════
+add_action( 'init', function() {
+    if ( get_option( 'hozio_leads_db_version' ) !== '4' ) {
+        global $wpdb;
+        $table   = $wpdb->prefix . 'hozio_leads';
+        $charset = $wpdb->get_charset_collate();
+        $sql     = "CREATE TABLE IF NOT EXISTS `{$table}` (
+            id         bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            created_at datetime            NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            deleted_at datetime            NULL DEFAULT NULL,
+            source     varchar(100)        NOT NULL DEFAULT '',
+            name       varchar(255)        NOT NULL DEFAULT '',
+            email      varchar(255)        NOT NULL DEFAULT '',
+            phone      varchar(100)        NOT NULL DEFAULT '',
+            referer    varchar(500)        NOT NULL DEFAULT '',
+            fields     longtext            NOT NULL DEFAULT '',
+            PRIMARY KEY (id),
+            KEY idx_created (created_at),
+            KEY idx_deleted (deleted_at)
+        ) {$charset};";
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        dbDelta( $sql );
+
+        // Safety net: dbDelta can fail to add columns to existing tables.
+        // Explicitly add deleted_at if it still isn't there.
+        $col_exists = $wpdb->get_var( "SHOW COLUMNS FROM `{$table}` LIKE 'deleted_at'" );
+        if ( ! $col_exists ) {
+            $wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `deleted_at` datetime NULL DEFAULT NULL, ADD KEY `idx_deleted` (`deleted_at`)" );
+            // Re-check: only mark complete when column is confirmed present.
+            $col_exists = $wpdb->get_var( "SHOW COLUMNS FROM `{$table}` LIKE 'deleted_at'" );
+        }
+
+        if ( $col_exists ) {
+            update_option( 'hozio_leads_db_version', '4' );
+        }
+    }
+} );
+
+// ══════════════════════════════════════════════════════════
 // 1. ADMIN MENU SETUP
 // ══════════════════════════════════════════════════════════
 add_action( 'admin_menu', function() {
@@ -412,28 +452,141 @@ function hozio_get_submissions( $per_page = 50, $page = 1 ) {
  * Get stats (total, today, this week) — separate lightweight queries.
  */
 function hozio_get_lead_stats() {
-    if ( ! hozio_submissions_tables_exist() ) return [ 0, 0, 0 ];
-
     global $wpdb;
-    $subs = $wpdb->prefix . 'e_submissions';
+    $total = 0; $today_count = 0; $week_count = 0;
+    $today_str = gmdate( 'Y-m-d 00:00:00' );
+    $week_str  = gmdate( 'Y-m-d 00:00:00', strtotime( '-7 days' ) );
 
-    $total = (int) $wpdb->get_var(
-        $wpdb->prepare( "SELECT COUNT(*) FROM `{$subs}` WHERE status <> %s", 'trash' )
-    );
-    $today = (int) $wpdb->get_var(
-        $wpdb->prepare(
-            "SELECT COUNT(*) FROM `{$subs}` WHERE status <> %s AND created_at >= %s",
-            'trash', gmdate( 'Y-m-d 00:00:00' )
-        )
-    );
-    $week = (int) $wpdb->get_var(
-        $wpdb->prepare(
-            "SELECT COUNT(*) FROM `{$subs}` WHERE status <> %s AND created_at >= %s",
-            'trash', gmdate( 'Y-m-d 00:00:00', strtotime( '-7 days' ) )
-        )
-    );
+    if ( hozio_submissions_tables_exist() ) {
+        $subs        = $wpdb->prefix . 'e_submissions';
+        $total       += (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$subs}` WHERE status <> %s", 'trash' ) );
+        $today_count += (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$subs}` WHERE status <> %s AND created_at >= %s", 'trash', $today_str ) );
+        $week_count  += (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$subs}` WHERE status <> %s AND created_at >= %s", 'trash', $week_str ) );
+    }
 
-    return [ $total, $today, $week ];
+    if ( hozio_custom_leads_table_exists() ) {
+        $ht           = $wpdb->prefix . 'hozio_leads';
+        $total       += (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$ht}` WHERE deleted_at IS NULL" );
+        $today_count += (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$ht}` WHERE deleted_at IS NULL AND created_at >= %s", $today_str ) );
+        $week_count  += (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$ht}` WHERE deleted_at IS NULL AND created_at >= %s", $week_str ) );
+    }
+
+    return [ $total, $today_count, $week_count ];
+}
+
+/**
+ * Check if the custom wp_hozio_leads table exists.
+ */
+function hozio_custom_leads_table_exists() {
+    static $exists = null;
+    if ( $exists !== null ) return $exists;
+    global $wpdb;
+    $table  = $wpdb->prefix . 'hozio_leads';
+    $exists = $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) === $table;
+    return $exists;
+}
+
+/**
+ * Fetch all leads from wp_hozio_leads, shaped like Elementor submission objects.
+ */
+function hozio_get_custom_leads_all() {
+    if ( ! hozio_custom_leads_table_exists() ) return [];
+    global $wpdb;
+    $table = $wpdb->prefix . 'hozio_leads';
+    $rows  = $wpdb->get_results( "SELECT * FROM `{$table}` WHERE deleted_at IS NULL ORDER BY created_at DESC" );
+    $leads = [];
+    foreach ( $rows as $row ) {
+        $fields = json_decode( $row->fields, true ) ?: [];
+        $leads[] = (object) [
+            'id'         => (int) $row->id,
+            'ltype'      => 'hozio',
+            'created_at' => $row->created_at,
+            'post_id'    => 0,
+            'referer'    => $row->referer,
+            'status'     => 'completed',
+            'name'       => $row->name,
+            'email'      => $row->email,
+            'phone'      => $row->phone,
+            'fields'     => $fields,
+            'has_data'   => ( $row->name !== '' || $row->email !== '' || $row->phone !== '' ),
+            'platform'   => $row->source ?: 'Unknown',
+        ];
+    }
+    return $leads;
+}
+
+/**
+ * Get distinct platform names that have leads in wp_hozio_leads.
+ */
+function hozio_get_custom_lead_platforms() {
+    if ( ! hozio_custom_leads_table_exists() ) return [];
+    global $wpdb;
+    $table   = $wpdb->prefix . 'hozio_leads';
+    $sources = $wpdb->get_col( "SELECT DISTINCT source FROM `{$table}` WHERE source <> '' AND deleted_at IS NULL ORDER BY source ASC" );
+    return array_map( 'sanitize_text_field', $sources );
+}
+
+/**
+ * Merge Elementor + custom leads, sort by date, paginate.
+ *
+ * @param int $per_page  0 = all
+ * @param int $page
+ * @return array [ 'submissions' => [...], 'total' => int ]
+ */
+function hozio_get_all_leads( $per_page = 50, $page = 1 ) {
+    $leads = [];
+
+    // Elementor leads
+    if ( hozio_submissions_tables_exist() ) {
+        $result = hozio_get_submissions( 0, 1 ); // 0 = all records
+        if ( $result && ! empty( $result['submissions'] ) ) {
+            foreach ( $result['submissions'] as $s ) {
+                if ( ! isset( $s->ltype ) ) $s->ltype    = 'elementor';
+                if ( ! isset( $s->platform ) ) $s->platform = 'Elementor';
+                $leads[] = $s;
+            }
+        }
+    }
+
+    // Custom leads
+    foreach ( hozio_get_custom_leads_all() as $s ) {
+        $leads[] = $s;
+    }
+
+    // Sort by created_at DESC
+    usort( $leads, function( $a, $b ) {
+        return strtotime( $b->created_at ) - strtotime( $a->created_at );
+    } );
+
+    $total = count( $leads );
+
+    if ( $per_page > 0 ) {
+        $offset = max( 0, ( $page - 1 ) * $per_page );
+        $leads  = array_slice( $leads, $offset, $per_page );
+    }
+
+    return [ 'submissions' => $leads, 'total' => $total ];
+}
+
+/**
+ * Shared helper — insert one lead record into wp_hozio_leads.
+ */
+function hozio_insert_lead_record( $source, $name, $email, $phone, $referer, $fields ) {
+    if ( ! hozio_custom_leads_table_exists() ) return;
+    global $wpdb;
+    $wpdb->insert(
+        $wpdb->prefix . 'hozio_leads',
+        [
+            'source'     => sanitize_text_field( $source ),
+            'name'       => sanitize_text_field( $name ),
+            'email'      => sanitize_email( $email ),
+            'phone'      => sanitize_text_field( $phone ),
+            'referer'    => esc_url_raw( $referer ),
+            'fields'     => wp_json_encode( $fields ),
+            'created_at' => current_time( 'mysql', true ),
+        ],
+        [ '%s', '%s', '%s', '%s', '%s', '%s', '%s' ]
+    );
 }
 
 /**
@@ -461,37 +614,386 @@ function hozio_status_badge( $status ) {
 }
 
 
+/**
+ * Get all trashed leads (Elementor + custom), merged and sorted.
+ */
+function hozio_get_all_trashed_leads( $per_page = 50, $page = 1 ) {
+    $leads = [];
+
+    // Trashed Elementor leads
+    if ( hozio_submissions_tables_exist() ) {
+        global $wpdb;
+        $subs = $wpdb->prefix . 'e_submissions';
+        $vals = $wpdb->prefix . 'e_submissions_values';
+        $rows = $wpdb->get_results( $wpdb->prepare(
+            "SELECT id, created_at, post_id, referer, status FROM `{$subs}` WHERE status = %s ORDER BY created_at DESC",
+            'trash'
+        ) );
+        if ( $rows ) {
+            $ids          = array_map( 'intval', wp_list_pluck( $rows, 'id' ) );
+            $placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+            $all_values   = $wpdb->get_results(
+                $wpdb->prepare( "SELECT submission_id, `key`, `value` FROM `{$vals}` WHERE submission_id IN ({$placeholders})", ...$ids ),
+                ARRAY_A
+            );
+            $values_map = [];
+            foreach ( $all_values as $v ) {
+                $values_map[ (int) $v['submission_id'] ][ $v['key'] ] = $v['value'];
+            }
+            foreach ( $rows as $row ) {
+                $m     = $values_map[ (int) $row->id ] ?? [];
+                $name  = trim( ( $m['fname'] ?? '' ) . ' ' . ( $m['lname'] ?? '' ) );
+                $email = $m['email'] ?? '';
+                $phone = $m['tel']   ?? '';
+                $leads[] = (object) [
+                    'id'         => (int) $row->id,
+                    'ltype'      => 'elementor',
+                    'created_at' => $row->created_at,
+                    'post_id'    => (int) $row->post_id,
+                    'referer'    => $row->referer,
+                    'status'     => 'trash',
+                    'name'       => $name,
+                    'email'      => $email,
+                    'phone'      => $phone,
+                    'fields'     => $m,
+                    'has_data'   => ( $name !== '' || $email !== '' || $phone !== '' ),
+                    'platform'   => 'Elementor',
+                ];
+            }
+        }
+    }
+
+    // Trashed custom leads
+    if ( hozio_custom_leads_table_exists() ) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'hozio_leads';
+        $rows  = $wpdb->get_results( "SELECT * FROM `{$table}` WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC" );
+        foreach ( $rows as $row ) {
+            $fields  = json_decode( $row->fields, true ) ?: [];
+            $leads[] = (object) [
+                'id'         => (int) $row->id,
+                'ltype'      => 'hozio',
+                'created_at' => $row->created_at,
+                'post_id'    => 0,
+                'referer'    => $row->referer,
+                'status'     => 'trash',
+                'name'       => $row->name,
+                'email'      => $row->email,
+                'phone'      => $row->phone,
+                'fields'     => $fields,
+                'has_data'   => ( $row->name !== '' || $row->email !== '' || $row->phone !== '' ),
+                'platform'   => $row->source ?: 'Unknown',
+            ];
+        }
+    }
+
+    usort( $leads, function( $a, $b ) {
+        return strtotime( $b->created_at ) - strtotime( $a->created_at );
+    } );
+
+    $total = count( $leads );
+    if ( $per_page > 0 ) {
+        $offset = max( 0, ( $page - 1 ) * $per_page );
+        $leads  = array_slice( $leads, $offset, $per_page );
+    }
+    return [ 'submissions' => $leads, 'total' => $total ];
+}
+
+/**
+ * Count all trashed leads across sources.
+ */
+function hozio_get_trash_count() {
+    global $wpdb;
+    $count = 0;
+    if ( hozio_submissions_tables_exist() ) {
+        $count += (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->prefix}e_submissions` WHERE status = %s", 'trash' ) );
+    }
+    if ( hozio_custom_leads_table_exists() ) {
+        $count += (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}hozio_leads` WHERE deleted_at IS NOT NULL" );
+    }
+    return $count;
+}
+
+/**
+ * Auto-purge custom leads that have been in trash 30+ days.
+ */
+function hozio_auto_purge_trash() {
+    if ( ! hozio_custom_leads_table_exists() ) return;
+    global $wpdb;
+    $cutoff = gmdate( 'Y-m-d H:i:s', strtotime( '-30 days' ) );
+    $wpdb->query( $wpdb->prepare(
+        "DELETE FROM `{$wpdb->prefix}hozio_leads` WHERE deleted_at IS NOT NULL AND deleted_at < %s",
+        $cutoff
+    ) );
+}
+
+/**
+ * Rule-based spam/test score — no AI required.
+ * Returns [ 'score' => 0–100, 'label' => string, 'class' => string, 'flags' => [] ]
+ */
+/**
+ * Rule-based spam/test score — no AI required.
+ *
+ * Three separate signal pools:
+ *   $test_score  — looks like an internal / placeholder test submission
+ *   $spam_score  — looks like outbound marketing spam
+ *   $real_score  — positive signals that suggest a genuine lead (reduces risk)
+ *
+ * Returns [ 'score' => 0–100, 'label' => string, 'class' => string, 'flags' => [] ]
+ */
+function hozio_lead_spam_score( $name, $email, $phone, $fields = [], $referer = '' ) {
+    $test_score = 0;
+    $spam_score = 0;
+    $real_score = 0;
+    $flags      = [];
+
+    $name_lc  = strtolower( trim( $name ) );
+    $email_lc = strtolower( trim( $email ) );
+    $phone_d  = preg_replace( '/\D/', '', $phone );
+
+    // ── Name: test / placeholder signals ──
+    if ( $name_lc ) {
+        foreach ( [ 'test', 'testing', 'asdf', 'qwerty', 'foo', 'bar', 'baz', 'aaa', 'bbb', 'xxx', '123', 'admin', 'user', 'john doe', 'jane doe', 'lorem ipsum', 'sample', 'demo', 'example', 'placeholder', 'fake', 'temp', 'tester' ] as $kw ) {
+            if ( strpos( $name_lc, $kw ) !== false ) { $test_score += 35; $flags[] = 'Test/placeholder name'; break; }
+        }
+        $stripped = str_replace( ' ', '', $name_lc );
+        if ( $stripped && strlen( $stripped ) > 1 && strlen( count_chars( $stripped, 3 ) ) === 1 ) {
+            $test_score += 25; $flags[] = 'Repeated characters in name';
+        }
+        if ( strlen( $stripped ) <= 2 ) { $test_score += 20; $flags[] = 'Very short name'; }
+    }
+
+    // ── Email: disposable / test signals ──
+    if ( $email_lc && strpos( $email_lc, '@' ) !== false ) {
+        $at_pos = strrpos( $email_lc, '@' );
+        $local  = substr( $email_lc, 0, $at_pos );
+        $edom   = substr( $email_lc, $at_pos + 1 );
+        foreach ( [ 'mailinator.com', 'guerrillamail.com', 'tempmail.com', 'yopmail.com', 'throwam.com', 'sharklasers.com', 'trashmail.com', 'maildrop.cc', '10minutemail.com', 'fakeinbox.com', 'spambox.us', 'throwaway.email', 'dispostable.com', 'mailnull.com', 'mailnesia.com', 'spamgourmet.com', 'spam4.me', 'getairmail.com' ] as $d ) {
+            if ( $edom === $d || strpos( $edom, $d ) !== false ) { $test_score += 45; $flags[] = 'Disposable email domain'; break; }
+        }
+        foreach ( [ 'test', 'testing', 'spam', 'fake', 'demo', 'asdf', 'qwerty', 'temp', 'noreply', 'no-reply' ] as $kw ) {
+            if ( strpos( $local, $kw ) !== false ) { $test_score += 25; $flags[] = 'Test keyword in email'; break; }
+        }
+        if ( strlen( $local ) <= 2 ) { $test_score += 15; $flags[] = 'Very short email username'; }
+    }
+
+    // ── Phone: fake pattern signals ──
+    if ( $phone_d ) {
+        if ( strlen( $phone_d ) >= 7 && strlen( count_chars( $phone_d, 3 ) ) === 1 ) {
+            $test_score += 35; $flags[] = 'Repeated phone digits';
+        }
+        if ( in_array( $phone_d, [ '1234567890', '0987654321', '1234567', '0000000000', '9999999999', '5555555555', '1111111111' ], true ) ) {
+            $test_score += 40; $flags[] = 'Common fake phone pattern';
+        }
+        if ( strlen( $phone_d ) < 7 ) { $test_score += 15; $flags[] = 'Phone number too short'; }
+    }
+
+    // ── No contact info at all ──
+    if ( ! $name && ! $email && ! $phone ) { $test_score += 15; $flags[] = 'No contact info'; }
+
+    // ── Field content analysis ──
+    if ( ! empty( $fields ) && is_array( $fields ) ) {
+        $all_text  = strtolower( implode( ' ', array_map( 'strval', $fields ) ) );
+        $url_count = preg_match_all( '/https?:\/\//i', $all_text, $dummy );
+
+        // "hozio" anywhere → internal test by site staff
+        if ( strpos( $all_text, 'hozio' ) !== false ) {
+            $test_score += 50; $flags[] = 'Contains "hozio" — likely internal test';
+        }
+
+        // "test" as a standalone word in message content
+        if ( preg_match( '/\btest\b/', $all_text ) ) {
+            $test_score += 20; $flags[] = 'Test keyword in message';
+        }
+
+        // Unsubscribe link — dead giveaway for outbound marketing spam
+        if ( strpos( $all_text, 'unsubscribe' ) !== false ) {
+            $spam_score += 60; $flags[] = 'Contains unsubscribe link';
+        }
+
+        // Multiple URLs in message
+        if ( $url_count >= 2 ) {
+            $spam_score += 30; $flags[] = 'Multiple URLs in message';
+        } elseif ( $url_count === 1 ) {
+            $spam_score += 15; $flags[] = 'URL in message';
+        }
+
+        // Affiliate / referral URL params
+        if ( preg_match( '/[?&](refer|ref|aff|affiliate|utm_source)=/i', $all_text ) ) {
+            $spam_score += 20; $flags[] = 'Affiliate/referral URL';
+        }
+
+        // Marketing spam phrases
+        $phrase_pts = 0;
+        foreach ( [
+            'hidden money' => 25, 'learn more:' => 20, 'click here' => 15,
+            'limited time' => 15, 'act now' => 15, 'make money' => 20,
+            'earn money' => 20, 'increase your' => 10, 'exponentially' => 15,
+            'cashflow' => 15, 'cash flow' => 10, 'trigger points' => 15,
+            'best part is' => 10, "it's way easier" => 10,
+            'want to find' => 10, 'shares exactly how' => 15,
+        ] as $phrase => $pts ) {
+            if ( strpos( $all_text, $phrase ) !== false ) $phrase_pts += $pts;
+        }
+        if ( $phrase_pts > 0 ) {
+            $spam_score += min( 40, $phrase_pts ); $flags[] = 'Spam marketing language';
+        }
+
+        // Long promotional message (>300 chars) that also contains a URL
+        foreach ( $fields as $val ) {
+            if ( strlen( strval( $val ) ) > 300 && $url_count >= 1 ) {
+                $spam_score += 15; $flags[] = 'Long promotional message with URL'; break;
+            }
+        }
+    }
+
+    // ── Positive / real signals (subtract from risk) ──
+
+    // Valid US phone: 10 digits (or 11 starting with 1), area code + exchange don't start with 0 or 1
+    if ( $phone_d ) {
+        $us = ( strlen( $phone_d ) === 11 && $phone_d[0] === '1' ) ? substr( $phone_d, 1 ) : ( strlen( $phone_d ) === 10 ? $phone_d : '' );
+        if ( strlen( $us ) === 10 && $us[0] >= '2' && $us[3] >= '2' ) {
+            $real_score += 25;
+        }
+    }
+
+    // Email from a well-known consumer provider
+    if ( $email_lc && strpos( $email_lc, '@' ) !== false ) {
+        $edom2 = substr( $email_lc, strrpos( $email_lc, '@' ) + 1 );
+        if ( in_array( $edom2, [ 'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com', 'me.com', 'aol.com', 'live.com', 'msn.com', 'comcast.net', 'att.net', 'verizon.net', 'sbcglobal.net', 'cox.net', 'mac.com', 'yahoo.co.uk', 'btinternet.com' ], true ) ) {
+            $real_score += 15;
+        }
+    }
+
+    // Full name — two+ words made of real letters
+    if ( $name_lc ) {
+        $parts = array_filter( explode( ' ', trim( $name_lc ) ) );
+        if ( count( $parts ) >= 2 ) {
+            $all_alpha = true;
+            foreach ( $parts as $p ) {
+                if ( ! preg_match( "/^[a-z'\-\.]+$/i", $p ) ) { $all_alpha = false; break; }
+            }
+            if ( $all_alpha ) $real_score += 15;
+        }
+    }
+
+    // Referer is from the same site (real page on this domain, not an outside bot)
+    if ( $referer && function_exists( 'home_url' ) ) {
+        $site_host = parse_url( home_url(), PHP_URL_HOST );
+        $ref_host  = parse_url( $referer, PHP_URL_HOST );
+        if ( $site_host && $ref_host && $ref_host === $site_host ) {
+            $real_score += 20;
+        }
+    }
+
+    // ── Combine and classify ──
+    $risk = max( 0, min( 100, ( $test_score + $spam_score ) - $real_score ) );
+
+    if ( $risk === 0 )  return [ 'score' => 0,     'label' => 'Looks Real',  'class' => 'hl-spam-clean',  'flags' => [] ];
+    if ( $risk <= 35 )  return [ 'score' => $risk, 'label' => 'Review',      'class' => 'hl-spam-review', 'flags' => $flags ];
+
+    // High risk — use the dominant signal type for the label
+    if ( $spam_score > $test_score ) {
+        return [ 'score' => $risk, 'label' => 'Likely Spam', 'class' => 'hl-spam-spam', 'flags' => $flags ];
+    }
+    return [ 'score' => $risk, 'label' => 'Likely Test', 'class' => 'hl-spam-test', 'flags' => $flags ];
+}
+
+
 // ══════════════════════════════════════════════════════════
 // 3. ADMIN PAGE: Leads List (CRM Dashboard)
 // ══════════════════════════════════════════════════════════
 function hozio_leads_list_page() {
-    if ( ! hozio_submissions_tables_exist() ) {
-        echo '<div class="wrap"><h1>Lead Submissions</h1><p>No submissions table found.</p></div>';
-        return;
-    }
+    hozio_auto_purge_trash();
+
+    $is_trash_view = isset( $_GET['view'] ) && $_GET['view'] === 'trash';
 
     // Pagination
-    $per_page = 50;
+    $per_page     = 50;
     $current_page = isset( $_GET['paged'] ) ? max( 1, (int) $_GET['paged'] ) : 1;
 
-    $result = hozio_get_submissions( $per_page, $current_page );
+    if ( $is_trash_view ) {
+        $result = hozio_get_all_trashed_leads( $per_page, $current_page );
+    } else {
+        $result = hozio_get_all_leads( $per_page, $current_page );
+    }
     $submissions = $result['submissions'];
     $total_items = $result['total'];
     $total_pages = (int) ceil( $total_items / $per_page );
 
+    // View-tab counts
+    $all_count   = hozio_get_all_leads( 0, 1 )['total'];
+    $trash_count = hozio_get_trash_count();
+
+    // Build platform filter options (main view only)
+    $platform_options = [];
+    if ( ! $is_trash_view ) {
+        if ( hozio_submissions_tables_exist() ) {
+            $platform_options[] = 'Elementor';
+        }
+        foreach ( hozio_get_custom_lead_platforms() as $src ) {
+            $platform_options[] = $src;
+        }
+    }
+
     list( $stat_total, $stat_today, $stat_week ) = hozio_get_lead_stats();
 
-    // Nonce for the view links
-    $view_nonce = wp_create_nonce( 'hozio_view_lead' );
+    // Nonces
+    $view_nonce   = wp_create_nonce( 'hozio_view_lead' );
+    $action_nonce = wp_create_nonce( 'hozio_lead_action' );
+    $export_nonce = wp_create_nonce( 'hozio_export_leads' );
     ?>
     <div class="hozio-leads-wrap">
 
       <!-- Header -->
       <div class="hl-header">
         <div>
-          <h1 class="hl-title">Lead Submissions</h1>
-          <p class="hl-subtitle">Track and manage all your incoming leads</p>
+          <h1 class="hl-title"><?php echo $is_trash_view ? 'Trash' : 'Lead Submissions'; ?></h1>
+          <p class="hl-subtitle"><?php echo $is_trash_view ? 'Items in trash are automatically deleted after 30 days' : 'Track and manage all your incoming leads'; ?></p>
         </div>
+        <?php if ( ! $is_trash_view ) : ?>
+        <div class="hl-export-wrap">
+          <button type="button" id="hl-export-btn" class="hl-export-btn">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export CSV
+          </button>
+          <div class="hl-export-dropdown" id="hl-export-dropdown">
+            <div class="hl-export-dd-title">Select date range</div>
+            <a href="#" class="hl-export-option" data-range="all">All leads</a>
+            <a href="#" class="hl-export-option" data-range="1year">Last 1 year</a>
+            <a href="#" class="hl-export-option" data-range="3months">Last 3 months</a>
+            <a href="#" class="hl-export-option" data-range="week">Last week</a>
+            <a href="#" class="hl-export-option" data-range="yesterday">Yesterday</a>
+            <a href="#" class="hl-export-option" data-range="today">Today</a>
+          </div>
+        </div>
+        <?php endif; ?>
+      </div>
+
+      <!-- View Tabs -->
+      <div class="hl-view-tabs">
+        <a href="<?php echo esc_url( admin_url( 'admin.php?page=hozio-leads' ) ); ?>" class="hl-view-tab <?php echo ! $is_trash_view ? 'hl-tab-active' : ''; ?>">
+          All <span class="hl-tab-count"><?php echo esc_html( $all_count ); ?></span>
+        </a>
+        <a href="<?php echo esc_url( admin_url( 'admin.php?page=hozio-leads&view=trash' ) ); ?>" class="hl-view-tab <?php echo $is_trash_view ? 'hl-tab-active' : ''; ?>">
+          Trash <span class="hl-tab-count"><?php echo esc_html( $trash_count ); ?></span>
+        </a>
+      </div>
+
+      <!-- Webhook URL Banner -->
+      <div class="hl-webhook-banner">
+        <div class="hl-webhook-info">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span><strong>Webhook URL</strong> — paste this into any form plugin to send leads here:</span>
+        </div>
+        <div class="hl-webhook-url-row">
+          <code id="hl-webhook-url"><?php echo esc_html( rest_url( 'hozio/v1/lead' ) ); ?></code>
+          <button type="button" id="hl-copy-webhook" class="hl-copy-btn">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy URL
+          </button>
+        </div>
+        <p class="hl-webhook-hint">Include a <code>source</code> field (e.g. <code>"source": "WPForms"</code>) so you can tell which platform sent it. POST JSON or form-encoded body with any fields you want to capture.</p>
       </div>
 
       <!-- Stat Cards -->
@@ -528,10 +1030,22 @@ function hozio_leads_list_page() {
       <?php if ( empty( $submissions ) && $current_page === 1 ) : ?>
         <div class="hl-empty-state">
           <svg width="64" height="64" fill="none" stroke="#cbd5e1" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <h2>No leads yet</h2>
-          <p>When someone submits a form on your site, it'll show up here.</p>
+          <h2><?php echo $is_trash_view ? 'Trash is empty' : 'No leads yet'; ?></h2>
+          <p><?php echo $is_trash_view ? 'Trashed leads appear here.' : "When someone submits a form on your site, it'll show up here."; ?></p>
         </div>
       <?php else : ?>
+
+      <!-- Bulk Action Bar -->
+      <div class="hl-bulk-bar" id="hl-bulk-bar">
+        <span class="hl-bulk-count" id="hl-bulk-count">0 selected</span>
+        <?php if ( ! $is_trash_view ) : ?>
+          <button type="button" class="hl-bulk-btn hl-bulk-trash-btn" id="hl-bulk-trash">&#128465; Move to Trash</button>
+        <?php else : ?>
+          <button type="button" class="hl-bulk-btn hl-bulk-restore-btn" id="hl-bulk-restore">&#8617; Restore</button>
+          <button type="button" class="hl-bulk-btn hl-bulk-delete-btn" id="hl-bulk-delete">&#10005; Delete Permanently</button>
+        <?php endif; ?>
+        <button type="button" class="hl-bulk-btn hl-bulk-cancel-btn" id="hl-bulk-cancel">Cancel</button>
+      </div>
 
       <!-- Search & Filter Bar -->
       <div class="hl-toolbar">
@@ -551,6 +1065,14 @@ function hozio_leads_list_page() {
             <option value="has-data">With Contact Info</option>
             <option value="no-data">Missing Contact Info</option>
           </select>
+          <?php if ( ! empty( $platform_options ) ) : ?>
+          <select id="hl-filter-platform">
+            <option value="">All Platforms</option>
+            <?php foreach ( $platform_options as $plat ) : ?>
+              <option value="<?php echo esc_attr( strtolower( $plat ) ); ?>"><?php echo esc_html( $plat ); ?></option>
+            <?php endforeach; ?>
+          </select>
+          <?php endif; ?>
         </div>
       </div>
 
@@ -564,26 +1086,32 @@ function hozio_leads_list_page() {
         <table class="hl-table" id="hl-leads-table">
           <thead>
             <tr>
-              <th class="hl-sortable" data-col="0">Date <span class="hl-sort-icon">↕</span></th>
-              <th class="hl-sortable" data-col="1">Name <span class="hl-sort-icon">↕</span></th>
-              <th class="hl-sortable" data-col="2">Email <span class="hl-sort-icon">↕</span></th>
-              <th class="hl-sortable" data-col="3">Phone <span class="hl-sort-icon">↕</span></th>
+              <th class="hl-col-cb"><input type="checkbox" id="hl-select-all" title="Select all visible"></th>
+              <th class="hl-sortable" data-col="1">Date <span class="hl-sort-icon">↕</span></th>
+              <th class="hl-sortable" data-col="2">Name <span class="hl-sort-icon">↕</span></th>
+              <th class="hl-sortable" data-col="3">Email <span class="hl-sort-icon">↕</span></th>
+              <th class="hl-sortable" data-col="4">Phone <span class="hl-sort-icon">↕</span></th>
               <th>Status</th>
-              <th>Source</th>
-              <th style="width:90px;"></th>
+              <th>Platform</th>
+              <th>Risk</th>
+              <th style="width:160px;"></th>
             </tr>
           </thead>
           <tbody>
           <?php foreach ( $submissions as $s ) :
+              $ltype    = $s->ltype ?? 'elementor';
+              $platform = $s->platform ?? 'Elementor';
               $view_url = wp_nonce_url(
-                  admin_url( 'admin.php?page=hozio-lead-view&id=' . $s->id ),
+                  admin_url( 'admin.php?page=hozio-lead-view&id=' . $s->id . ( $ltype === 'hozio' ? '&ltype=hozio' : '' ) ),
                   'hozio_view_lead',
                   '_hlnonce'
               );
               $form_page    = $s->post_id ? get_the_title( $s->post_id ) : '';
-              $field_labels = hozio_get_form_field_labels( $s->post_id );
+              $field_labels = ( $ltype === 'elementor' ) ? hozio_get_form_field_labels( $s->post_id ) : [];
               $badge        = hozio_status_badge( $s->status );
               $relative     = hozio_relative_time( $s->created_at );
+              $plat_slug    = strtolower( preg_replace( '/[^a-z0-9]/i', '', $platform ) );
+              $spam         = hozio_lead_spam_score( $s->name, $s->email, $s->phone, (array) $s->fields, $s->referer ?? '' );
 
               // Build expanded detail fields (only non-empty)
               $detail_fields = [];
@@ -596,17 +1124,22 @@ function hozio_leads_list_page() {
                   } elseif ( preg_match( '/^[\+\d\s\-\(\)]{7,}$/', $value ) ) {
                       $display = '<a href="tel:' . esc_attr( preg_replace( '/[^\d\+]/', '', $value ) ) . '">' . esc_html( $value ) . '</a>';
                   }
-                  $detail_fields[] = [ 'label' => $label, 'display' => $display ];
+                  $is_long = strlen( (string) $value ) > 150;
+                $detail_fields[] = [ 'label' => $label, 'display' => $display, 'raw' => (string) $value, 'is_long' => $is_long ];
               }
           ?>
             <tr class="hl-row <?php echo $s->has_data ? '' : 'hl-row-dim'; ?>"
+                data-id="<?php echo esc_attr( $s->id ); ?>"
+                data-ltype="<?php echo esc_attr( $ltype ); ?>"
                 data-name="<?php echo esc_attr( strtolower( $s->name ) ); ?>"
                 data-email="<?php echo esc_attr( strtolower( $s->email ) ); ?>"
                 data-phone="<?php echo esc_attr( $s->phone ); ?>"
                 data-status="<?php echo esc_attr( $s->status ); ?>"
                 data-date="<?php echo esc_attr( $s->created_at ); ?>"
                 data-has-data="<?php echo $s->has_data ? '1' : '0'; ?>"
+                data-platform="<?php echo esc_attr( strtolower( $platform ) ); ?>"
                 data-timestamp="<?php echo esc_attr( strtotime( $s->created_at ) ); ?>">
+              <td class="hl-cb-cell" data-label=""><input type="checkbox" class="hl-row-cb" value="<?php echo esc_attr( $s->id ); ?>"></td>
               <td data-label="Date">
                 <div class="hl-date-cell">
                   <span class="hl-date-primary"><?php echo esc_html( date_i18n( 'M j, Y', strtotime( $s->created_at ) ) ); ?></span>
@@ -625,49 +1158,120 @@ function hozio_leads_list_page() {
               <td data-label="Status">
                 <span class="hl-badge <?php echo esc_attr( $badge[1] ); ?>"><?php echo esc_html( $badge[0] ); ?></span>
               </td>
-              <td data-label="Source">
-                <span class="hl-source"><?php echo esc_html( $form_page ?: '—' ); ?></span>
+              <td data-label="Platform">
+                <div class="hl-platform-cell">
+                  <span class="hl-platform-badge hl-plat-<?php echo esc_attr( $plat_slug ); ?>"><?php echo esc_html( $platform ); ?></span>
+                  <?php if ( $form_page ) : ?>
+                    <span class="hl-platform-page"><?php echo esc_html( $form_page ); ?></span>
+                  <?php endif; ?>
+                </div>
               </td>
-              <td>
-                <span class="hl-expand-btn" title="Click to expand details">
-                  <span class="hl-expand-label">Details</span>
-                  <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+              <td data-label="Risk">
+                <span class="hl-spam-badge <?php echo esc_attr( $spam['class'] ); ?>">
+                  <?php if ( $spam['score'] > 0 ) : ?>
+                    <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <?php else : ?>
+                    <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                  <?php endif; ?>
+                  <?php echo esc_html( $spam['label'] ); ?>
                 </span>
+              </td>
+              <td class="hl-action-cell">
+                <div class="hl-action-group">
+                  <span class="hl-expand-btn" title="Click to expand details">
+                    <span class="hl-expand-label">Details</span>
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                  </span>
+                  <?php if ( ! $is_trash_view ) : ?>
+                    <button type="button" class="hl-row-action-btn hl-trash-btn"
+                            data-id="<?php echo esc_attr( $s->id ); ?>"
+                            data-ltype="<?php echo esc_attr( $ltype ); ?>"
+                            title="Move to trash">
+                      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </button>
+                  <?php else : ?>
+                    <button type="button" class="hl-row-action-btn hl-restore-btn"
+                            data-id="<?php echo esc_attr( $s->id ); ?>"
+                            data-ltype="<?php echo esc_attr( $ltype ); ?>"
+                            title="Restore">
+                      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+                    </button>
+                    <button type="button" class="hl-row-action-btn hl-delete-btn"
+                            data-id="<?php echo esc_attr( $s->id ); ?>"
+                            data-ltype="<?php echo esc_attr( $ltype ); ?>"
+                            title="Delete permanently">
+                      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  <?php endif; ?>
+                </div>
               </td>
             </tr>
             <!-- Expandable detail row -->
             <tr class="hl-detail-row" style="display:none;">
-              <td colspan="7">
+              <td colspan="9">
                 <div class="hl-detail-panel">
-                  <div class="hl-detail-header">
-                    <h3>Submission #<?php echo esc_html( $s->id ); ?></h3>
-                    <div class="hl-detail-meta">
-                      <span><?php echo esc_html( date_i18n( 'F j, Y \a\t g:i A', strtotime( $s->created_at ) ) ); ?></span>
+                  <div class="hl-dp-head">
+                    <div class="hl-dp-head-left">
+                      <span class="hl-dp-id">Submission #<?php echo esc_html( $s->id ); ?></span>
+                      <span class="hl-spam-badge <?php echo esc_attr( $spam['class'] ); ?>">
+                        <?php if ( $spam['score'] > 0 ) : ?>
+                          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        <?php else : ?>
+                          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                        <?php endif; ?>
+                        <?php echo esc_html( $spam['label'] ); ?>
+                        <?php if ( $spam['score'] > 0 ) : ?><span class="hl-dp-score">(<?php echo esc_html( $spam['score'] ); ?>%)</span><?php endif; ?>
+                      </span>
+                    </div>
+                    <div class="hl-dp-meta">
+                      <span class="hl-dp-date">
+                        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <?php echo esc_html( date_i18n( 'M j, Y \a\t g:i A', strtotime( $s->created_at ) ) ); ?>
+                      </span>
                       <?php if ( $form_page ) : ?>
-                        <span class="hl-meta-sep">•</span>
+                        <span class="hl-dp-dot">·</span>
                         <span><?php echo esc_html( $form_page ); ?></span>
                       <?php endif; ?>
                       <?php if ( $s->referer ) : ?>
-                        <span class="hl-meta-sep">•</span>
-                        <a href="<?php echo esc_url( $s->referer ); ?>" target="_blank" rel="noopener noreferrer" class="hl-referer-link">View source page ↗</a>
+                        <span class="hl-dp-dot">·</span>
+                        <a href="<?php echo esc_url( $s->referer ); ?>" target="_blank" rel="noopener noreferrer" class="hl-dp-source">
+                          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                          Source page
+                        </a>
                       <?php endif; ?>
                     </div>
                   </div>
+                  <?php if ( ! empty( $spam['flags'] ) ) : ?>
+                    <div class="hl-dp-flags">
+                      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      <?php echo esc_html( implode( ' · ', $spam['flags'] ) ); ?>
+                    </div>
+                  <?php endif; ?>
                   <?php if ( ! empty( $detail_fields ) ) : ?>
                     <div class="hl-detail-grid">
                       <?php foreach ( $detail_fields as $df ) : ?>
-                        <div class="hl-detail-field">
+                        <div class="hl-detail-field<?php echo $df['is_long'] ? ' hl-detail-field-wide' : ''; ?>">
                           <span class="hl-detail-label"><?php echo esc_html( $df['label'] ); ?></span>
-                          <span class="hl-detail-value"><?php echo $df['display']; ?></span>
+                          <span class="hl-detail-value">
+                            <?php if ( $df['is_long'] ) : ?>
+                              <span class="hl-val-short"><?php echo esc_html( mb_substr( $df['raw'], 0, 150 ) ); ?>…</span>
+                              <span class="hl-val-full" style="display:none"><?php echo $df['display']; ?></span>
+                              <button type="button" class="hl-readmore-btn">Read more</button>
+                            <?php else : ?>
+                              <?php echo $df['display']; ?>
+                            <?php endif; ?>
+                          </span>
                         </div>
                       <?php endforeach; ?>
                     </div>
                   <?php else : ?>
-                    <p class="hl-detail-empty">No field data available for this submission.</p>
+                    <span class="hl-detail-empty">No field data available for this submission.</span>
                   <?php endif; ?>
-                  <div class="hl-detail-actions">
-                    <a href="<?php echo esc_url( $view_url ); ?>" class="hl-btn-view">Open Full View →</a>
-                  </div>
+                  <?php if ( ! $is_trash_view ) : ?>
+                    <div class="hl-dp-footer">
+                      <a href="<?php echo esc_url( $view_url ); ?>" class="hl-btn-view">Open Full View →</a>
+                    </div>
+                  <?php endif; ?>
                 </div>
               </td>
             </tr>
@@ -679,6 +1283,13 @@ function hozio_leads_list_page() {
           <p style="font-size:15px;font-weight:600;color:#1e293b;margin:0 0 4px;">No results found</p>
           <p style="font-size:13px;color:#94a3b8;margin:0;">Try adjusting your search or filters</p>
         </div>
+      </div>
+
+      <!-- Shown dynamically when the last row is removed via JS -->
+      <div id="hl-empty-after-remove" style="display:none;" class="hl-empty-state">
+        <svg width="64" height="64" fill="none" stroke="#cbd5e1" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <h2><?php echo $is_trash_view ? 'Trash is empty' : 'No leads yet'; ?></h2>
+        <p><?php echo $is_trash_view ? 'Trashed leads appear here.' : "When someone submits a form on your site, it'll show up here."; ?></p>
       </div>
 
       <?php // Pagination
@@ -701,10 +1312,38 @@ function hozio_leads_list_page() {
     <!-- Scripts -->
     <script>
     jQuery(function($){
-      // Expand/collapse rows — click anywhere on the row
+      var actionNonce  = '<?php echo esc_js( $action_nonce ); ?>';
+      var exportNonce  = '<?php echo esc_js( $export_nonce ); ?>';
+      var exportDomain = '<?php echo esc_js( sanitize_file_name( parse_url( home_url(), PHP_URL_HOST ) ) ); ?>';
+
+      // ── Export CSV dropdown ──
+      $('#hl-export-btn').on('click', function(e){
+        e.stopPropagation();
+        $('#hl-export-dropdown').toggleClass('hl-dd-open');
+      });
+      $(document).on('click', function(){ $('#hl-export-dropdown').removeClass('hl-dd-open'); });
+      $('.hl-export-option').on('click', function(e){
+        e.preventDefault();
+        var range = $(this).data('range');
+        var url = ajaxurl + '?action=hozio_export_leads&range=' + encodeURIComponent(range) + '&_wpnonce=' + encodeURIComponent(exportNonce);
+        $('#hl-export-dropdown').removeClass('hl-dd-open');
+        fetch(url, { credentials: 'same-origin' })
+          .then(function(r){ return r.blob(); })
+          .then(function(blob){
+            var blobUrl = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = 'leads-' + exportDomain + '-' + range + '.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 100);
+          });
+      });
+
+      // ── Expand/collapse rows ──
       $('.hl-row').on('click', function(e){
-        // Don't trigger if clicking a link, button inside the row
-        if ($(e.target).closest('a, button').length && !$(e.target).closest('.hl-expand-btn').length) return;
+        if ($(e.target).closest('a, button, input[type=checkbox]').length) return;
         var $row = $(this), $btn = $row.find('.hl-expand-btn'), $detail = $row.next('.hl-detail-row');
         var isOpen = $detail.is(':visible');
         $('.hl-detail-row').slideUp(200);
@@ -716,19 +1355,147 @@ function hozio_leads_list_page() {
           $row.addClass('hl-row-active');
         }
       });
+      $('.hl-expand-btn').on('click', function(e){
+        e.stopPropagation();
+        $(this).closest('.hl-row').trigger('click');
+      });
 
-      // Search + filters
-      var $search = $('#hl-search'), $date = $('#hl-filter-date'), $data = $('#hl-filter-data');
+      // ── Checkbox / bulk selection ──
+      function getSelected() {
+        var items = [];
+        $('.hl-row-cb:checked').each(function(){
+          var $row = $(this).closest('.hl-row');
+          items.push({ id: $row.data('id'), ltype: $row.data('ltype') });
+        });
+        return items;
+      }
+      function updateBulkBar() {
+        var count = $('.hl-row-cb:checked').length;
+        if (count > 0) {
+          $('#hl-bulk-bar').addClass('hl-bulk-bar-active');
+          $('#hl-bulk-count').text(count + ' selected');
+        } else {
+          $('#hl-bulk-bar').removeClass('hl-bulk-bar-active');
+        }
+        $('#hl-select-all').prop('indeterminate', count > 0 && count < $('.hl-row-cb:visible').length);
+        $('#hl-select-all').prop('checked', count > 0 && count === $('.hl-row-cb:visible').length);
+      }
+      $(document).on('change', '.hl-row-cb', updateBulkBar);
+      $('#hl-select-all').on('change', function(){
+        $('.hl-row-cb:visible').prop('checked', this.checked);
+        updateBulkBar();
+      });
+      $('#hl-bulk-cancel').on('click', function(){
+        $('.hl-row-cb').prop('checked', false);
+        $('#hl-select-all').prop('checked', false).prop('indeterminate', false);
+        updateBulkBar();
+      });
+
+      // ── AJAX lead action helper ──
+      function leadAction(action, items, onDone) {
+        $.post(ajaxurl, {
+          action: 'hozio_lead_action',
+          _wpnonce: actionNonce,
+          lead_action: action,
+          leads: JSON.stringify(items)
+        }, function(){ onDone(); });
+      }
+      // Adjust the All/Trash tab count badges without a page reload
+      function adjustTabCounts(action, count) {
+        var $counts = $('.hl-view-tab .hl-tab-count');
+        var allN   = parseInt($counts.eq(0).text()) || 0;
+        var trashN = parseInt($counts.eq(1).text()) || 0;
+        if (action === 'trash') {
+          $counts.eq(0).text(Math.max(0, allN - count));
+          $counts.eq(1).text(trashN + count);
+        } else if (action === 'restore') {
+          $counts.eq(0).text(allN + count);
+          $counts.eq(1).text(Math.max(0, trashN - count));
+        } else if (action === 'delete_permanent') {
+          $counts.eq(1).text(Math.max(0, trashN - count));
+        }
+        // Keep visible-count in sync too
+        var vis = parseInt($('#hl-visible-count').text()) || 0;
+        $('#hl-visible-count').text(Math.max(0, vis - count));
+      }
+
+      function removeRows(items, action) {
+        var total = items.length, done = 0;
+        items.forEach(function(item){
+          var $row = $('.hl-row[data-id="'+item.id+'"][data-ltype="'+item.ltype+'"]');
+          $row.next('.hl-detail-row').remove();
+          $row.fadeOut(200, function(){
+            $(this).remove();
+            updateBulkBar();
+            done++;
+            if (done === total && $('.hl-row').length === 0) {
+              $('.hl-bulk-bar, .hl-toolbar, .hl-results-count, .hl-table-card').hide();
+              $('#hl-empty-after-remove').show();
+            }
+          });
+        });
+        if (action) adjustTabCounts(action, items.length);
+      }
+
+      // ── Row-level trash button ──
+      $(document).on('click', '.hl-trash-btn', function(e){
+        e.stopPropagation();
+        var $btn = $(this), id = $btn.data('id'), ltype = $btn.data('ltype');
+        leadAction('trash', [{id:id,ltype:ltype}], function(){
+          removeRows([{id:id,ltype:ltype}], 'trash');
+        });
+      });
+
+      // ── Row-level restore button ──
+      $(document).on('click', '.hl-restore-btn', function(e){
+        e.stopPropagation();
+        var $btn = $(this), id = $btn.data('id'), ltype = $btn.data('ltype');
+        leadAction('restore', [{id:id,ltype:ltype}], function(){
+          removeRows([{id:id,ltype:ltype}], 'restore');
+        });
+      });
+
+      // ── Row-level permanent delete button ──
+      $(document).on('click', '.hl-delete-btn', function(e){
+        e.stopPropagation();
+        if (!confirm('Permanently delete this lead? This cannot be undone.')) return;
+        var $btn = $(this), id = $btn.data('id'), ltype = $btn.data('ltype');
+        leadAction('delete_permanent', [{id:id,ltype:ltype}], function(){
+          removeRows([{id:id,ltype:ltype}], 'delete_permanent');
+        });
+      });
+
+      // ── Bulk actions ──
+      $('#hl-bulk-trash').on('click', function(){
+        var items = getSelected();
+        if (!items.length) return;
+        leadAction('trash', items, function(){ removeRows(items, 'trash'); });
+      });
+      $('#hl-bulk-restore').on('click', function(){
+        var items = getSelected();
+        if (!items.length) return;
+        leadAction('restore', items, function(){ removeRows(items, 'restore'); });
+      });
+      $('#hl-bulk-delete').on('click', function(){
+        var items = getSelected();
+        if (!items.length) return;
+        if (!confirm('Permanently delete ' + items.length + ' lead(s)? This cannot be undone.')) return;
+        leadAction('delete_permanent', items, function(){ removeRows(items, 'delete_permanent'); });
+      });
+
+      // ── Search + filters ──
+      var $search = $('#hl-search'), $date = $('#hl-filter-date'), $data = $('#hl-filter-data'), $plat = $('#hl-filter-platform');
       var debounceTimer;
       $search.on('input', function(){ clearTimeout(debounceTimer); debounceTimer = setTimeout(filterTable, 150); });
       $date.on('change', filterTable);
       $data.on('change', filterTable);
+      $plat.on('change', filterTable);
 
       function filterTable(){
         var query = $search.val().toLowerCase().trim();
         var dateFilter = $date.val();
         var dataFilter = $data.val();
-        var now = Math.floor(Date.now()/1000);
+        var platFilter = $plat.val();
         var td = new Date(); td.setHours(0,0,0,0);
         var todayTs = Math.floor(td.getTime()/1000);
         var weekTs = todayTs - 604800;
@@ -754,6 +1521,10 @@ function hozio_leads_list_page() {
             if (dataFilter==='has-data' && !hd) show=false;
             if (dataFilter==='no-data' && hd) show=false;
           }
+          if (platFilter && show) {
+            var rowPlat = ($row.data('platform')||'').toString().toLowerCase();
+            if (rowPlat.indexOf(platFilter) === -1) show=false;
+          }
           $row.toggle(show);
           if (!show) $detail.hide();
           if (show) visible++;
@@ -763,7 +1534,21 @@ function hozio_leads_list_page() {
         $('#hl-leads-table thead').toggle(visible > 0);
       }
 
-      // Column sorting
+      // ── Copy webhook URL ──
+      $('#hl-copy-webhook').on('click', function(){
+        var url = $('#hl-webhook-url').text();
+        var $btn = $(this);
+        navigator.clipboard.writeText(url).then(function(){
+          $btn.text('Copied!');
+          setTimeout(function(){ $btn.html('<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy URL'); }, 2000);
+        }).catch(function(){
+          var ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+          $btn.text('Copied!');
+          setTimeout(function(){ $btn.html('<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy URL'); }, 2000);
+        });
+      });
+
+      // ── Column sorting (col indices shifted +1 for checkbox column) ──
       var sortDir = {};
       $('.hl-sortable').on('click', function(){
         var col = parseInt($(this).data('col'));
@@ -775,7 +1560,7 @@ function hozio_leads_list_page() {
         });
         pairs.sort(function(a,b){
           var aT, bT;
-          if (col===0) {
+          if (col===1) {
             aT = parseInt(a.main.data('timestamp'))||0;
             bT = parseInt(b.main.data('timestamp'))||0;
           } else {
@@ -789,6 +1574,19 @@ function hozio_leads_list_page() {
         pairs.forEach(function(p){ $tbody.append(p.main); $tbody.append(p.detail); });
         $('.hl-sortable .hl-sort-icon').text('↕');
         $(this).find('.hl-sort-icon').text(sortDir[col] ? '↑' : '↓');
+      });
+
+      // ── Read more / show less for long field values ──
+      $(document).on('click', '.hl-readmore-btn', function(e){
+        e.stopPropagation();
+        var $btn   = $(this);
+        var $short = $btn.siblings('.hl-val-short');
+        var $full  = $btn.siblings('.hl-val-full');
+        if ($full.is(':hidden')) {
+          $short.hide(); $full.show(); $btn.text('Show less');
+        } else {
+          $short.show(); $full.hide(); $btn.text('Read more');
+        }
       });
     });
     </script>
@@ -869,21 +1667,31 @@ function hozio_leads_list_page() {
     .hl-expand-btn.hl-expanded { background:#eef2ff; border-color:#818cf8; color:#4f46e5; }
     .hl-expand-label { white-space:nowrap; }
 
-    .hl-detail-row td { padding:0 !important; border-bottom:1px solid #e2e8f0 !important; background:#f8fafc; }
-    .hl-detail-panel { padding:20px 24px 24px; border-top:2px solid #818cf8; }
-    .hl-detail-header h3 { font-size:15px; font-weight:600; color:#1e293b; margin:0 0 6px; }
-    .hl-detail-meta { font-size:12px; color:#94a3b8; margin-bottom:16px; }
-    .hl-meta-sep { margin:0 6px; }
-    .hl-referer-link { color:#3b82f6; text-decoration:none; }
-    .hl-referer-link:hover { text-decoration:underline; }
-    .hl-detail-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:16px; margin-bottom:16px; }
-    .hl-detail-field { display:flex; flex-direction:column; gap:3px; }
-    .hl-detail-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#94a3b8; }
-    .hl-detail-value { font-size:14px; color:#1e293b; word-break:break-word; }
+    /* Detail panel — inline expandable */
+    .hl-detail-row td { padding:0 !important; border-bottom:2px solid #e0e7ff !important; background:#fff; }
+    .hl-detail-panel { border-top:3px solid #818cf8; }
+    .hl-dp-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:12px 20px; background:#f5f3ff; border-bottom:1px solid #e0e7ff; }
+    .hl-dp-head-left { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .hl-dp-id { font-size:13px; font-weight:700; color:#4338ca; }
+    .hl-dp-score { font-size:10px; opacity:0.7; margin-left:2px; }
+    .hl-dp-meta { display:flex; align-items:center; gap:6px; font-size:12px; color:#6b7280; flex-wrap:wrap; }
+    .hl-dp-date { display:inline-flex; align-items:center; gap:4px; }
+    .hl-dp-dot { color:#d1d5db; }
+    .hl-dp-source { display:inline-flex; align-items:center; gap:3px; color:#4f46e5; text-decoration:none; font-weight:500; font-size:12px; }
+    .hl-dp-source:hover { text-decoration:underline; }
+    .hl-dp-flags { display:flex; align-items:center; gap:5px; padding:6px 20px; background:#fffbeb; border-bottom:1px solid #fde68a; font-size:11px; color:#92400e; font-style:italic; }
+    .hl-detail-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); padding:16px 20px 8px; gap:0; }
+    .hl-detail-field { padding:8px 14px 10px 0; border-bottom:1px solid #f1f5f9; }
+    .hl-detail-field-wide { grid-column:1 / -1; }
+    .hl-detail-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:#94a3b8; display:block; margin-bottom:4px; }
+    .hl-detail-value { font-size:13.5px; color:#1e293b; word-break:break-word; line-height:1.5; }
     .hl-detail-value a { color:#3b82f6; text-decoration:none; }
     .hl-detail-value a:hover { text-decoration:underline; }
-    .hl-detail-empty { color:#94a3b8; font-style:italic; font-size:13px; }
-    .hl-detail-actions { padding-top:12px; border-top:1px solid #e2e8f0; }
+    .hl-detail-empty { color:#94a3b8; font-style:italic; font-size:13px; display:block; padding:16px 20px; }
+    .hl-val-full { display:inline; }
+    .hl-readmore-btn { display:inline; background:none; border:none; padding:0 0 0 4px; font-size:12px; color:#4f46e5; font-weight:600; cursor:pointer; text-decoration:underline; vertical-align:baseline; line-height:inherit; }
+    .hl-readmore-btn:hover { color:#4338ca; }
+    .hl-dp-footer { padding:12px 20px; background:#fafbff; border-top:1px solid #e0e7ff; display:flex; justify-content:flex-end; }
     .hl-btn-view { display:inline-flex; align-items:center; gap:6px; padding:8px 20px; background:#4f46e5; color:#fff !important; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none !important; transition:background 0.2s; }
     .hl-btn-view:hover { background:#4338ca; }
 
@@ -913,9 +1721,91 @@ function hozio_leads_list_page() {
       .hl-table tbody td:last-child::before { display:none; }
       .hl-detail-row { margin-bottom:12px; }
       .hl-detail-row td { border-radius:0 0 12px 12px !important; }
-      .hl-detail-grid { grid-template-columns:1fr; }
+      .hl-dp-head { flex-direction:column; align-items:flex-start; }
+      .hl-detail-grid { grid-template-columns:1fr !important; padding:12px 14px 4px; }
     }
     @media (max-width:480px) { .hl-stats { grid-template-columns:1fr; } }
+
+    /* Webhook banner */
+    .hl-webhook-banner { background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:14px 18px; margin-bottom:20px; }
+    .hl-webhook-info { display:flex; align-items:center; gap:8px; font-size:13px; color:#0c4a6e; margin-bottom:8px; }
+    .hl-webhook-url-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+    .hl-webhook-url-row code { flex:1; background:#fff; border:1px solid #bae6fd; border-radius:6px; padding:7px 12px; font-size:12px; color:#0369a1; word-break:break-all; }
+    .hl-copy-btn { display:inline-flex; align-items:center; gap:5px; padding:7px 12px; background:#0ea5e9; color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; transition:background 0.15s; }
+    .hl-copy-btn:hover { background:#0284c7; }
+    .hl-webhook-hint { font-size:11px; color:#64748b; margin:0; }
+    .hl-webhook-hint code { background:#e0f2fe; padding:1px 4px; border-radius:3px; font-size:11px; color:#0369a1; }
+
+    /* Platform badges */
+    .hl-platform-cell { display:flex; flex-direction:column; gap:2px; }
+    .hl-platform-badge { display:inline-block; padding:2px 8px; border-radius:100px; font-size:11px; font-weight:600; white-space:nowrap; }
+    .hl-platform-page { font-size:11px; color:#94a3b8; }
+    .hl-plat-elementor { background:#ede9fe; color:#5b21b6; }
+    .hl-plat-wpforms { background:#dbeafe; color:#1d4ed8; }
+    .hl-plat-gravityforms { background:#d1fae5; color:#065f46; }
+    .hl-plat-contactform7, .hl-plat-cf7, .hl-plat-contactform7 { background:#fef3c7; color:#92400e; }
+    .hl-plat-fluentforms { background:#fce7f3; color:#9d174d; }
+    .hl-plat-divi { background:#fdf4ff; color:#7e22ce; }
+    .hl-plat-gravityforms { background:#d1fae5; color:#065f46; }
+    .hl-plat-zapier { background:#fff7ed; color:#c2410c; }
+    .hl-plat-typeform { background:#f0fdf4; color:#166534; }
+    /* All other platforms get a neutral style */
+    .hl-platform-badge:not([class*="hl-plat-"]),
+    .hl-plat-unknown { background:#f1f5f9; color:#475569; }
+
+    /* View tabs */
+    .hl-view-tabs { display:flex; gap:4px; margin-bottom:20px; border-bottom:2px solid #e2e8f0; }
+    .hl-view-tab { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; font-size:13px; font-weight:500; color:#64748b; text-decoration:none; border-bottom:2px solid transparent; margin-bottom:-2px; transition:color 0.15s,border-color 0.15s; }
+    .hl-view-tab:hover { color:#334155; }
+    .hl-tab-active { color:#4f46e5 !important; border-bottom-color:#4f46e5 !important; }
+    .hl-tab-count { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:18px; padding:0 6px; background:#e2e8f0; color:#64748b; border-radius:100px; font-size:11px; font-weight:600; }
+    .hl-tab-active .hl-tab-count { background:#eef2ff; color:#4f46e5; }
+
+    /* Bulk action bar */
+    .hl-bulk-bar { display:flex; align-items:center; gap:10px; padding:10px 16px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:10px; margin-bottom:12px; flex-wrap:wrap; opacity:0; max-height:0; overflow:hidden; transition:opacity 0.2s,max-height 0.2s; }
+    .hl-bulk-bar.hl-bulk-bar-active { opacity:1; max-height:60px; }
+    .hl-bulk-count { font-size:13px; font-weight:600; color:#4f46e5; margin-right:4px; }
+    .hl-bulk-btn { padding:6px 14px; border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; border:none; transition:background 0.15s; }
+    .hl-bulk-trash-btn { background:#fee2e2; color:#991b1b; }
+    .hl-bulk-trash-btn:hover { background:#fecaca; }
+    .hl-bulk-restore-btn { background:#d1fae5; color:#065f46; }
+    .hl-bulk-restore-btn:hover { background:#a7f3d0; }
+    .hl-bulk-delete-btn { background:#fee2e2; color:#991b1b; }
+    .hl-bulk-delete-btn:hover { background:#fecaca; }
+    .hl-bulk-cancel-btn { background:#f1f5f9; color:#475569; }
+    .hl-bulk-cancel-btn:hover { background:#e2e8f0; }
+
+    /* Checkbox column */
+    .hl-col-cb { width:36px; padding:12px 8px 12px 16px !important; }
+    .hl-cb-cell { padding:14px 8px 14px 16px !important; }
+    .hl-col-cb input, .hl-cb-cell input { cursor:pointer; width:15px; height:15px; accent-color:#4f46e5; }
+
+    /* Row action buttons */
+    .hl-action-cell { padding:10px 12px !important; }
+    .hl-action-group { display:flex; align-items:center; gap:6px; }
+    .hl-row-action-btn { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border:1px solid #e2e8f0; border-radius:7px; background:#fff; color:#94a3b8; cursor:pointer; transition:all 0.15s; flex-shrink:0; }
+    .hl-trash-btn:hover { border-color:#fca5a5; background:#fee2e2; color:#dc2626; }
+    .hl-restore-btn:hover { border-color:#86efac; background:#d1fae5; color:#15803d; }
+    .hl-delete-btn:hover { border-color:#fca5a5; background:#fee2e2; color:#dc2626; }
+
+    /* Spam score badge */
+    .hl-spam-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:100px; font-size:11px; font-weight:600; }
+    .hl-spam-clean { background:#d1fae5; color:#065f46; }
+    .hl-spam-review { background:#fef3c7; color:#92400e; }
+    .hl-spam-test { background:#fed7aa; color:#c2410c; }
+    .hl-spam-spam { background:#fee2e2; color:#991b1b; }
+    .hl-spam-flags { font-size:11px; color:#94a3b8; font-style:italic; }
+
+    /* Export button + dropdown */
+    .hl-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+    .hl-export-wrap { position:relative; flex-shrink:0; align-self:center; }
+    .hl-export-btn { display:inline-flex; align-items:center; gap:7px; padding:9px 18px; background:#4f46e5; color:#fff; border:none; border-radius:9px; font-size:13px; font-weight:600; cursor:pointer; transition:background 0.15s; white-space:nowrap; }
+    .hl-export-btn:hover { background:#4338ca; }
+    .hl-export-dropdown { display:none; position:absolute; right:0; top:calc(100% + 6px); background:#fff; border:1px solid #e2e8f0; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.10); min-width:180px; z-index:999; overflow:hidden; }
+    .hl-export-dropdown.hl-dd-open { display:block; }
+    .hl-export-dd-title { padding:10px 14px 6px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#94a3b8; }
+    .hl-export-option { display:block; padding:9px 14px; font-size:13px; color:#1e293b; text-decoration:none; transition:background 0.12s; }
+    .hl-export-option:hover { background:#f1f5f9; color:#1e293b; }
     </style>
     <?php
 }
@@ -933,110 +1823,699 @@ function hozio_lead_view_page() {
         wp_die( 'Security check failed. Please go back and try again.', 'Unauthorized', [ 'back_link' => true ] );
     }
 
-    if ( ! hozio_submissions_tables_exist() ) {
-        echo '<div class="wrap"><h1>Error</h1><p>Submissions table not found.</p></div>';
-        return;
-    }
-
     global $wpdb;
-    $subs = $wpdb->prefix . 'e_submissions';
-    $vals = $wpdb->prefix . 'e_submissions_values';
+    $id    = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
+    $ltype = isset( $_GET['ltype'] ) ? sanitize_key( $_GET['ltype'] ) : 'elementor';
 
-    $id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
     if ( ! $id ) {
         echo '<div class="wrap"><h1>Submission Not Found</h1><p>Invalid submission ID.</p></div>';
         return;
     }
 
-    $submission = $wpdb->get_row(
-        $wpdb->prepare( "SELECT * FROM `{$subs}` WHERE id = %d AND status <> %s", $id, 'trash' )
-    );
-    if ( ! $submission ) {
-        echo '<div class="wrap"><h1>Submission Not Found</h1><p>This submission does not exist.</p></div>';
-        return;
+    $back_url = admin_url( 'admin.php?page=hozio-leads' );
+
+    // ── Custom (hozio) lead ──────────────────────────────────
+    if ( $ltype === 'hozio' ) {
+        if ( ! hozio_custom_leads_table_exists() ) {
+            echo '<div class="wrap"><h1>Error</h1><p>Custom leads table not found.</p></div>';
+            return;
+        }
+        $table = $wpdb->prefix . 'hozio_leads';
+        $row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM `{$table}` WHERE id = %d", $id ) );
+        if ( ! $row ) {
+            echo '<div class="wrap"><h1>Submission Not Found</h1><p>This submission does not exist.</p></div>';
+            return;
+        }
+        $submission = (object) [
+            'id'         => (int) $row->id,
+            'created_at' => $row->created_at,
+            'status'     => 'completed',
+            'platform'   => $row->source ?: 'Unknown',
+            'referer'    => $row->referer,
+        ];
+        $raw_fields   = json_decode( $row->fields, true ) ?: [];
+        // Normalize to [ ['key'=>..., 'value'=>...], ... ] for the view template
+        $fields       = [];
+        foreach ( $raw_fields as $k => $v ) {
+            $fields[] = [ 'key' => $k, 'value' => (string) $v ];
+        }
+        $form_page    = $row->source ?: '—';
+        $field_labels = [];
+        $badge        = [ 'Success', 'hl-badge-success' ];
+    } else {
+        // ── Elementor lead ──────────────────────────────────────
+        if ( ! hozio_submissions_tables_exist() ) {
+            echo '<div class="wrap"><h1>Error</h1><p>Submissions table not found.</p></div>';
+            return;
+        }
+        $subs = $wpdb->prefix . 'e_submissions';
+        $vals = $wpdb->prefix . 'e_submissions_values';
+
+        $submission = $wpdb->get_row(
+            $wpdb->prepare( "SELECT * FROM `{$subs}` WHERE id = %d AND status <> %s", $id, 'trash' )
+        );
+        if ( ! $submission ) {
+            echo '<div class="wrap"><h1>Submission Not Found</h1><p>This submission does not exist.</p></div>';
+            return;
+        }
+
+        $fields = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT `key`, `value` FROM `{$vals}` WHERE submission_id = %d ORDER BY id ASC",
+                $id
+            ), ARRAY_A
+        );
+
+        $submission->platform = 'Elementor';
+        $form_page    = $submission->post_id ? get_the_title( $submission->post_id ) : '—';
+        $field_labels = hozio_get_form_field_labels( (int) $submission->post_id );
+        $badge        = hozio_status_badge( $submission->status );
     }
 
-    $fields = $wpdb->get_results(
-        $wpdb->prepare(
-            "SELECT `key`, `value` FROM `{$vals}` WHERE submission_id = %d ORDER BY id ASC",
-            $id
-        ), ARRAY_A
-    );
+    // Compute spam score for view page
+    $spam_v_fields = [];
+    foreach ( $fields as $f ) {
+        if ( isset( $f['key'] ) && $f['key'] !== '' ) $spam_v_fields[ $f['key'] ] = $f['value'];
+    }
+    if ( $ltype === 'hozio' ) {
+        $spam_v = hozio_lead_spam_score( $row->name, $row->email, $row->phone, $spam_v_fields, $row->referer ?? '' );
+    } else {
+        $sv_name  = trim( ( $spam_v_fields['fname'] ?? '' ) . ' ' . ( $spam_v_fields['lname'] ?? '' ) );
+        $sv_email = $spam_v_fields['email'] ?? '';
+        $sv_phone = $spam_v_fields['tel']   ?? '';
+        $spam_v   = hozio_lead_spam_score( $sv_name, $sv_email, $sv_phone, $spam_v_fields, $submission->referer ?? '' );
+    }
 
-    $form_page    = $submission->post_id ? get_the_title( $submission->post_id ) : '—';
-    $back_url     = admin_url( 'admin.php?page=hozio-leads' );
-    $field_labels = hozio_get_form_field_labels( (int) $submission->post_id );
-    $badge        = hozio_status_badge( $submission->status );
-
-    $badge_styles = [
-        'hl-badge-success' => 'background:#d1fae5;color:#065f46',
-        'hl-badge-error'   => 'background:#fee2e2;color:#991b1b',
-        'hl-badge-new'     => 'background:#4f46e5;color:#ffffff',
+    $badge_map = [
+        'hl-badge-success' => 'hlv-badge-success',
+        'hl-badge-error'   => 'hlv-badge-error',
+        'hl-badge-new'     => 'hlv-badge-new',
     ];
-    $badge_style = $badge_styles[ $badge[1] ] ?? 'background:#ede9fe;color:#5b21b6';
+    $badge_cls = $badge_map[ $badge[1] ] ?? 'hlv-badge-new';
+    $plat_slug_v = strtolower( preg_replace( '/[^a-z0-9]/i', '', $submission->platform ) );
     ?>
-    <div class="wrap" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:740px;">
-        <h1 style="display:flex;align-items:center;gap:8px;">
-            <a href="<?php echo esc_url( $back_url ); ?>" style="text-decoration:none;color:#64748b;font-size:14px;display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border:1px solid #e2e8f0;border-radius:8px;">← Back</a>
-            <span style="font-size:22px;font-weight:700;">Submission #<?php echo esc_html( $id ); ?></span>
-        </h1>
+    <div class="hlv-wrap">
 
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px;margin-top:16px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-            <table class="form-table" style="margin:0;">
-                <tr>
-                    <th style="width:130px;padding:10px 10px 10px 0;color:#64748b;font-size:13px;">Date</th>
-                    <td style="padding:10px 0;font-weight:500;"><?php echo esc_html( date_i18n( 'F j, Y \a\t g:i A', strtotime( $submission->created_at ) ) ); ?></td>
-                </tr>
-                <tr>
-                    <th style="padding:10px 10px 10px 0;color:#64748b;font-size:13px;">Status</th>
-                    <td style="padding:10px 0;">
-                        <span style="display:inline-block;padding:4px 14px;border-radius:100px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;<?php echo esc_attr( $badge_style ); ?>">
-                            <?php echo esc_html( $badge[0] ); ?>
-                        </span>
-                    </td>
-                </tr>
-                <tr>
-                    <th style="padding:10px 10px 10px 0;color:#64748b;font-size:13px;">Form Page</th>
-                    <td style="padding:10px 0;"><?php echo esc_html( $form_page ); ?></td>
-                </tr>
-                <?php if ( ! empty( $submission->referer ) ) : ?>
-                <tr>
-                    <th style="padding:10px 10px 10px 0;color:#64748b;font-size:13px;">Referrer</th>
-                    <td style="padding:10px 0;"><a href="<?php echo esc_url( $submission->referer ); ?>" target="_blank" rel="noopener noreferrer" style="color:#3b82f6;"><?php echo esc_html( $submission->referer ); ?></a></td>
-                </tr>
-                <?php endif; ?>
-            </table>
-
-            <hr style="margin:20px 0;border:none;border-top:1px solid #f1f5f9;">
-            <h3 style="margin:0 0 16px;font-size:15px;font-weight:600;color:#1e293b;">Submitted Fields</h3>
-
-            <?php if ( empty( $fields ) ) : ?>
-                <p style="color:#94a3b8;font-style:italic;">No field data found.</p>
-            <?php else : ?>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;">
-                <?php foreach ( $fields as $f ) :
-                    if ( $f['value'] === '' || $f['value'] === null ) continue;
-                    $raw_key = $f['key'];
-                    $fl      = $field_labels[ $raw_key ] ?? ucwords( str_replace( [ '_', '-' ], ' ', $raw_key ) );
-                    $value   = $f['value'];
-                    $display = esc_html( $value );
-                    if ( is_email( $value ) ) {
-                        $display = '<a href="mailto:' . esc_attr( $value ) . '" style="color:#3b82f6;">' . esc_html( $value ) . '</a>';
-                    } elseif ( preg_match( '/^[\+\d\s\-\(\)]{7,}$/', $value ) ) {
-                        $display = '<a href="tel:' . esc_attr( preg_replace( '/[^\d\+]/', '', $value ) ) . '" style="color:#3b82f6;">' . esc_html( $value ) . '</a>';
-                    }
-                ?>
-                    <div>
-                        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#94a3b8;margin-bottom:3px;"><?php echo esc_html( $fl ); ?></div>
-                        <div style="font-size:14px;color:#1e293b;word-break:break-word;"><?php echo $display; ?></div>
-                    </div>
-                <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
+      <!-- Page Header -->
+      <div class="hlv-page-head">
+        <a href="<?php echo esc_url( $back_url ); ?>" class="hlv-back">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+          Back to Leads
+        </a>
+        <div class="hlv-title-row">
+          <h1 class="hlv-title">Submission #<?php echo esc_html( $id ); ?></h1>
+          <div class="hlv-title-badges">
+            <span class="hlv-status-badge <?php echo esc_attr( $badge_cls ); ?>"><?php echo esc_html( $badge[0] ); ?></span>
+            <span class="hl-spam-badge <?php echo esc_attr( $spam_v['class'] ); ?>">
+              <?php if ( $spam_v['score'] > 0 ) : ?>
+                <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <?php else : ?>
+                <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              <?php endif; ?>
+              <?php echo esc_html( $spam_v['label'] ); ?>
+              <?php if ( $spam_v['score'] > 0 ) echo '<span style="opacity:.7;margin-left:2px;font-size:10px;">(' . esc_html( $spam_v['score'] ) . '%)</span>'; ?>
+            </span>
+          </div>
         </div>
+        <?php if ( ! empty( $spam_v['flags'] ) ) : ?>
+          <p class="hlv-flags">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <?php echo esc_html( implode( ' · ', $spam_v['flags'] ) ); ?>
+          </p>
+        <?php endif; ?>
+      </div>
+
+      <!-- Meta strip -->
+      <div class="hlv-meta-strip">
+        <div class="hlv-meta-item">
+          <span class="hlv-meta-label">Date Submitted</span>
+          <span class="hlv-meta-value"><?php echo esc_html( date_i18n( 'F j, Y \a\t g:i A', strtotime( $submission->created_at ) ) ); ?></span>
+        </div>
+        <div class="hlv-meta-divider"></div>
+        <div class="hlv-meta-item">
+          <span class="hlv-meta-label">Platform</span>
+          <span class="hlv-meta-value">
+            <span class="hl-platform-badge hl-plat-<?php echo esc_attr( $plat_slug_v ); ?>"><?php echo esc_html( $submission->platform ); ?></span>
+            <?php if ( $form_page && $form_page !== '—' && $form_page !== $submission->platform ) : ?>
+              <span class="hlv-meta-sub"><?php echo esc_html( $form_page ); ?></span>
+            <?php endif; ?>
+          </span>
+        </div>
+        <?php if ( ! empty( $submission->referer ) ) : ?>
+          <div class="hlv-meta-divider"></div>
+          <div class="hlv-meta-item">
+            <span class="hlv-meta-label">Source Page</span>
+            <span class="hlv-meta-value">
+              <a href="<?php echo esc_url( $submission->referer ); ?>" target="_blank" rel="noopener noreferrer" class="hlv-link">
+                <?php echo esc_html( $submission->referer ); ?>
+                <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </a>
+            </span>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <!-- Fields Card -->
+      <div class="hlv-card">
+        <div class="hlv-card-head">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Submitted Fields
+        </div>
+        <?php if ( empty( $fields ) ) : ?>
+          <p class="hlv-empty">No field data found.</p>
+        <?php else : ?>
+          <div class="hlv-fields-grid">
+            <?php foreach ( $fields as $f ) :
+                if ( $f['value'] === '' || $f['value'] === null ) continue;
+                $raw_key  = $f['key'];
+                $fl       = $field_labels[ $raw_key ] ?? ucwords( str_replace( [ '_', '-' ], ' ', $raw_key ) );
+                $value    = $f['value'];
+                $is_long  = strlen( $value ) > 150;
+                $display  = esc_html( $value );
+                if ( is_email( $value ) ) {
+                    $display = '<a href="mailto:' . esc_attr( $value ) . '" class="hlv-link">' . esc_html( $value ) . '</a>';
+                } elseif ( preg_match( '/^[\+\d\s\-\(\)]{7,}$/', $value ) ) {
+                    $display = '<a href="tel:' . esc_attr( preg_replace( '/[^\d\+]/', '', $value ) ) . '" class="hlv-link">' . esc_html( $value ) . '</a>';
+                }
+            ?>
+              <div class="hlv-field <?php echo $is_long ? 'hlv-field-wide' : ''; ?>">
+                <span class="hlv-field-label"><?php echo esc_html( $fl ); ?></span>
+                <span class="hlv-field-value"><?php echo $display; ?></span>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </div>
     </div>
+
+    <style>
+    .hlv-wrap { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; max-width:900px; padding:20px 20px 60px 0; color:#1e293b; }
+    .hlv-wrap *, .hlv-wrap *::before, .hlv-wrap *::after { box-sizing:border-box; }
+
+    /* Header */
+    .hlv-back { display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px; font-weight:500; color:#64748b; text-decoration:none; transition:all 0.15s; background:#fff; margin-bottom:14px; }
+    .hlv-back:hover { border-color:#cbd5e1; background:#f8fafc; color:#334155; }
+    .hlv-page-head { margin-bottom:16px; }
+    .hlv-title-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+    .hlv-title { font-size:24px; font-weight:700; color:#0f172a; margin:0; line-height:1.2; }
+    .hlv-title-badges { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .hlv-status-badge { display:inline-block; padding:4px 14px; border-radius:100px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; }
+    .hlv-badge-success { background:#d1fae5; color:#065f46; }
+    .hlv-badge-error { background:#fee2e2; color:#991b1b; }
+    .hlv-badge-new { background:#4f46e5; color:#fff; }
+    .hlv-flags { display:inline-flex; align-items:center; gap:5px; font-size:12px; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:7px; padding:5px 11px; margin:6px 0 0; }
+
+    /* Meta strip */
+    .hlv-meta-strip { display:flex; align-items:stretch; background:#fff; border:1px solid #e2e8f0; border-top:3px solid #818cf8; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.04); margin-bottom:16px; flex-wrap:wrap; }
+    .hlv-meta-item { padding:16px 20px; display:flex; flex-direction:column; gap:4px; flex:1; min-width:160px; }
+    .hlv-meta-divider { width:1px; background:#f1f5f9; margin:12px 0; flex-shrink:0; }
+    .hlv-meta-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:#94a3b8; }
+    .hlv-meta-value { font-size:14px; font-weight:500; color:#1e293b; display:flex; align-items:center; gap:6px; flex-wrap:wrap; word-break:break-all; }
+    .hlv-meta-sub { font-size:12px; color:#94a3b8; font-weight:400; }
+    .hlv-link { color:#4f46e5; text-decoration:none; display:inline-flex; align-items:center; gap:3px; word-break:break-all; font-weight:500; }
+    .hlv-link:hover { text-decoration:underline; }
+
+    /* Fields card */
+    .hlv-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.04); margin-bottom:16px; }
+    .hlv-card-head { display:flex; align-items:center; gap:7px; padding:13px 20px; background:#f8fafc; border-bottom:1px solid #e2e8f0; font-size:12px; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:0.5px; }
+    .hlv-fields-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); }
+    .hlv-field { padding:16px 20px; border-bottom:1px solid #f8fafc; border-right:1px solid #f8fafc; display:flex; flex-direction:column; gap:5px; }
+    .hlv-field:last-child { border-bottom:none; }
+    .hlv-field-wide { grid-column:1 / -1; }
+    .hlv-field-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:#94a3b8; }
+    .hlv-field-value { font-size:14px; color:#1e293b; word-break:break-word; line-height:1.6; }
+    .hlv-field-value .hlv-link { font-size:14px; }
+    .hlv-empty { color:#94a3b8; font-style:italic; padding:20px; margin:0; font-size:13px; display:block; }
+
+    @media (max-width:640px) {
+      .hlv-wrap { padding:12px 12px 40px 0; }
+      .hlv-title { font-size:18px; }
+      .hlv-meta-strip { flex-direction:column; }
+      .hlv-meta-divider { width:auto; height:1px; margin:0 12px; }
+      .hlv-fields-grid { grid-template-columns:1fr; }
+      .hlv-field-wide { grid-column:auto; }
+    }
+    </style>
     <?php
 }
+
+
+// ══════════════════════════════════════════════════════════
+// 4b. LEAD TRASH / RESTORE / DELETE — AJAX handler
+//     Single and bulk. Action: hozio_lead_action
+// ══════════════════════════════════════════════════════════
+add_action( 'wp_ajax_hozio_lead_action', function() {
+    check_ajax_referer( 'hozio_lead_action' );
+    if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( 'Unauthorized' );
+
+    global $wpdb;
+    $lead_action = sanitize_key( $_POST['lead_action'] ?? '' );
+    $raw_leads   = isset( $_POST['leads'] ) ? json_decode( stripslashes( $_POST['leads'] ), true ) : null;
+
+    if ( ! is_array( $raw_leads ) ) {
+        wp_send_json_error( 'Invalid data' );
+    }
+
+    foreach ( $raw_leads as $item ) {
+        $id    = absint( $item['id'] ?? 0 );
+        $ltype = sanitize_key( $item['ltype'] ?? 'elementor' );
+        if ( ! $id ) continue;
+
+        if ( $lead_action === 'trash' ) {
+            if ( $ltype === 'hozio' ) {
+                $wpdb->update( $wpdb->prefix . 'hozio_leads', [ 'deleted_at' => current_time( 'mysql', true ) ], [ 'id' => $id ], [ '%s' ], [ '%d' ] );
+            } else {
+                $wpdb->update( $wpdb->prefix . 'e_submissions', [ 'status' => 'trash' ], [ 'id' => $id ], [ '%s' ], [ '%d' ] );
+            }
+        } elseif ( $lead_action === 'restore' ) {
+            if ( $ltype === 'hozio' ) {
+                $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->prefix}hozio_leads` SET deleted_at = NULL WHERE id = %d", $id ) );
+            } else {
+                $wpdb->update( $wpdb->prefix . 'e_submissions', [ 'status' => 'completed' ], [ 'id' => $id ], [ '%s' ], [ '%d' ] );
+            }
+        } elseif ( $lead_action === 'delete_permanent' ) {
+            if ( $ltype === 'hozio' ) {
+                $wpdb->delete( $wpdb->prefix . 'hozio_leads', [ 'id' => $id ], [ '%d' ] );
+            } else {
+                $wpdb->delete( $wpdb->prefix . 'e_submissions', [ 'id' => $id ], [ '%d' ] );
+                $wpdb->delete( $wpdb->prefix . 'e_submissions_values', [ 'submission_id' => $id ], [ '%d' ] );
+            }
+        }
+    }
+
+    wp_send_json_success();
+} );
+
+
+// ══════════════════════════════════════════════════════════
+// 4c. CSV EXPORT — AJAX handler
+//     Fetched via JS fetch() so the page URL never changes
+// ══════════════════════════════════════════════════════════
+add_action( 'wp_ajax_hozio_export_leads', function() {
+    if ( ! current_user_can( 'manage_options' ) ) wp_die( 'Unauthorized' );
+
+    if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'hozio_export_leads' ) ) {
+        wp_die( 'Security check failed.' );
+    }
+
+    $range = sanitize_key( $_GET['range'] ?? 'all' );
+    $from  = null;
+    $to    = null;
+
+    switch ( $range ) {
+        case 'today':
+            $from = gmdate( 'Y-m-d 00:00:00' );
+            break;
+        case 'yesterday':
+            $from = gmdate( 'Y-m-d 00:00:00', strtotime( '-1 day' ) );
+            $to   = gmdate( 'Y-m-d 00:00:00' );
+            break;
+        case 'week':
+            $from = gmdate( 'Y-m-d H:i:s', strtotime( '-7 days' ) );
+            break;
+        case '3months':
+            $from = gmdate( 'Y-m-d H:i:s', strtotime( '-3 months' ) );
+            break;
+        case '1year':
+            $from = gmdate( 'Y-m-d H:i:s', strtotime( '-1 year' ) );
+            break;
+    }
+
+    global $wpdb;
+    $rows = [];
+
+    // ── Elementor leads ──────────────────────────────────
+    if ( hozio_submissions_tables_exist() ) {
+        $subs = $wpdb->prefix . 'e_submissions';
+        $vals = $wpdb->prefix . 'e_submissions_values';
+        $sql  = "SELECT id, created_at, post_id, referer FROM `{$subs}` WHERE status <> 'trash'";
+        $args = [];
+        if ( $from ) { $sql .= ' AND created_at >= %s'; $args[] = $from; }
+        if ( $to )   { $sql .= ' AND created_at < %s';  $args[] = $to; }
+        $sql .= ' ORDER BY created_at DESC';
+
+        $e_rows = $args
+            ? $wpdb->get_results( $wpdb->prepare( $sql, ...$args ) )
+            : $wpdb->get_results( $sql );
+
+        if ( $e_rows ) {
+            $ids          = array_map( 'intval', wp_list_pluck( $e_rows, 'id' ) );
+            $placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+            $all_values   = $wpdb->get_results(
+                $wpdb->prepare( "SELECT submission_id, `key`, `value` FROM `{$vals}` WHERE submission_id IN ({$placeholders})", ...$ids ),
+                ARRAY_A
+            );
+            $vmap = [];
+            foreach ( $all_values as $v ) {
+                $vmap[ (int) $v['submission_id'] ][ $v['key'] ] = $v['value'];
+            }
+            foreach ( $e_rows as $row ) {
+                $m     = $vmap[ (int) $row->id ] ?? [];
+                $name  = trim( ( $m['fname'] ?? '' ) . ' ' . ( $m['lname'] ?? '' ) );
+                $email = $m['email'] ?? '';
+                $phone = $m['tel']   ?? '';
+                unset( $m['fname'], $m['lname'], $m['email'], $m['tel'] );
+                $rows[] = [
+                    'id'         => $row->id,
+                    'created_at' => $row->created_at,
+                    'platform'   => 'Elementor',
+                    'name'       => $name,
+                    'email'      => $email,
+                    'phone'      => $phone,
+                    'referer'    => $row->referer,
+                    'fields'     => $m,
+                ];
+            }
+        }
+    }
+
+    // ── Custom (hozio) leads ─────────────────────────────
+    if ( hozio_custom_leads_table_exists() ) {
+        $ht   = $wpdb->prefix . 'hozio_leads';
+        $sql  = "SELECT * FROM `{$ht}` WHERE deleted_at IS NULL";
+        $args = [];
+        if ( $from ) { $sql .= ' AND created_at >= %s'; $args[] = $from; }
+        if ( $to )   { $sql .= ' AND created_at < %s';  $args[] = $to; }
+        $sql .= ' ORDER BY created_at DESC';
+
+        $c_rows = $args
+            ? $wpdb->get_results( $wpdb->prepare( $sql, ...$args ) )
+            : $wpdb->get_results( $sql );
+
+        foreach ( $c_rows as $row ) {
+            $fields = json_decode( $row->fields, true ) ?: [];
+            $rows[] = [
+                'id'         => $row->id,
+                'created_at' => $row->created_at,
+                'platform'   => $row->source ?: 'Unknown',
+                'name'       => $row->name,
+                'email'      => $row->email,
+                'phone'      => $row->phone,
+                'referer'    => $row->referer,
+                'fields'     => $fields,
+            ];
+        }
+    }
+
+    // Sort merged results by date DESC
+    usort( $rows, function( $a, $b ) {
+        return strtotime( $b['created_at'] ) - strtotime( $a['created_at'] );
+    } );
+
+    // Collect all unique field keys (for dynamic columns)
+    $all_field_keys = [];
+    foreach ( $rows as $r ) {
+        foreach ( array_keys( $r['fields'] ) as $k ) {
+            if ( ! in_array( $k, $all_field_keys, true ) ) {
+                $all_field_keys[] = $k;
+            }
+        }
+    }
+
+    // Output CSV
+    $domain   = sanitize_file_name( parse_url( home_url(), PHP_URL_HOST ) );
+    $filename = 'leads-' . $domain . '-' . gmdate( 'Y-m-d' ) . ( $range !== 'all' ? '-' . $range : '' ) . '.csv';
+    header( 'Content-Type: text/csv; charset=utf-8' );
+    header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+    header( 'Cache-Control: no-cache, no-store, must-revalidate' );
+    header( 'Pragma: no-cache' );
+    header( 'Expires: 0' );
+
+    echo "\xEF\xBB\xBF"; // BOM — ensures Excel opens UTF-8 correctly
+    $out = fopen( 'php://output', 'w' );
+
+    // Header row
+    $headers = [ 'ID', 'Date', 'Platform', 'Name', 'Email', 'Phone', 'Source URL' ];
+    foreach ( $all_field_keys as $k ) {
+        $headers[] = ucwords( str_replace( [ '_', '-' ], ' ', $k ) );
+    }
+    fputcsv( $out, $headers );
+
+    // Data rows
+    foreach ( $rows as $r ) {
+        $row_data = [
+            $r['id'],
+            $r['created_at'],
+            $r['platform'],
+            $r['name'],
+            $r['email'],
+            $r['phone'],
+            $r['referer'],
+        ];
+        foreach ( $all_field_keys as $k ) {
+            $row_data[] = $r['fields'][ $k ] ?? '';
+        }
+        fputcsv( $out, $row_data );
+    }
+
+    fclose( $out );
+    exit;
+} );
+
+
+// ══════════════════════════════════════════════════════════
+// 4e. REST API — Receive leads from any form platform
+//     POST /wp-json/hozio/v1/lead
+//     Body fields: source, name, email, phone, referer, + any other fields
+// ══════════════════════════════════════════════════════════
+add_action( 'rest_api_init', function() {
+    register_rest_route( 'hozio/v1', '/lead', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'hozio_rest_receive_lead',
+        'permission_callback' => '__return_true',
+    ] );
+} );
+
+function hozio_rest_receive_lead( WP_REST_Request $request ) {
+    global $wpdb;
+    $table = $wpdb->prefix . 'hozio_leads';
+
+    // Accept JSON or form-encoded body
+    $params = $request->get_json_params();
+    if ( empty( $params ) ) {
+        $params = $request->get_body_params();
+    }
+    if ( empty( $params ) ) {
+        return new WP_Error( 'no_data', 'No data received.', [ 'status' => 400 ] );
+    }
+
+    // Resolve name from common field patterns
+    $name = sanitize_text_field(
+        $params['name'] ?? trim(
+            ( $params['first_name'] ?? $params['fname'] ?? '' ) . ' ' .
+            ( $params['last_name']  ?? $params['lname'] ?? '' )
+        )
+    );
+    $source  = sanitize_text_field( $params['source'] ?? 'Unknown' );
+    $email   = sanitize_email( $params['email'] ?? '' );
+    $phone   = sanitize_text_field( $params['phone'] ?? $params['tel'] ?? $params['phone_number'] ?? '' );
+    $referer = esc_url_raw( $params['referer'] ?? ( isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '' ) );
+
+    // Exclude routing/internal keys before storing all fields as JSON
+    $skip   = [ 'source', 'referer', '_wpcf7', '_wpcf7_version', '_wpcf7_locale', '_wpcf7_unit_tag', '_wpcf7_container_post' ];
+    $fields = array_diff_key( $params, array_flip( $skip ) );
+
+    $inserted = $wpdb->insert( $table, [
+        'source'     => $source,
+        'name'       => $name,
+        'email'      => $email,
+        'phone'      => $phone,
+        'referer'    => $referer,
+        'fields'     => wp_json_encode( $fields ),
+        'created_at' => current_time( 'mysql', true ),
+    ], [ '%s', '%s', '%s', '%s', '%s', '%s', '%s' ] );
+
+    if ( ! $inserted ) {
+        return new WP_Error( 'db_error', 'Failed to save lead.', [ 'status' => 500 ] );
+    }
+
+    return rest_ensure_response( [ 'success' => true, 'id' => $wpdb->insert_id ] );
+}
+
+
+// ══════════════════════════════════════════════════════════
+// 4f. DIVI CONTACT FORM — native integration
+//     Fires automatically on every Divi form submission.
+//     No webhook URL or per-form configuration needed.
+// ══════════════════════════════════════════════════════════
+add_action( 'et_pb_contact_form_submit', 'hozio_capture_divi_lead', 10, 3 );
+
+function hozio_capture_divi_lead( $et_pb_contact_form_fields, $et_contact_email, $et_pb_contact_form_num ) {
+    if ( ! hozio_custom_leads_table_exists() ) return;
+
+    global $wpdb;
+    $table   = $wpdb->prefix . 'hozio_leads';
+    $name    = '';
+    $email   = '';
+    $phone   = '';
+    $fields  = [];
+
+    // Divi passes fields as [ ['label' => '...', 'value' => '...'], ... ]
+    if ( is_array( $et_pb_contact_form_fields ) ) {
+        foreach ( $et_pb_contact_form_fields as $field ) {
+            if ( ! is_array( $field ) || ! isset( $field['label'], $field['value'] ) ) continue;
+            $label = sanitize_text_field( $field['label'] );
+            $value = sanitize_text_field( $field['value'] );
+            if ( $label === '' ) continue;
+            $fields[ $label ] = $value;
+            $lower = strtolower( $label );
+            if ( ! $name  && strpos( $lower, 'name' )  !== false ) $name  = $value;
+            if ( ! $email && strpos( $lower, 'email' ) !== false ) $email = $value;
+            if ( ! $phone && ( strpos( $lower, 'phone' ) !== false || strpos( $lower, 'tel' ) !== false ) ) $phone = $value;
+        }
+    }
+
+    // Fallback: read directly from $_POST if Divi didn't pass structured fields
+    if ( empty( $fields ) ) {
+        $num_suffix = '_' . $et_pb_contact_form_num;
+        foreach ( $_POST as $key => $raw_val ) {
+            if ( strpos( $key, 'et_pb_contact_' ) !== 0 ) continue;
+            $label = ucwords( str_replace( [ 'et_pb_contact_', $num_suffix, '_' ], [ '', '', ' ' ], $key ) );
+            $value = sanitize_text_field( $raw_val );
+            $fields[ $label ] = $value;
+            $lower = strtolower( $key );
+            if ( ! $name  && strpos( $lower, 'name' )  !== false ) $name  = $value;
+            if ( ! $email && strpos( $lower, 'email' ) !== false ) $email = sanitize_email( $value );
+            if ( ! $phone && ( strpos( $lower, 'phone' ) !== false || strpos( $lower, 'tel' ) !== false ) ) $phone = $value;
+        }
+    }
+
+    $referer = esc_url_raw( $_POST['et_pb_contact_form_url'] ?? ( $_SERVER['HTTP_REFERER'] ?? '' ) );
+
+    $wpdb->insert( $table, [
+        'source'     => 'Divi',
+        'name'       => sanitize_text_field( $name ),
+        'email'      => sanitize_email( $email ),
+        'phone'      => sanitize_text_field( $phone ),
+        'referer'    => $referer,
+        'fields'     => wp_json_encode( $fields ),
+        'created_at' => current_time( 'mysql', true ),
+    ], [ '%s', '%s', '%s', '%s', '%s', '%s', '%s' ] );
+}
+
+
+// ══════════════════════════════════════════════════════════
+// 4g. CONTACT FORM 7 — native integration
+//     Fires automatically on every CF7 form submission.
+// ══════════════════════════════════════════════════════════
+add_action( 'wpcf7_mail_sent', function( $contact_form ) {
+    $submission = WPCF7_Submission::get_instance();
+    if ( ! $submission ) return;
+
+    $posted = $submission->get_posted_data();
+    $name   = ''; $email = ''; $phone = ''; $fields = [];
+    $skip   = [ '_wpcf7', '_wpcf7_version', '_wpcf7_locale', '_wpcf7_unit_tag', '_wpcf7_container_post', '_wpcf7_posted_data_hash', 'g-recaptcha-response', '_wpnonce' ];
+
+    foreach ( $posted as $key => $value ) {
+        if ( in_array( $key, $skip, true ) || strpos( $key, '_wpcf7' ) === 0 ) continue;
+        if ( is_array( $value ) ) $value = implode( ', ', $value );
+        $value = sanitize_text_field( $value );
+        $label = ucwords( str_replace( [ '-', '_' ], ' ', $key ) );
+        $fields[ $label ] = $value;
+        $lower = strtolower( $key );
+        if ( ! $name  && strpos( $lower, 'name' )  !== false ) $name  = $value;
+        if ( ! $email && strpos( $lower, 'email' ) !== false ) $email = $value;
+        if ( ! $phone && ( strpos( $lower, 'phone' ) !== false || strpos( $lower, 'tel' ) !== false ) ) $phone = $value;
+    }
+
+    hozio_insert_lead_record(
+        'Contact Form 7', $name, $email, $phone,
+        isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '',
+        $fields
+    );
+} );
+
+
+// ══════════════════════════════════════════════════════════
+// 4h. WPFORMS — native integration
+//     Fires automatically on every WPForms submission.
+// ══════════════════════════════════════════════════════════
+add_action( 'wpforms_process_complete', function( $fields, $entry, $form_data, $entry_id ) {
+    $name  = ''; $email = ''; $phone = ''; $all_fields = [];
+
+    foreach ( $fields as $field ) {
+        $label = sanitize_text_field( $field['name'] ?? '' );
+        $value = $field['value'] ?? '';
+        if ( is_array( $value ) ) $value = implode( ', ', $value );
+        $value = sanitize_text_field( (string) $value );
+        if ( $label === '' && $value === '' ) continue;
+        $all_fields[ $label ?: 'Field ' . ( $field['id'] ?? '' ) ] = $value;
+        $type  = $field['type'] ?? '';
+        $lower = strtolower( $label );
+        if ( ! $name  && ( $type === 'name'  || strpos( $lower, 'name' )  !== false ) ) $name  = $value;
+        if ( ! $email && ( $type === 'email' || strpos( $lower, 'email' ) !== false ) ) $email = $value;
+        if ( ! $phone && ( $type === 'phone' || strpos( $lower, 'phone' ) !== false || strpos( $lower, 'tel' ) !== false ) ) $phone = $value;
+    }
+
+    hozio_insert_lead_record(
+        'WPForms', $name, $email, $phone,
+        isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '',
+        $all_fields
+    );
+}, 10, 4 );
+
+
+// ══════════════════════════════════════════════════════════
+// 4i. GRAVITY FORMS — native integration
+//     Fires automatically on every Gravity Forms submission.
+// ══════════════════════════════════════════════════════════
+add_action( 'gform_after_submission', function( $entry, $form ) {
+    $name  = ''; $email = ''; $phone = ''; $all_fields = [];
+
+    foreach ( $form['fields'] as $field ) {
+        $field_id = $field->id;
+        $label    = sanitize_text_field( $field->label );
+        $type     = $field->type;
+
+        // Name fields — GF stores data in sub-keys (.3 = first, .6 = last),
+        // NOT in the parent field ID. rgar($entry, $field_id) always returns ''.
+        if ( $type === 'name' ) {
+            $first  = sanitize_text_field( rgar( $entry, $field_id . '.3' ) );
+            $last   = sanitize_text_field( rgar( $entry, $field_id . '.6' ) );
+            $middle = sanitize_text_field( rgar( $entry, $field_id . '.4' ) );
+            $prefix = sanitize_text_field( rgar( $entry, $field_id . '.2' ) );
+            $full   = trim( implode( ' ', array_filter( [ $prefix, $first, $middle, $last ] ) ) );
+            if ( $full !== '' ) {
+                $all_fields[ $label ] = $full;
+                if ( ! $name ) $name = $full;
+            }
+            continue;
+        }
+
+        // Address fields — also stored in sub-keys
+        if ( $type === 'address' ) {
+            $parts = array_filter( [
+                rgar( $entry, $field_id . '.1' ),  // street
+                rgar( $entry, $field_id . '.2' ),  // street 2
+                rgar( $entry, $field_id . '.3' ),  // city
+                rgar( $entry, $field_id . '.4' ),  // state
+                rgar( $entry, $field_id . '.5' ),  // zip
+                rgar( $entry, $field_id . '.6' ),  // country
+            ] );
+            if ( ! empty( $parts ) ) {
+                $all_fields[ $label ] = sanitize_text_field( implode( ', ', $parts ) );
+            }
+            continue;
+        }
+
+        // All other field types
+        $value = rgar( $entry, (string) $field_id );
+        if ( $value === '' || $value === null ) continue;
+        if ( is_array( $value ) ) $value = implode( ', ', $value );
+        $value = sanitize_text_field( (string) $value );
+        $all_fields[ $label ] = $value;
+        $lower = strtolower( $label );
+        if ( ! $name  && strpos( $lower, 'name' )  !== false ) $name  = $value;
+        if ( ! $email && ( $type === 'email' || strpos( $lower, 'email' ) !== false ) ) $email = $value;
+        if ( ! $phone && ( $type === 'phone' || strpos( $lower, 'phone' ) !== false || strpos( $lower, 'tel' ) !== false ) ) $phone = $value;
+    }
+
+    hozio_insert_lead_record(
+        'Gravity Forms', $name, $email, $phone,
+        rgar( $entry, 'source_url' ) ?: ( isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '' ),
+        $all_fields
+    );
+}, 10, 2 );
 
 
 // ══════════════════════════════════════════════════════════
@@ -1049,12 +2528,8 @@ add_shortcode( 'leads_digest', function() {
                 </div>';
     }
 
-    if ( ! hozio_submissions_tables_exist() ) {
-        return '<p><em>No submissions table found.</em></p>';
-    }
-
     // Front-end: load all for client-side filtering (capped at 500 for safety)
-    $result      = hozio_get_submissions( 500, 1 );
+    $result      = hozio_get_all_leads( 500, 1 );
     $submissions = $result['submissions'];
     $total_items = $result['total'];
 
