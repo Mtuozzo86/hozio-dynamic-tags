@@ -568,7 +568,7 @@ if (!function_exists('hozio_custom_post_link_override')) {
 // Override the_permalink output - SECONDARY METHOD
 if (!function_exists('hozio_override_the_permalink')) {
     add_filter('the_permalink', 'hozio_override_the_permalink', 9999, 2);
-    function hozio_override_the_permalink($permalink, $post) {
+    function hozio_override_the_permalink($permalink, $post = null) {
         // EARLY EXIT: Only apply to posts
         if (!is_object($post) || $post->post_type !== 'post') {
             return $permalink;
