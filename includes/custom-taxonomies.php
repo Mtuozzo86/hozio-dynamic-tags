@@ -1195,4 +1195,25 @@ function process_taxonomy_based_connection() {
     </div>
     <?php
 }
+
+// ========================
+// FORCE NOINDEX ON LEADS PAGE
+// ========================
+// Any site with a page at slug 'leads-page' should never have it indexed.
+// is_page('leads-page') returns false if no such page exists, so this is a no-op on sites without it.
+
+add_action('template_redirect', 'hozio_noindex_leads_page', 2);
+function hozio_noindex_leads_page() {
+    if (!is_page('leads-page')) return;
+    header('X-Robots-Tag: noindex, nofollow', true);
+}
+
+add_filter('wp_robots', 'hozio_leads_page_wp_robots', 99);
+function hozio_leads_page_wp_robots($robots) {
+    if (!is_page('leads-page')) return $robots;
+    unset($robots['index']);
+    $robots['noindex'] = true;
+    $robots['nofollow'] = true;
+    return $robots;
+}
 ?>
