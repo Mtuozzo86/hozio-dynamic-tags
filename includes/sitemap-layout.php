@@ -2008,11 +2008,6 @@ function hozio_sitemap_auto_place_page($new_status, $old_status, $post) {
         $overrides['accordions'] = $accordions;
         update_option('hozio_sitemap_layout_overrides', $overrides);
 
-        // Log the auto-placed page for admin notification
-        $auto_placed = get_transient('hozio_sitemap_auto_placed_pages');
-        if (!is_array($auto_placed)) $auto_placed = array();
-        $auto_placed[] = $post->ID;
-        set_transient('hozio_sitemap_auto_placed_pages', $auto_placed, 30 * DAY_IN_SECONDS);
     }
 }
 add_action('transition_post_status', 'hozio_sitemap_auto_place_page', 10, 3);
@@ -2111,27 +2106,11 @@ function hozio_save_sitemap_layout() {
 
     update_option('hozio_sitemap_layout_overrides', $data);
 
-    // Clear auto-placed notification on save
-    delete_transient('hozio_sitemap_auto_placed_pages');
-
     wp_redirect(add_query_arg('settings-updated', 'true', admin_url('admin.php?page=hozio-sitemap-settings&tab=layout')));
     exit;
 }
 add_action('admin_post_hozio_save_sitemap_layout', 'hozio_save_sitemap_layout');
 
-// Dismiss auto-placed pages notification
-function hozio_dismiss_auto_placed() {
-    if (!wp_verify_nonce($_GET['_wpnonce'], 'hozio_dismiss_auto_placed')) {
-        wp_die('Security check failed');
-    }
-    if (!current_user_can('manage_options')) {
-        wp_die('Unauthorized');
-    }
-    delete_transient('hozio_sitemap_auto_placed_pages');
-    wp_redirect(admin_url('admin.php?page=hozio-sitemap-settings&tab=layout'));
-    exit;
-}
-add_action('admin_post_hozio_dismiss_auto_placed', 'hozio_dismiss_auto_placed');
 
 function hozio_sanitize_accordion_array($items) {
     $sanitized = array();
@@ -2311,6 +2290,9 @@ function hozio_sitemap_layout_page() {
                 <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-sitemap-settings&tab=layout')); ?>" class="hozio-tab active">
                     <span class="dashicons dashicons-layout"></span> Layout Editor
                 </a>
+                <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-sitemap-settings&tab=image-sitemap')); ?>" class="hozio-tab">
+                    <span class="dashicons dashicons-format-image"></span> Image Sitemap
+                </a>
             </div>
 
             <div class="hozio-content">
@@ -2320,31 +2302,6 @@ function hozio_sitemap_layout_page() {
                     </div>
                 <?php endif; ?>
 
-                <?php
-                // Show notification for auto-placed pages
-                $auto_placed_ids = get_transient('hozio_sitemap_auto_placed_pages');
-                if (!empty($auto_placed_ids) && is_array($auto_placed_ids)) :
-                    // Filter to only pages that still exist and are published
-                    $valid_titles = array();
-                    foreach ($auto_placed_ids as $ap_id) {
-                        $ap_page = get_post(intval($ap_id));
-                        if ($ap_page && $ap_page->post_status === 'publish') {
-                            $valid_titles[] = $ap_page->post_title ? $ap_page->post_title : '(Untitled)';
-                        }
-                    }
-                    if (!empty($valid_titles)) :
-                ?>
-                    <div class="notice notice-info" style="margin: 0 0 20px 0; border-radius: 6px; border-left-color: var(--hozio-blue);">
-                        <p>
-                            <span class="dashicons dashicons-info" style="color: var(--hozio-blue);"></span>
-                            <strong><?php echo count($valid_titles); ?> page(s) were automatically added</strong> to your sitemap layout since your last edit:
-                            <em><?php echo esc_html(implode(', ', $valid_titles)); ?></em>
-                        </p>
-                        <p>
-                            <a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=hozio_dismiss_auto_placed'), 'hozio_dismiss_auto_placed')); ?>" class="button button-small">Dismiss</a>
-                        </p>
-                    </div>
-                <?php endif; endif; ?>
 
                 <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" id="hozio-layout-form">
                     <?php wp_nonce_field('hozio_sitemap_layout_nonce', 'hozio_sitemap_layout_nonce_field'); ?>

@@ -43,6 +43,7 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/loop-configurations.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/parent-page-filtering.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/support-page.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/sitemap-layout.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/image-sitemap.php';
 
 // Hub integration files (defensive loading — file_exists prevents fatal errors on partial updates)
 $hozio_hub_includes = [

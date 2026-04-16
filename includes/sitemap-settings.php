@@ -658,6 +658,12 @@ function hozio_sitemap_settings_page() {
         return;
     }
 
+    // Delegate to image sitemap tab
+    if ($tab === 'image-sitemap') {
+        hozio_image_sitemap_page();
+        return;
+    }
+
     // Check if settings were saved
     if (isset($_GET['settings-updated']) && $_GET['settings-updated'] === 'true') {
         add_settings_error(
@@ -694,11 +700,14 @@ function hozio_sitemap_settings_page() {
         </div>
 
         <div class="hozio-tab-bar">
-            <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-sitemap-settings&tab=appearance')); ?>" class="hozio-tab active">
+            <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-sitemap-settings&tab=appearance')); ?>" class="hozio-tab<?php echo ($tab === 'appearance' || $tab === '') ? ' active' : ''; ?>">
                 <span class="dashicons dashicons-admin-appearance"></span> Appearance
             </a>
-            <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-sitemap-settings&tab=layout')); ?>" class="hozio-tab">
+            <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-sitemap-settings&tab=layout')); ?>" class="hozio-tab<?php echo $tab === 'layout' ? ' active' : ''; ?>">
                 <span class="dashicons dashicons-layout"></span> Layout Editor
+            </a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-sitemap-settings&tab=image-sitemap')); ?>" class="hozio-tab<?php echo $tab === 'image-sitemap' ? ' active' : ''; ?>">
+                <span class="dashicons dashicons-format-image"></span> Image Sitemap
             </a>
         </div>
 
