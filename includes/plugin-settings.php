@@ -166,6 +166,66 @@ function hozio_ajax_hub_connect() {
 add_action('wp_ajax_hozio_hub_connect', 'hozio_ajax_hub_connect');
 
 /**
+ * Handle AJAX action to verify live Hub connection
+ */
+function hozio_ajax_check_hub_connection() {
+    check_ajax_referer('hozio_check_connection_nonce', 'nonce');
+
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['type' => 'permission', 'message' => 'Permission denied']);
+    }
+
+    if (!class_exists('Hozio_Hub_Client') || !Hozio_Hub_Client::is_connected()) {
+        wp_send_json_error(['type' => 'not_connected', 'message' => 'Not connected to Hub']);
+    }
+
+    $hub_url    = get_option('hozio_hub_url');
+    $site_token = get_option('hozio_hub_site_token');
+    $endpoint   = $hub_url . '/wp-json/hozio-hub/v1/heartbeat';
+
+    $response = wp_remote_post($endpoint, [
+        'timeout'   => 15,
+        'sslverify' => true,
+        'headers'   => [
+            'Authorization' => 'Bearer ' . $site_token,
+            'Content-Type'  => 'application/json',
+        ],
+        'body' => wp_json_encode([
+            'site_url'       => home_url(),
+            'plugin_version' => defined('HOZIO_VERSION') ? HOZIO_VERSION : '0.0.0',
+            'wp_version'     => get_bloginfo('version'),
+            'php_version'    => phpversion(),
+        ]),
+    ]);
+
+    if (is_wp_error($response)) {
+        wp_send_json_error(['type' => 'network', 'message' => 'Could not reach Hub: ' . $response->get_error_message()]);
+    }
+
+    $code = wp_remote_retrieve_response_code($response);
+    $body = json_decode(wp_remote_retrieve_body($response), true);
+
+    if ($code === 401 || $code === 403) {
+        wp_send_json_error(['type' => 'auth', 'message' => 'Authentication failed — this site was deleted from the Hub. Please disconnect and re-register.']);
+    }
+
+    if ($code === 404) {
+        wp_send_json_error(['type' => 'not_found', 'message' => 'Hub endpoint not found. Is the Hub plugin active at ' . $hub_url . '?']);
+    }
+
+    if ($code !== 200 || empty($body)) {
+        wp_send_json_error(['type' => 'bad_response', 'message' => 'Hub returned unexpected status ' . $code]);
+    }
+
+    $license_status = $body['license_status'] ?? get_option('hozio_hub_last_known_status', 'active');
+    set_transient('hozio_hub_license_status', $license_status, DAY_IN_SECONDS);
+    update_option('hozio_hub_last_known_status', $license_status);
+
+    wp_send_json_success(['type' => 'ok', 'license_status' => $license_status]);
+}
+add_action('wp_ajax_hozio_check_hub_connection', 'hozio_ajax_check_hub_connection');
+
+/**
  * Handle AJAX action to disconnect from Hub
  */
 function hozio_ajax_hub_disconnect() {
@@ -398,15 +458,35 @@ function hozio_plugin_settings_page() {
 
                 <?php if ($hub_connected): ?>
                     <!-- Hub-managed license -->
-                    <div class="hozio-hub-status-box">
+                    <div class="hozio-hub-status-box" id="hozio-hub-status-box">
                         <div class="hozio-hub-status-header">
-                            <span class="dashicons dashicons-yes-alt" style="color: #16a34a; font-size: 20px;"></span>
-                            <strong>Connected to Hub</strong>
+                            <span class="dashicons dashicons-yes-alt" style="color: #16a34a; font-size: 20px;" id="hozio-hub-status-icon"></span>
+                            <strong id="hozio-hub-status-label">Connected to Hub</strong>
                         </div>
                         <table class="hozio-hub-status-table">
                             <tr><td>Hub URL:</td><td><?php echo esc_html($hub_url); ?></td></tr>
-                            <tr><td>License Status:</td><td><strong style="color: <?php echo $hub_license === 'active' ? '#16a34a' : '#d63638'; ?>;"><?php echo esc_html(ucfirst($hub_license ?: 'unknown')); ?></strong></td></tr>
+                            <tr>
+                                <td>License Status:</td>
+                                <td>
+                                    <strong id="hozio-hub-license-display" style="color: <?php echo $hub_license === 'active' ? '#16a34a' : '#d63638'; ?>;">
+                                        <?php echo esc_html(ucfirst($hub_license ?: 'unknown')); ?>
+                                    </strong>
+                                </td>
+                            </tr>
                         </table>
+                        <div id="hozio-check-connection-result" style="margin-top:8px;font-size:13px;display:none;"></div>
+                        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="button" id="hozio-check-connection-btn"
+                                    data-nonce="<?php echo esc_attr(wp_create_nonce('hozio_check_connection_nonce')); ?>">
+                                <span class="dashicons dashicons-update" style="margin-top:3px;"></span>
+                                Check Connection
+                            </button>
+                            <button type="button" class="button" id="hozio-hub-disconnect-btn"
+                                    data-nonce="<?php echo esc_attr(wp_create_nonce('hozio_hub_disconnect_nonce')); ?>"
+                                    style="color:#d63638;border-color:#d63638;">
+                                Disconnect
+                            </button>
+                        </div>
                     </div>
                 <?php else: ?>
                     <!-- Manual license key -->
@@ -1828,6 +1908,60 @@ function hozio_plugin_settings_page() {
                     $btn.prop('disabled', false).text('Connect to Hub');
                     $result.html('<span style="color: #d63638;">Network error. Check the Hub URL.</span>');
                 }
+            });
+        });
+
+        // Hub Check Connection
+        $('#hozio-check-connection-btn').on('click', function() {
+            var $btn    = $(this);
+            var $result = $('#hozio-check-connection-result');
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update" style="margin-top:3px;"></span> Checking…');
+            $result.hide();
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: { action: 'hozio_check_hub_connection', nonce: $btn.data('nonce') },
+                success: function(response) {
+                    $btn.prop('disabled', false).html('<span class="dashicons dashicons-update" style="margin-top:3px;"></span> Check Connection');
+                    if (response.success) {
+                        var status = response.data.license_status || 'active';
+                        var color  = status === 'active' ? '#16a34a' : '#d63638';
+                        $('#hozio-hub-status-icon').removeClass().addClass('dashicons dashicons-yes-alt').css('color', '#16a34a');
+                        $('#hozio-hub-status-label').text('Connected to Hub');
+                        $('#hozio-hub-license-display').css('color', color).text(status.charAt(0).toUpperCase() + status.slice(1));
+                        $result.html('<span style="color:#16a34a;">&#10003; Connection verified.</span>').show();
+                    } else {
+                        var isAuth = response.data && response.data.type === 'auth';
+                        $('#hozio-hub-status-icon').removeClass().addClass('dashicons dashicons-warning').css('color', '#d63638');
+                        $('#hozio-hub-status-label').text('Connection Lost');
+                        var msg = (response.data && response.data.message) ? response.data.message : 'Connection check failed.';
+                        $result.html('<span style="color:#d63638;">&#9888; ' + msg + '</span>' +
+                            (isAuth ? '<br><small>Click <strong>Disconnect</strong> below, then re-register with a new key from the Hub.</small>' : '')).show();
+                    }
+                },
+                error: function() {
+                    $btn.prop('disabled', false).html('<span class="dashicons dashicons-update" style="margin-top:3px;"></span> Check Connection');
+                    $result.html('<span style="color:#d63638;">Network error. Please try again.</span>').show();
+                }
+            });
+        });
+
+        // Hub Disconnect (by ID for the connected-state button)
+        $('#hozio-hub-disconnect-btn').on('click', function() {
+            if (!confirm('Disconnect from Hub? The site will no longer receive commands or license updates from the Hub.')) return;
+            var $btn = $(this);
+            $btn.prop('disabled', true).text('Disconnecting…');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: { action: 'hozio_hub_disconnect', nonce: $btn.data('nonce') },
+                success: function(response) {
+                    if (response.success) { location.reload(); }
+                    else { alert('Error: ' + response.data); $btn.prop('disabled', false).text('Disconnect'); }
+                },
+                error: function() { alert('Network error'); $btn.prop('disabled', false).text('Disconnect'); }
             });
         });
 
