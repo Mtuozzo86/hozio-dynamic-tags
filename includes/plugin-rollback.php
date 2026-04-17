@@ -237,6 +237,11 @@ function hozio_perform_rollback($target_version) {
 
     hozio_audit_log("Rollback complete: {$current_version} → {$target_version}", 'Rollback');
 
+    // Notify Hub immediately so it sees the new version
+    if (!wp_next_scheduled('hozio_hub_heartbeat_post_update')) {
+        wp_schedule_single_event(time() + 5, 'hozio_hub_heartbeat_post_update');
+    }
+
     return [
         'success' => true,
         'message' => "Successfully installed v{$target_version} (was v{$current_version}).",

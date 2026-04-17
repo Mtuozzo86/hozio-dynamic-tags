@@ -310,3 +310,6 @@ Hozio_Hub_Client::init();
 
 // Login heartbeat event handler
 add_action('hozio_hub_heartbeat_login', ['Hozio_Hub_Client', 'send_heartbeat']);
+
+// Post-update heartbeat — fires ~5s after plugin update completes
+add_action('hozio_hub_heartbeat_post_update', ['Hozio_Hub_Client', 'send_heartbeat']);

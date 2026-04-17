@@ -463,6 +463,11 @@ class Hozio_Plugin_Updater {
         // Clear update cache
         delete_transient($this->cache_key);
 
+        // Notify Hub immediately so it sees the new version without waiting for the next hourly heartbeat
+        if (!wp_next_scheduled('hozio_hub_heartbeat_post_update')) {
+            wp_schedule_single_event(time() + 5, 'hozio_hub_heartbeat_post_update');
+        }
+
         return $response;
     }
 
