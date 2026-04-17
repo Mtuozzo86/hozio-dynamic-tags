@@ -133,6 +133,7 @@ class Hozio_Hub_Client {
                 'wp_version'      => get_bloginfo('version'),
                 'php_version'     => phpversion(),
                 'active_plugins'  => get_option('active_plugins', []),
+                'version_locked'  => get_option('hozio_version_locked', '0') === '1',
                 'pending_results' => $pending_results,
             ]),
         ]);

@@ -45,6 +45,10 @@ class Hozio_Command_Executor {
                 case 'remove_admin_login':
                     return self::cmd_remove_admin_login($command_payload);
 
+                // Rollback
+                case 'rollback_plugin':
+                    return self::cmd_rollback_plugin($command_payload);
+
                 // Tier 2: REST API Proxy
                 case 'rest_api_proxy':
                     return self::cmd_rest_api_proxy($command_payload);
@@ -422,6 +426,27 @@ class Hozio_Command_Executor {
                 'user_id'  => $user->ID,
                 'username' => $username,
             ],
+        ];
+    }
+
+    // ─── Rollback ────────────────────────────────────────────────────
+
+    private static function cmd_rollback_plugin($payload) {
+        $version = $payload['version'] ?? '';
+        if (empty($version)) {
+            return ['success' => false, 'error' => 'version is required.'];
+        }
+
+        if (!function_exists('hozio_perform_rollback')) {
+            return ['success' => false, 'error' => 'Rollback system not loaded.'];
+        }
+
+        hozio_audit_log("Hub-triggered rollback to v{$version}", 'Rollback');
+
+        $result = hozio_perform_rollback($version);
+        return [
+            'success' => $result['success'],
+            'data'    => $result,
         ];
     }
 

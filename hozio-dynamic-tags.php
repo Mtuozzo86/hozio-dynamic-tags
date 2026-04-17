@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.11.5
+Version:         4.11.6
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,7 +13,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.11.5');
+define('HOZIO_VERSION', '4.11.6');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -25,6 +25,9 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/plugin-settings.php';
 
 // Load self-hosted plugin updater (checks GitHub Releases for updates)
 require_once plugin_dir_path( __FILE__ ) . 'includes/plugin-updater.php';
+
+// Rollback system — must load after updater so hozio_get_plugin_version() is available
+require_once plugin_dir_path( __FILE__ ) . 'includes/plugin-rollback.php';
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/admin-settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/dynamic-tags.php';

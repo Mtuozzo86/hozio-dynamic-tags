@@ -276,10 +276,13 @@ function hozio_plugin_settings_save() {
     $service_menu_sync_enabled = isset($_POST['hozio_service_menu_sync_enabled']) ? '1' : '0';
     update_option('hozio_service_menu_sync_enabled', $service_menu_sync_enabled);
 
-    // Save license key
+    // Save license key — never overwrite an existing key with an empty submission
     if (isset($_POST['hozio_license_key'])) {
-        $license_key = sanitize_text_field(trim($_POST['hozio_license_key']));
-        update_option('hozio_license_key', $license_key);
+        $submitted_key = sanitize_text_field(trim($_POST['hozio_license_key']));
+        $existing_key  = get_option('hozio_license_key', '');
+        if (!empty($submitted_key) || empty($existing_key)) {
+            update_option('hozio_license_key', $submitted_key);
+        }
     }
 
     // Save auto-updates enabled setting
@@ -360,7 +363,7 @@ function hozio_plugin_settings_page() {
     ?>
     <div class="wrap hozio-settings-wrap">
         <div class="hozio-header">
-            <img src="<?php echo esc_url(plugins_url('../assets/hozio-logo.png', __FILE__)); ?>" alt="Hozio" class="hozio-logo">
+            <img src="<?php echo esc_url(plugins_url('../assets/hozio-burst.png', __FILE__)); ?>" alt="Hozio" class="hozio-logo">
             <div class="hozio-header-text">
                 <h1>Plugin Settings</h1>
                 <p class="hozio-subtitle">Configure plugin features and debugging options</p>
@@ -373,6 +376,9 @@ function hozio_plugin_settings_page() {
         </div>
         <?php endif; ?>
 
+        <div class="hozio-settings-layout">
+        <!-- ── LEFT: main settings form ─────────────────────────────── -->
+        <div class="hozio-main-col">
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <input type="hidden" name="action" value="hozio_plugin_settings_save">
             <?php wp_nonce_field('hozio_plugin_settings_save', 'hozio_plugin_settings_nonce'); ?>
@@ -465,6 +471,30 @@ function hozio_plugin_settings_page() {
                             <div class="hozio-toggle-description">
                                 When enabled, WordPress will automatically install plugin updates.
                                 <?php echo $hub_connected ? 'Managed via Hub.' : 'Requires a valid license key.'; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Version Lock Toggle -->
+                <?php $version_locked = get_option('hozio_version_locked', '0') === '1'; ?>
+                <div class="hozio-field" style="margin-top: 16px;">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" id="hozio-version-lock-toggle" value="1"
+                                   data-nonce="<?php echo esc_attr(wp_create_nonce('hozio_rollback_nonce')); ?>"
+                                   <?php checked($version_locked, true); ?>>
+                            <span class="hozio-toggle-slider" style="<?php echo $version_locked ? 'background:#dc2626!important;' : ''; ?>"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">
+                                Version Lock
+                                <?php if ($version_locked): ?>
+                                    <span style="display:inline-block;background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;text-transform:uppercase;letter-spacing:.5px;">Locked</span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="hozio-toggle-description">
+                                When locked, all automatic updates are blocked and Hub cannot push updates to this site. Use during active development or client projects.
                             </div>
                         </div>
                     </div>
@@ -644,86 +674,615 @@ function hozio_plugin_settings_page() {
                 </div>
             </div>
 
-            <!-- System Information Section -->
-            <div class="hozio-section">
-                <h2 class="hozio-section-title">System Information</h2>
-
-                <table class="hozio-system-info">
-                    <tr>
-                        <th>Plugin Version</th>
-                        <td><?php echo esc_html(hozio_get_plugin_version()); ?></td>
-                    </tr>
-                    <tr>
-                        <th>WordPress Version</th>
-                        <td><?php echo esc_html(get_bloginfo('version')); ?></td>
-                    </tr>
-                    <tr>
-                        <th>PHP Version</th>
-                        <td><?php echo esc_html(PHP_VERSION); ?></td>
-                    </tr>
-                    <tr>
-                        <th>Debug Log Path</th>
-                        <td><code><?php echo esc_html($log_path); ?></code></td>
-                    </tr>
-                    <tr>
-                        <th>Debug Logging</th>
-                        <td>
-                            <?php if ($constant_defined): ?>
-                                <span class="hozio-status hozio-status-<?php echo HOZIO_DEBUG ? 'on' : 'off'; ?>">
-                                    <?php echo HOZIO_DEBUG ? 'Enabled (via wp-config.php)' : 'Disabled (via wp-config.php)'; ?>
-                                </span>
-                            <?php else: ?>
-                                <span class="hozio-status hozio-status-<?php echo $debug_enabled === '1' ? 'on' : 'off'; ?>">
-                                    <?php echo $debug_enabled === '1' ? 'Enabled' : 'Disabled'; ?>
-                                </span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>DOM Parsing</th>
-                        <td>
-                            <span class="hozio-status hozio-status-<?php echo $dom_parsing_enabled === '1' ? 'on' : 'off'; ?>">
-                                <?php echo $dom_parsing_enabled === '1' ? 'Enabled' : 'Disabled'; ?>
-                            </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Service Menu Sync</th>
-                        <td>
-                            <span class="hozio-status hozio-status-<?php echo $service_menu_sync_enabled === '1' ? 'on' : 'off'; ?>">
-                                <?php echo $service_menu_sync_enabled === '1' ? 'Enabled' : 'Disabled'; ?>
-                            </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Canonical Redirects</th>
-                        <td>
-                            <span class="hozio-status hozio-status-<?php echo $canonical_redirect_enabled === '1' ? 'on' : 'off'; ?>">
-                                <?php echo $canonical_redirect_enabled === '1' ? 'Enabled' : 'Disabled'; ?>
-                            </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>License Status</th>
-                        <td>
-                            <span class="hozio-status hozio-status-<?php echo $license_status['status'] === 'valid' ? 'on' : 'off'; ?>">
-                                <?php echo esc_html($license_status['message']); ?>
-                            </span>
-                        </td>
-                    </tr>
-                </table>
-            </div>
-
             <div class="hozio-submit-wrapper">
                 <button type="submit" class="button button-primary button-large">Save Settings</button>
             </div>
         </form>
+        </div><!-- /.hozio-main-col -->
+
+        <!-- ── RIGHT: sidebar ───────────────────────────────────────── -->
+        <div class="hozio-sidebar-col">
+
+            <?php
+            $history        = get_option('hozio_version_history', []);
+            $prev_entry     = !empty($history) ? $history[0] : null;
+            $quick_revert_raw = $prev_entry && !empty($prev_entry['previous']) ? $prev_entry['previous'] : '';
+            $quick_revert     = ($quick_revert_raw !== $current_ver) ? $quick_revert_raw : '';
+            $rollback_nonce = wp_create_nonce('hozio_rollback_nonce');
+            $current_ver    = hozio_get_plugin_version();
+            ?>
+
+            <!-- Version Control Card -->
+            <div class="hozio-sidebar-card hozio-rollback-card">
+
+                <!-- Accordion header -->
+                <button type="button" class="hozio-accordion-trigger" aria-expanded="true">
+                    <div class="hozio-accordion-title">
+                        <span class="dashicons dashicons-backup"></span>
+                        <span>Version Control</span>
+                    </div>
+                    <div class="hozio-accordion-meta">
+                        <span class="hozio-version-pill">v<?php echo esc_html($current_ver); ?></span>
+                        <span class="dashicons dashicons-arrow-up-alt2 hozio-accordion-chevron"></span>
+                    </div>
+                </button>
+
+                <div class="hozio-accordion-body">
+
+                    <!-- Current version banner -->
+                    <div class="hozio-current-version-banner">
+                        <div class="hozio-cv-label">Currently Installed</div>
+                        <div class="hozio-cv-version">v<?php echo esc_html($current_ver); ?></div>
+                    </div>
+
+                    <!-- Quick Revert -->
+                    <?php if ($quick_revert): ?>
+                    <div class="hozio-revert-strip">
+                        <div class="hozio-revert-strip-label">
+                            <span class="dashicons dashicons-undo"></span>
+                            Previous version: <strong>v<?php echo esc_html($quick_revert); ?></strong>
+                        </div>
+                        <button type="button" class="hozio-revert-btn hozio-quick-revert-btn"
+                                data-version="<?php echo esc_attr($quick_revert); ?>"
+                                data-nonce="<?php echo esc_attr($rollback_nonce); ?>">
+                            Revert Now
+                        </button>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Install History accordion (default closed) -->
+                    <div class="hozio-history-block">
+                        <div class="hozio-history-header">
+                            <button type="button" class="hozio-history-toggle" aria-expanded="false">
+                                <span class="dashicons dashicons-arrow-right-alt2 hozio-history-chevron"></span>
+                                Install History
+                                <?php
+                                $unique_count = count(array_unique(array_column($history, 'version')));
+                                if ($unique_count > 0): ?>
+                                    <span class="hozio-history-count"><?php echo $unique_count; ?></span>
+                                <?php endif; ?>
+                            </button>
+                            <?php if (!empty($history)): ?>
+                            <button type="button" class="hozio-history-clear-btn"
+                                    data-nonce="<?php echo esc_attr($rollback_nonce); ?>"
+                                    title="Clear history">
+                                <span class="dashicons dashicons-trash"></span>
+                            </button>
+                            <?php endif; ?>
+                        </div>
+                        <div class="hozio-history-body" style="display:none;">
+                        <?php if (!empty($history)): ?>
+                        <ul class="hozio-timeline">
+                        <?php
+                        $method_colors = [
+                            'auto_update' => '#0073aa',
+                            'rollback'    => '#7c3aed',
+                            'hub_command' => '#059669',
+                            'update'      => '#6b7280',
+                        ];
+                        $method_labels = [
+                            'auto_update' => 'Auto-update',
+                            'rollback'    => 'Rollback',
+                            'hub_command' => 'Hub',
+                            'update'      => 'Manual',
+                        ];
+                        $seen_versions = [];
+                        foreach ($history as $i => $entry):
+                            // Skip duplicate versions (same version recorded more than once)
+                            if (in_array($entry['version'], $seen_versions, true)) continue;
+                            $seen_versions[] = $entry['version'];
+                            $is_current = ($entry['version'] === $current_ver);
+                            $dot_color  = $method_colors[$entry['method']] ?? '#6b7280';
+                            $label      = $method_labels[$entry['method']] ?? ucfirst($entry['method']);
+                        ?>
+                        <li class="hozio-timeline-item">
+                            <span class="hozio-timeline-dot" style="background:<?php echo esc_attr($dot_color); ?>;"></span>
+                            <div class="hozio-timeline-content">
+                                <span class="hozio-timeline-ver">v<?php echo esc_html($entry['version']); ?></span>
+                                <?php if ($is_current): ?>
+                                    <span class="hozio-badge hozio-badge-current">current</span>
+                                <?php endif; ?>
+                                <span class="hozio-timeline-meta">
+                                    <?php echo esc_html(date_i18n('M j', $entry['installed_at'])); ?>
+                                    &middot; <span style="color:<?php echo esc_attr($dot_color); ?>;"><?php echo esc_html($label); ?></span>
+                                </span>
+                            </div>
+                        </li>
+                        <?php endforeach; ?>
+                        </ul>
+                        <?php else: ?>
+                        <p style="margin:8px 12px;font-size:12px;color:#9ca3af;">No history recorded yet.</p>
+                        <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <!-- Browse All Releases -->
+                    <div class="hozio-browse-releases">
+                        <button type="button" class="hozio-load-releases-btn hozio-browse-btn"
+                                data-nonce="<?php echo esc_attr($rollback_nonce); ?>">
+                            <span class="dashicons dashicons-download"></span>
+                            Browse All Releases
+                            <span class="hozio-releases-status"></span>
+                        </button>
+
+                        <div class="hozio-releases-list" style="display:none;margin-top:12px;">
+                            <table class="widefat striped hozio-releases-table">
+                                <thead>
+                                    <tr>
+                                        <th>Version</th>
+                                        <th>Date</th>
+                                        <th>Notes</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody class="hozio-releases-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Progress & result -->
+                    <div class="hozio-rollback-progress" style="display:none;">
+                        <span class="dashicons dashicons-update spin"></span>
+                        <div>
+                            <strong class="hozio-rollback-progress-title">Installing…</strong>
+                            <p class="hozio-rollback-progress-msg">Do not close this page.</p>
+                        </div>
+                    </div>
+                    <div class="hozio-rollback-result" style="display:none;"></div>
+
+                </div><!-- /.hozio-accordion-body -->
+            </div><!-- /.hozio-rollback-card -->
+
+            <!-- System Info Card -->
+            <div class="hozio-sidebar-card hozio-sysinfo-card">
+                <button type="button" class="hozio-accordion-trigger" aria-expanded="true">
+                    <div class="hozio-accordion-title">
+                        <span class="dashicons dashicons-info-outline"></span>
+                        <span>System Info</span>
+                    </div>
+                    <span class="dashicons dashicons-arrow-up-alt2 hozio-accordion-chevron"></span>
+                </button>
+                <div class="hozio-accordion-body">
+                    <table class="hozio-sysinfo-table">
+                        <tr><th>Plugin</th><td>v<?php echo esc_html($current_ver); ?></td></tr>
+                        <tr><th>WordPress</th><td><?php echo esc_html(get_bloginfo('version')); ?></td></tr>
+                        <tr><th>PHP</th><td><?php echo esc_html(PHP_VERSION); ?></td></tr>
+                        <tr>
+                            <th>License</th>
+                            <td><span class="hozio-status hozio-status-<?php echo $license_status['status'] === 'valid' ? 'on' : 'off'; ?>"><?php echo esc_html($license_status['status'] === 'valid' ? 'Valid' : 'Invalid'); ?></span></td>
+                        </tr>
+                        <tr>
+                            <th>Debug</th>
+                            <td><span class="hozio-status hozio-status-<?php echo ($debug_enabled === '1' || ($constant_defined && HOZIO_DEBUG)) ? 'on' : 'off'; ?>"><?php echo ($debug_enabled === '1' || ($constant_defined && HOZIO_DEBUG)) ? 'On' : 'Off'; ?></span></td>
+                        </tr>
+                        <tr><th>Log File</th><td><code style="font-size:11px;"><?php echo esc_html(basename($log_path)); ?></code> <span style="color:#999;">(<?php echo esc_html($log_size); ?>)</span></td></tr>
+                    </table>
+                </div>
+            </div>
+
+        </div><!-- /.hozio-sidebar-col -->
+        </div><!-- /.hozio-settings-layout -->
+    </div><!-- /.wrap -->
+
+    <!-- Full-page rollback overlay -->
+    <div id="hozio-rollback-overlay" style="display:none;">
+        <div class="hozio-overlay-box">
+            <span class="hozio-overlay-icon dashicons dashicons-update hozio-spinning"></span>
+            <div class="hozio-overlay-title">Installing…</div>
+            <div class="hozio-overlay-sub">Do not close this tab.</div>
+        </div>
     </div>
 
     <style>
-    .hozio-settings-wrap {
-        max-width: 900px;
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    .hozio-settings-wrap { max-width: none; }
+
+    .hozio-settings-layout {
+        display: grid;
+        grid-template-columns: 55% 1fr;
+        gap: 24px;
+        align-items: start;
     }
+
+    @keyframes hozio-spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+    }
+    .hozio-spinning {
+        display: inline-block;
+        animation: hozio-spin 0.7s linear infinite;
+    }
+
+    .hozio-sidebar-col {
+        position: sticky;
+        top: 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    /* ── Sidebar cards ───────────────────────────────────────────────── */
+    .hozio-sidebar-card {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,.08);
+        overflow: hidden;
+    }
+
+    .hozio-accordion-trigger {
+        width: 100%;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 16px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #1f2937;
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb;
+        transition: background .15s;
+    }
+
+    .hozio-accordion-trigger:hover { background: #f9fafb; }
+
+    .hozio-rollback-card .hozio-accordion-trigger {
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        color: #fff;
+        border-bottom-color: rgba(255,255,255,.15);
+    }
+
+    .hozio-rollback-card .hozio-accordion-trigger:hover { filter: brightness(1.06); }
+
+    .hozio-accordion-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .hozio-accordion-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .hozio-version-pill {
+        background: rgba(255,255,255,.2);
+        color: #fff;
+        border-radius: 20px;
+        padding: 2px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .3px;
+    }
+
+    .hozio-accordion-chevron {
+        transition: transform .2s;
+        opacity: .7;
+    }
+
+    .hozio-accordion-trigger[aria-expanded="false"] .hozio-accordion-chevron {
+        transform: rotate(180deg);
+    }
+
+    .hozio-accordion-body { padding: 0; }
+    .hozio-accordion-body.is-collapsed { display: none; }
+
+    /* ── Current version banner ─────────────────────────────────────── */
+    .hozio-current-version-banner {
+        padding: 18px;
+        background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+        border-bottom: 1px solid #ddd6fe;
+        text-align: center;
+    }
+
+    .hozio-cv-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .6px;
+        color: #7c3aed;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .hozio-cv-version {
+        font-size: 28px;
+        font-weight: 800;
+        color: #4f46e5;
+        line-height: 1;
+    }
+
+    /* ── Quick revert strip ─────────────────────────────────────────── */
+    .hozio-revert-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 18px;
+        background: #fffbeb;
+        border-bottom: 1px solid #fde68a;
+        font-size: 13px;
+    }
+
+    .hozio-revert-strip-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #92400e;
+    }
+
+    .hozio-revert-strip-label .dashicons { font-size: 16px; width: 16px; height: 16px; }
+
+    .hozio-revert-btn {
+        background: #7c3aed !important;
+        border-color: #7c3aed !important;
+        color: #fff !important;
+        border-radius: 6px !important;
+        padding: 4px 12px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background .15s !important;
+    }
+
+    .hozio-revert-btn:hover { background: #6d28d9 !important; border-color: #6d28d9 !important; }
+    .hozio-revert-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* ── History accordion ──────────────────────────────────────────── */
+    .hozio-history-block {
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .hozio-history-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 18px;
+    }
+
+    .hozio-history-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        color: #6b7280;
+        font-weight: 600;
+        padding: 0;
+    }
+
+    .hozio-history-toggle:hover { color: #374151; }
+
+    .hozio-history-chevron {
+        font-size: 14px !important;
+        width: 14px !important;
+        height: 14px !important;
+        transition: transform .2s;
+    }
+
+    .hozio-history-toggle[aria-expanded="true"] .hozio-history-chevron {
+        transform: rotate(90deg);
+    }
+
+    .hozio-history-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #e5e7eb;
+        color: #4b5563;
+        font-size: 10px;
+        font-weight: 700;
+        border-radius: 10px;
+        padding: 1px 6px;
+        min-width: 18px;
+    }
+
+    .hozio-history-clear-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #d1d5db;
+        padding: 0;
+        line-height: 1;
+        transition: color .15s;
+    }
+
+    .hozio-history-clear-btn:hover { color: #ef4444; }
+    .hozio-history-clear-btn .dashicons { font-size: 15px !important; width: 15px !important; height: 15px !important; }
+
+    .hozio-history-body { padding: 0 18px 12px; }
+
+    /* ── Rollback overlay ───────────────────────────────────────────── */
+    #hozio-rollback-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(17,24,39,.75);
+        z-index: 999999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .hozio-overlay-box {
+        background: #fff;
+        border-radius: 16px;
+        padding: 40px 50px;
+        text-align: center;
+        box-shadow: 0 20px 60px rgba(0,0,0,.3);
+        min-width: 280px;
+    }
+
+    .hozio-overlay-icon {
+        font-size: 48px !important;
+        width: 48px !important;
+        height: 48px !important;
+        color: #7c3aed;
+        margin-bottom: 16px;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .hozio-overlay-icon.hozio-overlay-done {
+        color: #16a34a;
+        animation: none;
+    }
+
+    .hozio-overlay-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 6px;
+    }
+
+    .hozio-overlay-sub {
+        font-size: 13px;
+        color: #6b7280;
+    }
+
+    /* ── Timeline ───────────────────────────────────────────────────── */
+
+    .hozio-timeline {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        position: relative;
+    }
+
+    .hozio-timeline::before {
+        content: '';
+        position: absolute;
+        left: 6px;
+        top: 6px;
+        bottom: 6px;
+        width: 2px;
+        background: #e5e7eb;
+    }
+
+    .hozio-timeline-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 5px 0;
+        position: relative;
+    }
+
+    .hozio-timeline-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 2px;
+        border: 2px solid #fff;
+        box-shadow: 0 0 0 2px rgba(0,0,0,.1);
+        position: relative;
+        z-index: 1;
+    }
+
+    .hozio-timeline-content { flex: 1; min-width: 0; }
+
+    .hozio-timeline-ver {
+        font-weight: 700;
+        font-size: 13px;
+        color: #111827;
+        margin-right: 4px;
+    }
+
+    .hozio-timeline-meta {
+        display: block;
+        font-size: 11px;
+        color: #9ca3af;
+        margin-top: 1px;
+    }
+
+    /* ── Browse releases ────────────────────────────────────────────── */
+    .hozio-browse-releases { padding: 14px 18px; }
+
+    .hozio-browse-btn {
+        width: 100%;
+        display: flex !important;
+        align-items: center;
+        gap: 6px;
+        justify-content: center;
+        border: 2px dashed #d1d5db !important;
+        border-radius: 8px !important;
+        background: #f9fafb !important;
+        color: #374151 !important;
+        padding: 8px !important;
+        font-size: 13px !important;
+        cursor: pointer;
+        transition: all .15s !important;
+    }
+
+    .hozio-browse-btn:hover {
+        border-color: #7c3aed !important;
+        color: #7c3aed !important;
+        background: #faf5ff !important;
+    }
+
+    .hozio-releases-status { font-size: 11px; color: #9ca3af; margin-left: 4px; }
+
+    .hozio-releases-table { font-size: 12px !important; }
+    .hozio-releases-table th,
+    .hozio-releases-table td { padding: 6px 8px !important; }
+
+    /* ── Progress / result ──────────────────────────────────────────── */
+    .hozio-rollback-progress {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 18px;
+        background: #fffbeb;
+        border-top: 1px solid #fde68a;
+        font-size: 13px;
+    }
+
+    .hozio-rollback-progress .dashicons { color: #d97706; font-size: 20px; }
+
+    .hozio-rollback-progress p { margin: 2px 0 0; font-size: 12px; color: #92400e; }
+
+    .hozio-rollback-result { padding: 12px 18px; font-size: 13px; }
+
+    /* ── System info card ───────────────────────────────────────────── */
+    .hozio-sysinfo-card .hozio-accordion-trigger {
+        background: #f8fafc;
+        color: #374151;
+    }
+
+    .hozio-sysinfo-table {
+        width: 100%;
+        font-size: 13px;
+        border-collapse: collapse;
+        margin: 0;
+        padding: 8px 0;
+    }
+
+    .hozio-sysinfo-table tr { border: none; }
+
+    .hozio-sysinfo-table th,
+    .hozio-sysinfo-table td {
+        padding: 7px 18px;
+        border: none;
+        vertical-align: middle;
+    }
+
+    .hozio-sysinfo-table th {
+        width: 90px;
+        color: #6b7280;
+        font-weight: 500;
+        font-size: 12px;
+    }
+
+    .hozio-sysinfo-table tr:nth-child(even) { background: #f9fafb; }
 
     .hozio-header {
         display: flex;
@@ -737,8 +1296,9 @@ function hozio_plugin_settings_page() {
     }
 
     .hozio-header .hozio-logo {
-        width: 60px;
-        height: auto;
+        width: 52px;
+        height: 52px;
+        object-fit: contain;
     }
 
     .hozio-header h1 {
@@ -1090,6 +1650,18 @@ function hozio_plugin_settings_page() {
         color: #666;
     }
 
+    .hozio-badge {
+        display: inline-block;
+        padding: 1px 7px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+        vertical-align: middle;
+        margin-left: 4px;
+    }
+
+    .hozio-badge-current { background: #d1fae5; color: #065f46; }
+
     /* Hub connect divider */
     .hozio-hub-connect-inline {
         margin-top: 20px;
@@ -1287,6 +1859,263 @@ function hozio_plugin_settings_page() {
                 }
             });
         });
+
+        // ── Accordion ────────────────────────────────────────────────
+        $('.hozio-accordion-trigger').on('click', function() {
+            var $btn  = $(this);
+            var $body = $btn.closest('.hozio-sidebar-card').find('.hozio-accordion-body');
+            var open  = $btn.attr('aria-expanded') === 'true';
+            $btn.attr('aria-expanded', open ? 'false' : 'true');
+            $body.toggleClass('is-collapsed', open);
+        });
+
+        // ── Rollback ─────────────────────────────────────────────────
+
+        function hozioFormatDate(iso) {
+            if (!iso) return '—';
+            var d = new Date(iso);
+            return d.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
+        }
+
+        function hozioRollbackStart(version) {
+            $('#hozio-rollback-overlay')
+                .find('.hozio-overlay-icon').removeClass('hozio-overlay-done dashicons-yes-alt').addClass('hozio-spinning dashicons-update').end()
+                .find('.hozio-overlay-title').text('Installing v' + version + '…').end()
+                .find('.hozio-overlay-sub').text('Do not close this tab.').end()
+                .show();
+            $('.hozio-rollback-progress').show();
+            $('.hozio-rollback-result').hide();
+            $('[data-version]').prop('disabled', true);
+        }
+
+        function hozioRollbackDone($btn, originalText, success, message) {
+            $('.hozio-rollback-progress').hide();
+            $('[data-version]').prop('disabled', false);
+            $btn && $btn.text(originalText);
+
+            if (success) {
+                // Update overlay to "Done" state and keep it visible until reload
+                $('#hozio-rollback-overlay')
+                    .find('.hozio-overlay-icon').removeClass('hozio-spinning dashicons-update').addClass('hozio-overlay-done dashicons-yes-alt').end()
+                    .find('.hozio-overlay-title').text('Done! Reloading…').end()
+                    .find('.hozio-overlay-sub').text('The page will refresh automatically.').end();
+                setTimeout(function() { location.reload(); }, 2000);
+            } else {
+                $('#hozio-rollback-overlay').hide();
+                var color = '#991b1b';
+                var bg    = '#fee2e2';
+                $('.hozio-rollback-result')
+                    .show()
+                    .html('<div style="padding:12px 16px;background:' + bg + ';border-radius:8px;color:' + color + ';display:flex;gap:10px;align-items:center;">' +
+                          '<span class="dashicons dashicons-warning" style="font-size:20px;"></span>' +
+                          '<div>' + message + '</div>' +
+                          '</div>');
+            }
+        }
+
+        // History accordion toggle
+        $(document).on('click', '.hozio-history-toggle', function() {
+            var $btn  = $(this);
+            var $body = $btn.closest('.hozio-history-block').find('.hozio-history-body');
+            var open  = $btn.attr('aria-expanded') === 'true';
+            $btn.attr('aria-expanded', open ? 'false' : 'true');
+            $body.slideToggle(200);
+        });
+
+        // Clear history
+        $(document).on('click', '.hozio-history-clear-btn', function() {
+            if (!confirm('Clear all install history? This cannot be undone.')) return;
+            var $btn   = $(this);
+            var nonce  = $btn.data('nonce');
+            $.post(ajaxurl, { action: 'hozio_clear_version_history', nonce: nonce }, function(r) {
+                if (r.success) {
+                    $btn.closest('.hozio-history-block').find('.hozio-history-body').html('<p style="margin:8px 0;font-size:12px;color:#9ca3af;">No history recorded yet.</p>');
+                    $btn.closest('.hozio-history-block').find('.hozio-history-count').remove();
+                    $btn.remove();
+                }
+            });
+        });
+
+        // Quick Revert button
+        $('.hozio-quick-revert-btn').on('click', function() {
+            var $btn    = $(this);
+            var version = $btn.data('version');
+            var nonce   = $btn.data('nonce');
+
+            if (!confirm('Revert to v' + version + '? The page will reload automatically when done.')) return;
+
+            hozioRollbackStart(version);
+            $btn.text('Installing…').prop('disabled', true);
+
+            $.ajax({
+                url: ajaxurl, type: 'POST',
+                data: { action: 'hozio_rollback_to_version', nonce: nonce, version: version },
+                timeout: 300000,
+                success: function(r) { hozioRollbackDone($btn, 'Revert to v' + version, r.success, r.success ? r.data.message : r.data); },
+                error: function()    { hozioRollbackDone($btn, 'Revert to v' + version, false, 'Network error. Check your server error log.'); }
+            });
+        });
+
+        // Load releases from GitHub
+        $('.hozio-load-releases-btn').on('click', function() {
+            var $btn    = $(this);
+            var nonce   = $btn.data('nonce');
+            var $status = $('.hozio-releases-status');
+
+            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update hozio-spinning" style="margin-top:3px;"></span> Loading…');
+            $status.text('');
+
+            $.ajax({
+                url: ajaxurl, type: 'POST',
+                data: { action: 'hozio_fetch_releases', nonce: nonce },
+                timeout: 30000,
+                success: function(r) {
+                    $btn.prop('disabled', false);
+                    if (!r.success) {
+                        $btn.html('<span class="dashicons dashicons-warning" style="margin-top:3px;color:#d63638;"></span> Error');
+                        $status.text(r.data);
+                        setTimeout(function() { $btn.html('<span class="dashicons dashicons-update" style="margin-top:3px;"></span> Refresh'); }, 3000);
+                        return;
+                    }
+
+                    var releases = r.data.releases;
+                    var current  = r.data.current_version;
+                    $btn.html('<span class="dashicons dashicons-yes-alt" style="margin-top:3px;color:#16a34a;"></span> Done — ' + releases.length + ' releases');
+                    setTimeout(function() { $btn.html('<span class="dashicons dashicons-update" style="margin-top:3px;"></span> Refresh'); }, 2500);
+                    var html = '';
+                    $.each(releases, function(i, rel) {
+                        var isCurrent = rel.version === current;
+                        var rowStyle  = isCurrent ? 'background:#f5f3ff;' : (i % 2 === 0 ? '' : 'background:#fafafa;');
+                        var badge     = isCurrent ? '<span class="hozio-badge hozio-badge-current">current</span>' : '';
+                        var safeVer   = hozioEsc(rel.version.replace(/\./g, '-'));
+                        var rawNotes  = rel.changelog ? rel.changelog.trim() : '';
+
+                        var noteHtml = rawNotes
+                            ? '<a href="#" class="hozio-notes-toggle" data-ver="' + safeVer + '" style="font-size:11px;color:#7c3aed;text-decoration:none;white-space:nowrap;">▼ Release notes</a>'
+                            : '<span style="color:#9ca3af;font-size:11px;">No notes</span>';
+
+                        var btnHtml = isCurrent
+                            ? '<span style="color:#9ca3af;font-size:11px;">Installed</span>'
+                            : '<button type="button" class="button button-small hozio-install-version-btn" ' +
+                              'data-version="' + hozioEsc(rel.version) + '" data-nonce="' + hozioEsc(nonce) + '" ' +
+                              'style="border-color:#7c3aed;color:#7c3aed;white-space:nowrap;">' +
+                              'Install v' + hozioEsc(rel.version) + '</button>';
+
+                        html += '<tr style="' + rowStyle + '">' +
+                            '<td style="white-space:nowrap;padding:8px 6px;"><strong>v' + hozioEsc(rel.version) + '</strong>' + badge + '</td>' +
+                            '<td style="white-space:nowrap;color:#6b7280;padding:8px 6px;">' + hozioFormatDate(rel.released_at) + '</td>' +
+                            '<td style="padding:8px 6px;">' + noteHtml + '</td>' +
+                            '<td style="text-align:right;padding:8px 6px;">' + btnHtml + '</td>' +
+                            '</tr>';
+
+                        if (rawNotes) {
+                            html += '<tr class="hozio-notes-expand" id="hozio-notes-' + safeVer + '" style="display:none;">' +
+                                '<td colspan="4" style="padding:0 8px 12px 24px;background:' + (isCurrent ? '#f5f3ff' : '#fafafa') + ';">' +
+                                '<div style="border:1px solid #e9d5ff;border-radius:6px;padding:14px 18px;background:#fff;max-height:400px;overflow-y:auto;">' +
+                                hozioMarkdown(rawNotes) +
+                                '</div></td></tr>';
+                        }
+                    });
+
+                    $('.hozio-releases-tbody').html(html);
+                    $('.hozio-releases-list').show();
+                },
+                error: function() {
+                    $btn.prop('disabled', false);
+                    $btn.html('<span class="dashicons dashicons-warning" style="margin-top:3px;color:#d63638;"></span> Network error');
+                    setTimeout(function() { $btn.html('<span class="dashicons dashicons-update" style="margin-top:3px;"></span> Refresh'); }, 3000);
+                }
+            });
+        });
+
+        // Install a specific version from the releases table
+        $(document).on('click', '.hozio-install-version-btn', function() {
+            var $btn    = $(this);
+            var version = $btn.data('version');
+            var nonce   = $btn.data('nonce');
+            var orig    = $btn.text();
+
+            if (!confirm('Install v' + version + '? This will replace the current plugin files. The page will reload when done.')) return;
+
+            hozioRollbackStart(version);
+            $btn.text('Installing…').prop('disabled', true);
+
+            $.ajax({
+                url: ajaxurl, type: 'POST',
+                data: { action: 'hozio_rollback_to_version', nonce: nonce, version: version },
+                timeout: 300000,
+                success: function(r) { hozioRollbackDone($btn, orig, r.success, r.success ? r.data.message : r.data); },
+                error: function()    { hozioRollbackDone($btn, orig, false, 'Network error. Check your server error log.'); }
+            });
+        });
+
+        // Simple HTML-entity escape helper
+        function hozioEsc(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function hozioMarkdown(md) {
+            var lines  = md.split('\n');
+            var html   = '';
+            var inList = false;
+            function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+            function inline(s) { return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`(.+?)`/g,'<code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:11px;">$1</code>'); }
+            lines.forEach(function(line) {
+                var m;
+                if ((m = line.match(/^### (.+)$/))) {
+                    if (inList) { html += '</ul>'; inList = false; }
+                    html += '<h5 style="margin:8px 0 3px;font-size:12px;font-weight:700;color:#374151;">' + inline(m[1]) + '</h5>';
+                } else if ((m = line.match(/^## (.+)$/))) {
+                    if (inList) { html += '</ul>'; inList = false; }
+                    html += '<h4 style="margin:12px 0 4px;font-size:13px;font-weight:700;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:4px;">' + inline(m[1]) + '</h4>';
+                } else if ((m = line.match(/^# (.+)$/))) {
+                    if (inList) { html += '</ul>'; inList = false; }
+                    html += '<h3 style="margin:12px 0 5px;font-size:14px;font-weight:700;color:#111827;">' + inline(m[1]) + '</h3>';
+                } else if ((m = line.match(/^[-*] (.+)$/))) {
+                    if (!inList) { html += '<ul style="margin:4px 0 6px;padding-left:18px;">'; inList = true; }
+                    html += '<li style="margin:2px 0;font-size:12px;color:#374151;">' + inline(m[1]) + '</li>';
+                } else if (line.trim() === '') {
+                    if (inList) { html += '</ul>'; inList = false; }
+                } else {
+                    if (inList) { html += '</ul>'; inList = false; }
+                    var p = inline(line);
+                    if (p.trim()) html += '<p style="margin:4px 0;font-size:12px;color:#374151;">' + p + '</p>';
+                }
+            });
+            if (inList) html += '</ul>';
+            return html;
+        }
+
+        // Toggle release notes expanded row
+        $(document).on('click', '.hozio-notes-toggle', function(e) {
+            e.preventDefault();
+            var ver  = $(this).data('ver');
+            var $row = $('#hozio-notes-' + ver);
+            var open = $row.is(':visible');
+            $row.toggle(!open);
+            $(this).text(open ? '▼ Release notes' : '▲ Release notes');
+        });
+
+        // Version lock toggle (AJAX — not a form field, takes effect immediately)
+        $('#hozio-version-lock-toggle').on('change', function() {
+            var $cb    = $(this);
+            var locked = $cb.is(':checked');
+            var nonce  = $cb.data('nonce');
+            var $slider = $cb.next('.hozio-toggle-slider');
+            $.post(ajaxurl, { action: 'hozio_set_version_lock', nonce: nonce, locked: locked ? 1 : 0 }, function(r) {
+                if (r.success) {
+                    $slider.css('background', locked ? '#dc2626' : '');
+                } else {
+                    $cb.prop('checked', !locked); // revert on failure
+                }
+            });
+        });
+
+        // ── End Rollback ─────────────────────────────────────────────
 
         // Check for updates
         $('.hozio-check-updates-btn').on('click', function() {

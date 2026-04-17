@@ -135,9 +135,21 @@ class Hozio_Hub_Direct_Endpoint {
      * @return array
      */
     private static function get_site_info() {
+        $raw_history = get_option('hozio_version_history', []);
+        $history = array_map(function($e) {
+            return [
+                'version'      => $e['version'],
+                'method'       => $e['method'],
+                'previous'     => $e['previous'] ?? '',
+                'installed_at' => $e['installed_at'],
+            ];
+        }, array_slice($raw_history, 0, 10));
+
         return [
             'site_url'       => home_url(),
             'plugin_version' => defined('HOZIO_VERSION') ? HOZIO_VERSION : '0.0.0',
+            'version_locked' => get_option('hozio_version_locked', '0') === '1',
+            'version_history'=> $history,
             'wp_version'     => get_bloginfo('version'),
             'php_version'    => phpversion(),
             'active_plugins' => get_option('active_plugins', []),

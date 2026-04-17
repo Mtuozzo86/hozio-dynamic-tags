@@ -225,6 +225,11 @@ class Hozio_Plugin_Updater {
             return false;
         }
 
+        // Check if version is locked (blocks all auto-updates)
+        if (function_exists('hozio_is_version_locked') && hozio_is_version_locked()) {
+            return false;
+        }
+
         // Check if auto-updates are enabled in settings
         if (get_option('hozio_auto_updates_enabled', '1') !== '1') {
             return false;
