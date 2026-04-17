@@ -167,19 +167,19 @@ function hozio_perform_rollback($target_version) {
         return ['success' => false, 'message' => "Version {$target_version} not found in GitHub releases."];
     }
 
-    if (get_filesystem_method() !== 'direct') {
-        return ['success' => false, 'message' => 'Direct filesystem access is required. Cannot install without FTP credentials.'];
-    }
-
-    // Load WP upgrader classes
+    // Load WP upgrader classes first — get_filesystem_method() lives in file.php
     foreach ([
+        ABSPATH . 'wp-admin/includes/file.php',
         ABSPATH . 'wp-admin/includes/class-wp-upgrader.php',
         ABSPATH . 'wp-admin/includes/class-plugin-upgrader.php',
         ABSPATH . 'wp-admin/includes/class-wp-ajax-upgrader-skin.php',
-        ABSPATH . 'wp-admin/includes/file.php',
         ABSPATH . 'wp-admin/includes/plugin.php',
     ] as $f) {
         if (file_exists($f)) require_once $f;
+    }
+
+    if (get_filesystem_method() !== 'direct') {
+        return ['success' => false, 'message' => 'Direct filesystem access is required. Cannot install without FTP credentials.'];
     }
 
     $plugin_slug     = basename(dirname(plugin_dir_path(__FILE__)));
