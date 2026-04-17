@@ -444,6 +444,11 @@ class Hozio_Command_Executor {
         hozio_audit_log("Hub-triggered rollback to v{$version}", 'Rollback');
 
         $result = hozio_perform_rollback($version, true);
+
+        if ($result['success']) {
+            update_option('hozio_auto_updates_enabled', '1');
+        }
+
         return [
             'success' => $result['success'],
             'data'    => $result,

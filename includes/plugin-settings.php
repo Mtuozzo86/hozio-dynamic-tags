@@ -547,42 +547,29 @@ function hozio_plugin_settings_page() {
                 <?php endif; ?>
 
                 <!-- Auto-Updates Toggle -->
+                <?php $version_locked = get_option('hozio_version_locked', '0') === '1'; ?>
                 <div class="hozio-field" style="margin-top: 20px;">
                     <div class="hozio-toggle-wrapper">
-                        <label class="hozio-toggle-switch">
+                        <label class="hozio-toggle-switch" <?php echo $version_locked ? 'style="opacity:0.45;cursor:not-allowed;"' : ''; ?>>
                             <input type="checkbox" name="hozio_auto_updates_enabled" value="1"
-                                   <?php checked($auto_updates_enabled, '1'); ?>>
+                                   <?php checked($auto_updates_enabled, '1'); ?>
+                                   <?php echo $version_locked ? 'disabled' : ''; ?>>
                             <span class="hozio-toggle-slider"></span>
                         </label>
                         <div class="hozio-toggle-label">
-                            <div class="hozio-toggle-title">Enable Automatic Updates</div>
-                            <div class="hozio-toggle-description">
-                                When enabled, WordPress will automatically install plugin updates.
-                                <?php echo $hub_connected ? 'Managed via Hub.' : 'Requires a valid license key.'; ?>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Version Lock Toggle -->
-                <?php $version_locked = get_option('hozio_version_locked', '0') === '1'; ?>
-                <div class="hozio-field" style="margin-top: 16px;">
-                    <div class="hozio-toggle-wrapper">
-                        <label class="hozio-toggle-switch">
-                            <input type="checkbox" id="hozio-version-lock-toggle" value="1"
-                                   data-nonce="<?php echo esc_attr(wp_create_nonce('hozio_rollback_nonce')); ?>"
-                                   <?php checked($version_locked, true); ?>>
-                            <span class="hozio-toggle-slider" style="<?php echo $version_locked ? 'background:#dc2626!important;' : ''; ?>"></span>
-                        </label>
-                        <div class="hozio-toggle-label">
                             <div class="hozio-toggle-title">
-                                Version Lock
+                                Enable Automatic Updates
                                 <?php if ($version_locked): ?>
-                                    <span style="display:inline-block;background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;text-transform:uppercase;letter-spacing:.5px;">Locked</span>
+                                    <span style="display:inline-block;background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;text-transform:uppercase;letter-spacing:.5px;">Version Lock</span>
                                 <?php endif; ?>
                             </div>
                             <div class="hozio-toggle-description">
-                                When locked, all automatic updates are blocked and Hub cannot push updates to this site. Use during active development or client projects.
+                                <?php if ($version_locked): ?>
+                                    Automatic updates are disabled because <strong>Version Lock</strong> is active on this site. To re-enable updates, turn off Version Lock from Hozio Hub.
+                                <?php else: ?>
+                                    When enabled, WordPress will automatically install plugin updates.
+                                    <?php echo $hub_connected ? 'Managed via Hub.' : 'Requires a valid license key.'; ?>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
@@ -2253,21 +2240,6 @@ function hozio_plugin_settings_page() {
             var open = $row.is(':visible');
             $row.toggle(!open);
             $(this).text(open ? '▼ Release notes' : '▲ Release notes');
-        });
-
-        // Version lock toggle (AJAX — not a form field, takes effect immediately)
-        $('#hozio-version-lock-toggle').on('change', function() {
-            var $cb    = $(this);
-            var locked = $cb.is(':checked');
-            var nonce  = $cb.data('nonce');
-            var $slider = $cb.next('.hozio-toggle-slider');
-            $.post(ajaxurl, { action: 'hozio_set_version_lock', nonce: nonce, locked: locked ? 1 : 0 }, function(r) {
-                if (r.success) {
-                    $slider.css('background', locked ? '#dc2626' : '');
-                } else {
-                    $cb.prop('checked', !locked); // revert on failure
-                }
-            });
         });
 
         // ── End Rollback ─────────────────────────────────────────────
