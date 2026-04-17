@@ -155,7 +155,7 @@ function hozio_get_release_by_version($version) {
  * @param string $target_version e.g. "4.11.3"
  * @return array { success: bool, message: string, version?: string }
  */
-function hozio_perform_rollback($target_version) {
+function hozio_perform_rollback($target_version, $from_hub = false) {
     $target_version = ltrim(sanitize_text_field($target_version), 'vV');
 
     if (empty($target_version)) {
@@ -228,7 +228,13 @@ function hozio_perform_rollback($target_version) {
     }
 
     // Record in history and reactivate
-    hozio_record_version_snapshot($target_version, 'rollback', $current_version);
+    $is_upgrade = version_compare($target_version, $current_version, '>');
+    if ($from_hub) {
+        $snap_method = $is_upgrade ? 'hub_update' : 'hub_rollback';
+    } else {
+        $snap_method = $is_upgrade ? 'update' : 'rollback';
+    }
+    hozio_record_version_snapshot($target_version, $snap_method, $current_version);
     delete_option('hozio_pre_upgrade_version');
 
     if (function_exists('activate_plugin')) {

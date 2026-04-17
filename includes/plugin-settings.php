@@ -213,6 +213,14 @@ function hozio_ajax_check_hub_connection() {
         wp_send_json_error(['type' => 'not_found', 'message' => 'Hub endpoint not found. Is the Hub plugin active at ' . $hub_url . '?']);
     }
 
+    if ($code === 429) {
+        wp_send_json_success([
+            'type'           => 'ok',
+            'license_status' => get_option('hozio_hub_last_known_status', 'active'),
+            'note'           => 'rate_limited',
+        ]);
+    }
+
     if ($code !== 200 || empty($body)) {
         wp_send_json_error(['type' => 'bad_response', 'message' => 'Hub returned unexpected status ' . $code]);
     }
@@ -835,25 +843,31 @@ function hozio_plugin_settings_page() {
                         <ul class="hozio-timeline">
                         <?php
                         $method_colors = [
-                            'auto_update' => '#0073aa',
-                            'rollback'    => '#7c3aed',
-                            'hub_command' => '#059669',
-                            'update'      => '#6b7280',
+                            'auto_update'  => '#0073aa',
+                            'update'       => '#0073aa',
+                            'rollback'     => '#7c3aed',
+                            'hub_update'   => '#0073aa',
+                            'hub_rollback' => '#7c3aed',
+                            'hub_command'  => '#059669',
                         ];
                         $method_labels = [
-                            'auto_update' => 'Auto-update',
-                            'rollback'    => 'Rollback',
-                            'hub_command' => 'Hub',
-                            'update'      => 'Manual',
+                            'auto_update'  => 'Auto-update',
+                            'update'       => 'Update',
+                            'rollback'     => 'Rollback',
+                            'hub_update'   => 'Update',
+                            'hub_rollback' => 'Rollback',
+                            'hub_command'  => 'Hub',
                         ];
+                        $hub_methods = ['hub_update', 'hub_rollback', 'hub_command'];
                         $seen_versions = [];
                         foreach ($history as $i => $entry):
                             // Skip duplicate versions (same version recorded more than once)
                             if (in_array($entry['version'], $seen_versions, true)) continue;
                             $seen_versions[] = $entry['version'];
-                            $is_current = ($entry['version'] === $current_ver);
-                            $dot_color  = $method_colors[$entry['method']] ?? '#6b7280';
-                            $label      = $method_labels[$entry['method']] ?? ucfirst($entry['method']);
+                            $is_current  = ($entry['version'] === $current_ver);
+                            $dot_color   = $method_colors[$entry['method']] ?? '#6b7280';
+                            $label       = $method_labels[$entry['method']] ?? ucfirst($entry['method']);
+                            $is_hub      = in_array($entry['method'], $hub_methods, true);
                         ?>
                         <li class="hozio-timeline-item">
                             <span class="hozio-timeline-dot" style="background:<?php echo esc_attr($dot_color); ?>;"></span>
@@ -865,6 +879,9 @@ function hozio_plugin_settings_page() {
                                 <span class="hozio-timeline-meta">
                                     <?php echo esc_html(date_i18n('M j', $entry['installed_at'])); ?>
                                     &middot; <span style="color:<?php echo esc_attr($dot_color); ?>;"><?php echo esc_html($label); ?></span>
+                                    <?php if ($is_hub): ?>
+                                        <span style="display:inline-block;margin-left:4px;padding:0 5px;background:#059669;color:#fff;border-radius:3px;font-size:10px;font-weight:600;vertical-align:middle;line-height:16px;">Hub</span>
+                                    <?php endif; ?>
                                 </span>
                             </div>
                         </li>
@@ -1930,7 +1947,11 @@ function hozio_plugin_settings_page() {
                         $('#hozio-hub-status-icon').removeClass().addClass('dashicons dashicons-yes-alt').css('color', '#16a34a');
                         $('#hozio-hub-status-label').text('Connected to Hub');
                         $('#hozio-hub-license-display').css('color', color).text(status.charAt(0).toUpperCase() + status.slice(1));
-                        $result.html('<span style="color:#16a34a;">&#10003; Connection verified.</span>').show();
+                        if (response.data.note === 'rate_limited') {
+                            $result.html('<span style="color:#996800;">&#9432; Connection is active — Hub is temporarily rate-limiting heartbeat requests. This is normal and will resolve automatically.</span>').show();
+                        } else {
+                            $result.html('<span style="color:#16a34a;">&#10003; Connection verified.</span>').show();
+                        }
                     } else {
                         var isAuth = response.data && response.data.type === 'auth';
                         $('#hozio-hub-status-icon').removeClass().addClass('dashicons dashicons-warning').css('color', '#d63638');

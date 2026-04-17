@@ -443,7 +443,7 @@ class Hozio_Command_Executor {
 
         hozio_audit_log("Hub-triggered rollback to v{$version}", 'Rollback');
 
-        $result = hozio_perform_rollback($version);
+        $result = hozio_perform_rollback($version, true);
         return [
             'success' => $result['success'],
             'data'    => $result,
