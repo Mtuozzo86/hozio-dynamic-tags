@@ -485,7 +485,7 @@ class Hozio_ImageVideoSitemap {
                 continue;
             }
 
-            $direct_url = wp_get_attachment_url( $attachment_id );
+            $direct_url = $this->ivxs_get_raw_file_url( $attachment_id );
 
             if ( empty( $direct_url ) ) {
                 continue;
@@ -503,6 +503,33 @@ class Hozio_ImageVideoSitemap {
             echo '</image:image>';
             echo '</url>';
         }
+    }
+
+    /**
+     * Return the raw physical file URL for an attachment, bypassing any
+     * wp_get_attachment_url filters that might rewrite it to the attachment
+     * page URL (which 301-redirects on WP 6.4+ and causes Ahrefs sitemap errors).
+     */
+    private function ivxs_get_raw_file_url( $attachment_id ) {
+        $file_path = get_attached_file( $attachment_id );
+        if ( empty( $file_path ) ) {
+            return '';
+        }
+
+        $upload_dir = wp_get_upload_dir();
+        if ( empty( $upload_dir['basedir'] ) || empty( $upload_dir['baseurl'] ) ) {
+            return '';
+        }
+
+        if ( strpos( $file_path, $upload_dir['basedir'] ) === 0 ) {
+            return str_replace( $upload_dir['basedir'], $upload_dir['baseurl'], $file_path );
+        }
+
+        // Fallback — file lives outside standard uploads dir (rare). Use filtered URL
+        // but strip anything that doesn't look like a file (no extension) to avoid
+        // emitting the attachment page URL into the sitemap.
+        $filtered = wp_get_attachment_url( $attachment_id );
+        return ( $filtered && preg_match( '/\.[a-z0-9]{2,5}(\?.*)?$/i', $filtered ) ) ? $filtered : '';
     }
 
     /**
@@ -539,7 +566,7 @@ class Hozio_ImageVideoSitemap {
                 continue;
             }
 
-            $direct_url = wp_get_attachment_url( $attachment_id );
+            $direct_url = $this->ivxs_get_raw_file_url( $attachment_id );
 
             if ( empty( $direct_url ) ) {
                 continue;
@@ -549,7 +576,7 @@ class Hozio_ImageVideoSitemap {
 
             $video_page_url = $this->ivxs_find_video_usage( $attachment_id );
 
-            $thumbnail = wp_get_attachment_url( get_post_thumbnail_id( $attachment_id ) );
+            $thumbnail = $this->ivxs_get_raw_file_url( get_post_thumbnail_id( $attachment_id ) );
 
             $title = get_the_title( $attachment_id );
             if ( empty( $title ) ) {
