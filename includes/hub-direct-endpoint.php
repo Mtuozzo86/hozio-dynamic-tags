@@ -148,6 +148,7 @@ class Hozio_Hub_Direct_Endpoint {
         return [
             'site_url'       => home_url(),
             'plugin_version' => defined('HOZIO_VERSION') ? HOZIO_VERSION : '0.0.0',
+            'hub_connected'  => class_exists('Hozio_Hub_Client') && Hozio_Hub_Client::is_connected(),
             'version_locked' => get_option('hozio_version_locked', '0') === '1',
             'version_history'=> $history,
             'wp_version'     => get_bloginfo('version'),
