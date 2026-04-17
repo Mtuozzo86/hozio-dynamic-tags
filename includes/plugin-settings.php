@@ -608,22 +608,6 @@ function hozio_plugin_settings_page() {
                     </table>
                 </div>
 
-                <?php if ($hub_connected): ?>
-                    <!-- Disconnect (subtle, at bottom) -->
-                    <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb;">
-                        <button type="button" class="button hozio-hub-disconnect-btn"
-                                data-nonce="<?php echo esc_attr(wp_create_nonce('hozio_hub_disconnect_nonce')); ?>"
-                                style="color: #999; border-color: #ddd; font-size: 12px;">
-                            Disconnect from Hub
-                        </button>
-                        <p class="hozio-field-description" style="margin-top: 6px; font-size: 12px;">
-                            Disconnecting will revert to manual license key mode.
-                            <?php if (empty($license_key)): ?>
-                                <strong style="color: #d63638;">No manual key is set — auto-updates will be disabled.</strong>
-                            <?php endif; ?>
-                        </p>
-                    </div>
-                <?php endif; ?>
             </div>
 
             <!-- Debug & Logging Section -->
@@ -1975,35 +1959,6 @@ function hozio_plugin_settings_page() {
                     else { alert('Error: ' + response.data); $btn.prop('disabled', false).text('Disconnect'); }
                 },
                 error: function() { alert('Network error'); $btn.prop('disabled', false).text('Disconnect'); }
-            });
-        });
-
-        // Hub Disconnect
-        $('.hozio-hub-disconnect-btn').on('click', function() {
-            if (!confirm('Disconnect from Hub? License validation will revert to manual key mode.')) return;
-            var $btn = $(this);
-            $btn.prop('disabled', true).text('Disconnecting...');
-
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'hozio_hub_disconnect',
-                    nonce: $btn.data('nonce')
-                },
-                success: function(response) {
-                    if (response.success) {
-                        alert(response.data.message);
-                        location.reload();
-                    } else {
-                        alert('Error: ' + response.data);
-                        $btn.prop('disabled', false).text('Disconnect from Hub');
-                    }
-                },
-                error: function() {
-                    alert('Network error');
-                    $btn.prop('disabled', false).text('Disconnect from Hub');
-                }
             });
         });
 
