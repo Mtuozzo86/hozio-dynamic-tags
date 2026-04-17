@@ -552,7 +552,7 @@ function hozio_plugin_settings_page() {
                     <div class="hozio-toggle-wrapper">
                         <label class="hozio-toggle-switch" <?php echo $version_locked ? 'style="opacity:0.45;cursor:not-allowed;"' : ''; ?>>
                             <input type="checkbox" name="hozio_auto_updates_enabled" value="1"
-                                   <?php checked($auto_updates_enabled, '1'); ?>
+                                   <?php checked(!$version_locked && $auto_updates_enabled === '1', true); ?>
                                    <?php echo $version_locked ? 'disabled' : ''; ?>>
                             <span class="hozio-toggle-slider"></span>
                         </label>
@@ -579,11 +579,16 @@ function hozio_plugin_settings_page() {
                 <div class="hozio-update-info-box" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
                     <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
                         <button type="button" class="button button-secondary hozio-check-updates-btn"
-                                data-nonce="<?php echo wp_create_nonce('hozio_check_updates_nonce'); ?>">
+                                data-nonce="<?php echo wp_create_nonce('hozio_check_updates_nonce'); ?>"
+                                <?php echo $version_locked ? 'disabled title="Version Lock is active — updates are blocked"' : ''; ?>>
                             <span class="dashicons dashicons-update" style="margin-top: 3px;"></span>
                             Check for Updates
                         </button>
+                        <?php if ($version_locked): ?>
+                            <span style="color:#dc2626;font-size:12px;">Version Lock is active — updates are blocked from Hozio Hub.</span>
+                        <?php else: ?>
                         <span class="hozio-update-result"></span>
+                        <?php endif; ?>
                     </div>
                     <table class="hozio-update-info-table" style="width: 100%; font-size: 13px;">
                         <tr>
