@@ -6,6 +6,19 @@
 
 if (!defined('ABSPATH')) exit;
 
+// ─── License Gate ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns true only when the site has an active license.
+ * Hub-connected: checks Hub license status. Manual: checks that a key is set.
+ */
+function hozio_is_license_active() {
+    if (class_exists('Hozio_Hub_Client') && Hozio_Hub_Client::is_connected()) {
+        return Hozio_Hub_Client::get_license_status() === 'active';
+    }
+    return !empty(get_option('hozio_license_key', ''));
+}
+
 // ─── Version History ─────────────────────────────────────────────────────────
 
 /**
@@ -272,6 +285,10 @@ add_action('wp_ajax_hozio_fetch_releases', 'hozio_ajax_fetch_releases');
 function hozio_ajax_rollback_to_version() {
     check_ajax_referer('hozio_rollback_nonce', 'nonce');
     if (!current_user_can('manage_options')) wp_send_json_error('Permission denied');
+
+    if (!hozio_is_license_active()) {
+        wp_send_json_error('A valid active license is required to install plugin versions. Please check your license status in the Hub.');
+    }
 
     $version = sanitize_text_field($_POST['version'] ?? '');
     if (empty($version)) wp_send_json_error('Version is required.');

@@ -870,13 +870,21 @@ function hozio_plugin_settings_page() {
                     </div>
 
                     <!-- Browse All Releases -->
+                    <?php $license_active = function_exists('hozio_is_license_active') && hozio_is_license_active(); ?>
                     <div class="hozio-browse-releases">
                         <button type="button" class="hozio-load-releases-btn hozio-browse-btn"
-                                data-nonce="<?php echo esc_attr($rollback_nonce); ?>">
+                                data-nonce="<?php echo esc_attr($rollback_nonce); ?>"
+                                <?php echo !$license_active ? 'disabled title="A valid license is required to install versions"' : ''; ?>>
                             <span class="dashicons dashicons-download"></span>
                             Browse All Releases
                             <span class="hozio-releases-status"></span>
                         </button>
+                        <?php if (!$license_active): ?>
+                            <p style="margin:8px 0 0 0;font-size:12px;color:#d63638;">
+                                <span class="dashicons dashicons-warning" style="font-size:13px;vertical-align:middle;"></span>
+                                A valid active license is required to install or rollback versions. Check your license status above.
+                            </p>
+                        <?php endif; ?>
 
                         <div class="hozio-releases-list" style="display:none;margin-top:12px;">
                             <table class="widefat striped hozio-releases-table">
