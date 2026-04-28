@@ -45,6 +45,37 @@ function hozio_plugin_settings_register() {
         'default' => true,
         'sanitize_callback' => 'rest_sanitize_boolean'
     ]);
+
+    register_setting('hozio_plugin_settings', 'hozio_faq_schema_enabled', [
+        'type' => 'boolean',
+        'default' => true,
+        'sanitize_callback' => 'rest_sanitize_boolean'
+    ]);
+    register_setting('hozio_plugin_settings', 'hozio_faq_schema_general_enabled', [
+        'type' => 'boolean',
+        'default' => true,
+        'sanitize_callback' => 'rest_sanitize_boolean'
+    ]);
+    register_setting('hozio_plugin_settings', 'hozio_faq_schema_service_enabled', [
+        'type' => 'boolean',
+        'default' => true,
+        'sanitize_callback' => 'rest_sanitize_boolean'
+    ]);
+    register_setting('hozio_plugin_settings', 'hozio_faq_schema_town_enabled', [
+        'type' => 'boolean',
+        'default' => true,
+        'sanitize_callback' => 'rest_sanitize_boolean'
+    ]);
+    register_setting('hozio_plugin_settings', 'hozio_faq_schema_service_exclude', [
+        'type' => 'string',
+        'default' => '',
+        'sanitize_callback' => 'sanitize_text_field'
+    ]);
+    register_setting('hozio_plugin_settings', 'hozio_faq_schema_town_exclude', [
+        'type' => 'string',
+        'default' => '',
+        'sanitize_callback' => 'sanitize_text_field'
+    ]);
 }
 add_action('admin_init', 'hozio_plugin_settings_register');
 
@@ -361,6 +392,13 @@ function hozio_plugin_settings_save() {
     $canonical_redirect_enabled = isset($_POST['hozio_canonical_redirect_enabled']) ? '1' : '0';
     update_option('hozio_canonical_redirect_enabled', $canonical_redirect_enabled);
 
+    // Save FAQ schema settings
+    update_option('hozio_faq_schema_enabled',         isset($_POST['hozio_faq_schema_enabled'])         ? '1' : '0');
+    update_option('hozio_faq_schema_general_enabled',  isset($_POST['hozio_faq_schema_general_enabled'])  ? '1' : '0');
+    update_option('hozio_faq_schema_service_enabled',  isset($_POST['hozio_faq_schema_service_enabled'])  ? '1' : '0');
+    update_option('hozio_faq_schema_town_enabled',     isset($_POST['hozio_faq_schema_town_enabled'])     ? '1' : '0');
+    update_option('hozio_faq_schema_service_exclude',  sanitize_text_field($_POST['hozio_faq_schema_service_exclude'] ?? ''));
+    update_option('hozio_faq_schema_town_exclude',           sanitize_text_field($_POST['hozio_faq_schema_town_exclude']           ?? ''));
     wp_redirect(add_query_arg('settings-updated', 'true', admin_url('admin.php?page=hozio-plugin-settings')));
     exit;
 }
@@ -406,6 +444,32 @@ function hozio_plugin_settings_page() {
     $license_key = get_option('hozio_license_key', '');
     $auto_updates_enabled = get_option('hozio_auto_updates_enabled', '1');
     $canonical_redirect_enabled = get_option('hozio_canonical_redirect_enabled', '1');
+    $faq_schema_enabled         = get_option('hozio_faq_schema_enabled', '1');
+    $faq_schema_general_enabled = get_option('hozio_faq_schema_general_enabled', '1');
+    $faq_schema_service_enabled = get_option('hozio_faq_schema_service_enabled', '1');
+    $faq_schema_town_enabled    = get_option('hozio_faq_schema_town_enabled', '1');
+    $faq_schema_service_exclude    = get_option('hozio_faq_schema_service_exclude', '');
+    $faq_schema_town_exclude          = get_option('hozio_faq_schema_town_exclude', '');
+    // Auto-detect which page has the general_questions ACF fields populated
+    $faq_detected_pages = get_posts([
+        'post_type'      => 'any',
+        'posts_per_page' => 3,
+        'meta_query'     => [[
+            'key'     => 'general_questions__question_1',
+            'compare' => '!=',
+            'value'   => '',
+        ]],
+        'fields' => 'ids',
+    ]);
+    $faq_detected_label = '';
+    if (!empty($faq_detected_pages)) {
+        $labels = [];
+        foreach ($faq_detected_pages as $pid) {
+            $labels[] = get_the_title($pid) . ' (ID: ' . $pid . ')';
+        }
+        $faq_detected_label = implode(', ', $labels);
+    }
+    $faq_acf_found = !empty($faq_detected_pages);
 
     // Get update timing info
     $last_update_check = function_exists('hozio_get_last_update_check') ? hozio_get_last_update_check() : 'Unknown';
@@ -431,7 +495,7 @@ function hozio_plugin_settings_page() {
     ?>
     <div class="wrap hozio-settings-wrap">
         <div class="hozio-header">
-            <img src="<?php echo esc_url(plugins_url('../assets/hozio-burst.png', __FILE__)); ?>" alt="Hozio" class="hozio-logo">
+            <img src="<?php echo esc_url(plugins_url('assets/hozio-burst.png', HOZIO_PLUGIN_FILE)); ?>" alt="Hozio" class="hozio-logo">
             <div class="hozio-header-text">
                 <h1>Plugin Settings</h1>
                 <p class="hozio-subtitle">Configure plugin features and debugging options</p>
@@ -721,6 +785,98 @@ function hozio_plugin_settings_page() {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- FAQ Schema Section -->
+            <div class="hozio-section">
+                <h2 class="hozio-section-title">FAQ Schema</h2>
+                <p class="hozio-section-description">Output JSON-LD FAQPage schema to <code>&lt;head&gt;</code> using ACF fields. The FAQ page is auto-detected. Use the exclude fields to skip specific pages for service or town groups.</p>
+
+                <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_faq_schema_enabled" value="1"
+                                   <?php checked($faq_schema_enabled, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">FAQ Schema Output</div>
+                            <div class="hozio-toggle-description">
+                                Master switch. Disabling this suppresses all FAQ schema output sitewide.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_faq_schema_general_enabled" value="1"
+                                   <?php checked($faq_schema_general_enabled, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">FAQ Page Schema</div>
+                            <div class="hozio-toggle-description">
+                                Uses <code>general_questions__question/answer_N</code> ACF fields. Schema only outputs on pages where those fields are populated.
+                                <?php if ($faq_acf_found): ?>
+                                    <br><strong style="color:#16a34a;">&#10003; ACF detected: <?php echo esc_html($faq_detected_label); ?></strong>
+                                <?php else: ?>
+                                    <br><span style="color:#b91c1c;">&#10007; No ACF fields detected &mdash; schema will not output for this group.</span>
+                                    <br><span style="color:#6b7280;font-size:12px;">If your FAQ page has JSON-LD in an Elementor HTML widget, Google can still see it in the page body. View source &rarr; Ctrl+F &ldquo;FAQPage&rdquo; to verify.</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_faq_schema_service_enabled" value="1"
+                                   <?php checked($faq_schema_service_enabled, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">Service Page FAQ Schema</div>
+                            <div class="hozio-toggle-description">
+                                Outputs FAQ schema using <code>faq_question/answer_N</code> fields on any page where those fields are filled.
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;padding-left:62px;">
+                        <label style="font-size:13px;color:#444;display:block;margin-bottom:4px;">Exclude Post IDs</label>
+                        <input type="text" name="hozio_faq_schema_service_exclude"
+                               value="<?php echo esc_attr($faq_schema_service_exclude); ?>"
+                               placeholder="e.g. 45, 102, 387" style="width:260px;">
+                        <p class="description" style="margin-top:4px;">Comma-separated post IDs to skip for this schema group.</p>
+                    </div>
+                </div>
+
+                <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_faq_schema_town_enabled" value="1"
+                                   <?php checked($faq_schema_town_enabled, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">Town Page FAQ Schema (HOG)</div>
+                            <div class="hozio-toggle-description">
+                                Outputs FAQ schema using <code>new_hog_faq_question/answer_N</code> fields on any page where those fields are filled.
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;padding-left:62px;">
+                        <label style="font-size:13px;color:#444;display:block;margin-bottom:4px;">Exclude Post IDs</label>
+                        <input type="text" name="hozio_faq_schema_town_exclude"
+                               value="<?php echo esc_attr($faq_schema_town_exclude); ?>"
+                               placeholder="e.g. 45, 102, 387" style="width:260px;">
+                        <p class="description" style="margin-top:4px;">Comma-separated post IDs to skip for this schema group.</p>
+                    </div>
+                </div>
+
             </div>
 
             <!-- Cache Management Section -->
@@ -2261,6 +2417,18 @@ function hozio_plugin_settings_page() {
                 }
             });
         });
+        // FAQ Schema master toggle — dims/disables sub-fields when master is off
+        var $faqMaster   = $('input[name="hozio_faq_schema_enabled"]');
+        var $faqSection  = $faqMaster.closest('.hozio-section');
+        var $faqSubFields = $faqSection.find('.hozio-field').not($faqMaster.closest('.hozio-field'));
+
+        function updateFaqToggles() {
+            var on = $faqMaster.is(':checked');
+            $faqSubFields.css('opacity', on ? '' : '0.4').css('pointer-events', on ? '' : 'none');
+            $faqSubFields.find('input, select, textarea').prop('disabled', !on);
+        }
+        $faqMaster.on('change', updateFaqToggles);
+        updateFaqToggles();
     });
     </script>
     <?php
