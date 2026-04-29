@@ -69,6 +69,9 @@ function hozio_support_page() {
                 <button class="hozio-tab" data-tab="settings">
                     <span class="dashicons dashicons-admin-generic"></span> Settings &amp; Admin
                 </button>
+                <button class="hozio-tab" data-tab="acf-shortcodes">
+                    <span class="dashicons dashicons-database-view"></span> ACF Shortcodes
+                </button>
             </div>
 
             <!-- Card Grid -->
@@ -124,6 +127,18 @@ function hozio_support_page() {
                     <span class="dashicons dashicons-archive hozio-card-icon"></span>
                     <h3 class="hozio-card-title">Taxonomy Archive Settings</h3>
                     <p class="hozio-card-desc">Enable/disable taxonomy archive pages</p>
+                </div>
+
+                <div class="hozio-card" data-section="ghost-page-protection" data-category="pages" data-description="Block phantom URLs from orphaned child pages and taxonomy terms">
+                    <span class="dashicons dashicons-shield hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Ghost Page Protection</h3>
+                    <p class="hozio-card-desc">Block phantom URLs from orphaned child pages</p>
+                </div>
+
+                <div class="hozio-card" data-section="town-content-checker" data-category="pages" data-description="Scan town pages for missing ACF fields with deep-link editing">
+                    <span class="dashicons dashicons-clipboard hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Town Content Checker</h3>
+                    <p class="hozio-card-desc">Scan town pages for missing ACF fields</p>
                 </div>
 
                 <!-- ======== ELEMENTOR TOOLS ======== -->
@@ -190,6 +205,18 @@ function hozio_support_page() {
                     <p class="hozio-card-desc">Sync service pages to nav menu</p>
                 </div>
 
+                <div class="hozio-card" data-section="duplicate-page-detector" data-category="sitemap" data-description="Find and fix WordPress auto-generated duplicate page slugs (-2, -3)">
+                    <span class="dashicons dashicons-warning hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Duplicate Page Detector</h3>
+                    <p class="hozio-card-desc">Find and fix duplicate page slugs (-2, -3)</p>
+                </div>
+
+                <div class="hozio-card" data-section="image-video-sitemap" data-category="sitemap" data-description="Auto-generate image and video XML sitemap entries for Google Search Console">
+                    <span class="dashicons dashicons-format-image hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Image &amp; Video XML Sitemap</h3>
+                    <p class="hozio-card-desc">Auto-generate image and video XML sitemaps</p>
+                </div>
+
                 <!-- ======== SETTINGS & ADMIN ======== -->
 
                 <div class="hozio-card" data-section="lead-management" data-category="settings" data-description="View and manage form submissions">
@@ -208,6 +235,32 @@ function hozio_support_page() {
                     <span class="dashicons dashicons-cloud hozio-card-icon"></span>
                     <h3 class="hozio-card-title">Hub Connectivity</h3>
                     <p class="hozio-card-desc">Connect to Hozio Hub for remote management</p>
+                </div>
+
+                <div class="hozio-card" data-section="faq-schema" data-category="settings" data-description="Output FAQPage JSON-LD schema to page head from ACF fields">
+                    <span class="dashicons dashicons-editor-help hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">FAQ Schema</h3>
+                    <p class="hozio-card-desc">Output FAQPage JSON-LD to &lt;head&gt; from ACF fields</p>
+                </div>
+
+                <!-- ======== ACF SHORTCODES ======== -->
+
+                <div class="hozio-card" data-section="acf-generic-shortcodes" data-category="acf-shortcodes" data-description="Universal ACF shortcodes: acf_text, acf_img, acf_img_url, acf_raw — output any ACF field anywhere">
+                    <span class="dashicons dashicons-shortcode hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Generic ACF Shortcodes</h3>
+                    <p class="hozio-card-desc">Output any ACF field value anywhere on the site</p>
+                </div>
+
+                <div class="hozio-card" data-section="acf-hog-shortcodes" data-category="acf-shortcodes" data-description="Named shortcodes for all Town and HOG page ACF fields — hero, outcomes, about us, how it works, FAQ, links">
+                    <span class="dashicons dashicons-location hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Town / HOG Page Fields</h3>
+                    <p class="hozio-card-desc">Named shortcodes for every HOG page ACF field</p>
+                </div>
+
+                <div class="hozio-card" data-section="acf-service-shortcodes" data-category="acf-shortcodes" data-description="Named shortcodes for all Service page ACF fields — hero, trust symbols, benefits, how it works, FAQ, service-related info">
+                    <span class="dashicons dashicons-admin-tools hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Service Page Fields</h3>
+                    <p class="hozio-card-desc">Named shortcodes for every service page ACF field</p>
                 </div>
 
             </div><!-- .hozio-card-grid -->
@@ -494,8 +547,10 @@ function hozio_support_page() {
                         </ol>
                     </div>
                     <div class="hozio-support-notes">
-                        <h3>Important notes</h3>
+                        <h3>Filter modes</h3>
                         <ul>
+                            <li><strong>By Taxonomy Terms (default):</strong> Filter loop results by selecting a taxonomy and specific terms. All pages matching those terms are shown.</li>
+                            <li><strong>By Specific Pages:</strong> Hand-pick an exact list of pages to display using a checkbox picker. Use this when you need precise control over which pages appear rather than relying on taxonomy assignment.</li>
                             <li>Configurations apply to <strong>all loop widgets on the page</strong> (excluding header, footer, and popup contexts).</li>
                             <li>If no configuration is assigned, loop widgets use their default Elementor query settings.</li>
                         </ul>
@@ -615,14 +670,16 @@ function hozio_support_page() {
                             <li><strong>Create a new page</strong> in WordPress (e.g., title it "Sitemap").</li>
                             <li><strong>In Page Attributes</strong>, select <strong>"HTML Sitemap"</strong> as the page template.</li>
                             <li><strong>Publish the page.</strong></li>
-                            <li><strong>Customize colors</strong> via Hozio Pro &rarr; Sitemap Settings &rarr; Appearance tab.</li>
+                            <li><strong>Customize appearance</strong> via <strong>Hozio Pro &rarr; Sitemap Settings &rarr; Appearance</strong> tab.</li>
                         </ol>
                     </div>
                     <div class="hozio-support-notes">
-                        <h3>Important notes</h3>
+                        <h3>Appearance options</h3>
                         <ul>
                             <li>This is an <strong>HTML sitemap</strong> for visitors, not an XML sitemap for search engines.</li>
                             <li>The template automatically generates the sitemap content &mdash; no shortcodes needed.</li>
+                            <li><strong>Color Theme:</strong> Choose <em>Light</em>, <em>Dark</em>, or <em>Custom Color</em> using the pill selector. Custom Color opens a color picker for a fully branded background.</li>
+                            <li><strong>Border &amp; Divider Color:</strong> Set the color used for accordion borders and section dividers independently from the background.</li>
                         </ul>
                     </div>
                 </div>
@@ -654,6 +711,8 @@ function hozio_support_page() {
                             <li>The <strong>Exclude Pages</strong> section lets you hide specific pages from the sitemap entirely.</li>
                             <li>Importing auto-detection <strong>replaces</strong> your current manual layout.</li>
                             <li>Child pages can have nested children (sub-accordions) for multi-level structures.</li>
+                            <li><strong>Deleted pages are auto-removed</strong> from the layout on save &mdash; you don&rsquo;t need to manually clean up after trashing pages.</li>
+                            <li>A <strong>warning banner</strong> appears at the top of the Layout Editor when town pages have missing ACF content fields. Click the banner to jump to the <strong>Town Content Checker</strong> for details.</li>
                         </ul>
                     </div>
                 </div>
@@ -776,7 +835,7 @@ function hozio_support_page() {
                         <h3>How to set it up</h3>
                         <ol>
                             <li>Go to <strong>Hozio Pro &rarr; Hozio Pro Settings</strong>.</li>
-                            <li><strong>Feature toggles:</strong> DOM Parsing, Service Menu Sync, Auto-Updates.</li>
+                            <li><strong>Feature toggles:</strong> DOM Parsing, Service Menu Sync, Ghost Page Protection, Auto-Updates.</li>
                             <li><strong>Enable HOZIO_DEBUG</strong> to start logging. Logs are written to <code>wp-content/hozio-debug.log</code>.</li>
                             <li>Use <strong>"Test Log Entry"</strong> to verify logging and <strong>"Clear Log"</strong> to reset.</li>
                         </ol>
@@ -785,8 +844,10 @@ function hozio_support_page() {
                         <h3>Important notes</h3>
                         <ul>
                             <li>Debug logging works <strong>independently from WP_DEBUG</strong>.</li>
-                            <li>Logs are categorized by component: ParentPagesQuery, CountyQuery, TownQuery, LoopConfig, MenuSync, etc.</li>
+                            <li>Logs are categorized by component: ParentPagesQuery, CountyQuery, TownQuery, LoopConfig, MenuSync, GhostPage, etc.</li>
                             <li>Remember to <strong>disable debug logging</strong> on production sites.</li>
+                            <li><strong>Audit Log:</strong> All Hub commands, plugin updates, and rollbacks are written to <code>wp-content/hozio-audit.log</code> via <code>hozio_audit_log()</code>. The audit log auto-rotates at 500KB and is separate from the debug log. Useful for diagnosing unexpected changes on live sites.</li>
+                            <li><strong>Install History:</strong> A timeline in the Plugin Settings page shows every version installed, labeled as Update or Rollback, with Hub-triggered installs marked with a green Hub badge.</li>
                         </ul>
                     </div>
                 </div>
@@ -795,8 +856,15 @@ function hozio_support_page() {
                 <div data-content="hub-connectivity">
                     <div class="hozio-support-what">
                         <h3>What it does</h3>
-                        <p>Hub Connectivity allows your site to register with the Hozio Hub &mdash; a central management dashboard. Once connected, the Hub manages your license and can send remote commands.</p>
-                        <p>Supported remote operations: page management, plugin management, admin access, option updates, and REST API proxy.</p>
+                        <p>Hub Connectivity allows your site to register with the Hozio Hub &mdash; a central management dashboard. Once connected, the Hub manages your license and can send remote commands to the site in real time.</p>
+                        <p>Supported remote operations: page management, plugin management, admin access, option updates, REST API proxy, <strong>plugin version control</strong> (update, rollback, version lock), and version drift detection.</p>
+                        <p><strong>Version Control features (Hub-managed):</strong></p>
+                        <ul>
+                            <li><strong>Update &amp; Rollback</strong> &mdash; The Hub can push any release version to the site. The Install History timeline in Plugin Settings shows every install with a label (Update vs. Rollback) and a green Hub badge for Hub-triggered installs.</li>
+                            <li><strong>Version Lock</strong> &mdash; The Hub can lock a site to its current version, preventing updates. When locked, the Auto-Updates toggle shows a "Version Lock" badge and the Check for Updates button is grayed out. Version Lock can only be set from the Hub, not from the site.</li>
+                            <li><strong>Quick Revert</strong> &mdash; Rolls back to the previous version in one click from the Hub dashboard.</li>
+                            <li><strong>Version Drift Detection</strong> &mdash; On each page load, Hozio checks if the installed version matches what the Hub expects. If drift is detected, the Hub is notified automatically.</li>
+                        </ul>
                     </div>
                     <div class="hozio-support-steps">
                         <h3>How to set it up</h3>
@@ -804,8 +872,9 @@ function hozio_support_page() {
                             <li>Go to <strong>Hozio Pro &rarr; Settings</strong>.</li>
                             <li>In the Hub Connection section, the Hub URL defaults to <code>https://www.hozio.com</code>.</li>
                             <li>Enter your <strong>Registration Key</strong>.</li>
-                            <li>Click <strong>Connect</strong>. The site will register and receive its license.</li>
-                            <li>A heartbeat runs hourly to keep the Hub in sync.</li>
+                            <li>Click <strong>Connect</strong>. The site will register and receive its license automatically.</li>
+                            <li>A heartbeat runs hourly to keep the Hub in sync. After an update or rollback, an additional heartbeat fires within 5 seconds so the Hub reflects the change immediately.</li>
+                            <li>Version Lock and auto-update settings can be pushed from the Hub without any action on the site.</li>
                         </ol>
                     </div>
                     <div class="hozio-support-notes">
@@ -814,6 +883,362 @@ function hozio_support_page() {
                             <li>When connected, the <strong>license is managed remotely</strong> &mdash; no manual key entry needed.</li>
                             <li>To disconnect, click <strong>Disconnect</strong> in the Hub Connection section.</li>
                             <li>Remote commands include self-protection: the Hub cannot deactivate Hozio Pro itself.</li>
+                            <li><strong>Rollbacks require a valid license.</strong> If the license is inactive, the rollback AJAX handler will reject the request.</li>
+                            <li>The Plugin Settings page shows a <strong>Hub connection status indicator</strong> &mdash; it distinguishes between "reachable but not connected" and "fully connected" states.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: ghost-page-protection -->
+                <div data-content="ghost-page-protection">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Ghost pages are orphaned child pages whose URL no longer resolves correctly &mdash; for example, a page at <code>/plumbing/houston/</code> that exists in the database but whose parent page was deleted, renamed, or moved. Without protection, these phantom URLs return 200 OK and can be indexed by Google.</p>
+                        <p>Ghost Page Protection intercepts every front-end request, compares the requested URL against the page&rsquo;s true permalink, and either <strong>301-redirects</strong> the visitor to the correct URL or returns a hard <strong>404</strong> depending on your setting. Ghost pages are also excluded from the <strong>Yoast XML sitemap</strong> and filtered out of <strong>Elementor dynamic query results</strong>.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Go to <strong>Hozio Pro &rarr; Hozio Pro Settings</strong>.</li>
+                            <li>Find <strong>Ghost Page Protection</strong> and toggle it <strong>On</strong>.</li>
+                            <li>Choose your response mode:
+                                <ul>
+                                    <li><strong>Canonical Redirect (default):</strong> Ghost URLs 301-redirect to the page&rsquo;s real permalink.</li>
+                                    <li><strong>Hard 404:</strong> Ghost URLs return a 404 error page.</li>
+                                </ul>
+                            </li>
+                            <li>Click <strong>Save Settings</strong>.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>Ghost pages also receive an <strong>X-Robots-Tag: noindex</strong> HTTP header to prevent them from being indexed even if a crawler finds them.</li>
+                            <li>To debug, append <code>?hozio_ghost_debug</code> to any URL &mdash; Hozio will add <code>X-Ghost-Debug</code> headers showing how the URL was evaluated.</li>
+                            <li>WordPress resolves single-segment URLs via the <code>name</code> query var. Ghost Protection accounts for this so valid pages are never accidentally blocked.</li>
+                            <li>Ghost pages are automatically excluded from Elementor&rsquo;s <code>dynamic_parent_pages_query</code> and <code>dynamic_county_pages_query</code> results.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: town-content-checker -->
+                <div data-content="town-content-checker">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>The Town Content Checker scans all your town pages and reports which ACF fields are empty or missing. It groups missing fields by category (Links, Other) and shows a badge count per category so you can quickly see which pages need attention. Results are paginated and filterable.</p>
+                        <p>The <strong>Edit pencil</strong> next to each result deep-links directly to the missing field&rsquo;s ACF metabox on the page edit screen &mdash; the field is scrolled into view and highlighted automatically via the <code>hozio_highlight</code> URL parameter.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to use it</h3>
+                        <ol>
+                            <li>Go to <strong>Hozio Pro &rarr; Sitemap Settings</strong> and look for the <strong>Town Content Checker</strong> tab (or access it from the Sitemap Layout Editor warning banner).</li>
+                            <li>The checker loads and scans all town pages automatically.</li>
+                            <li>Use the <strong>category filter pills</strong> to show only <em>Links</em> issues or <em>Other</em> field issues. Both are off by default &mdash; toggle them to see those categories.</li>
+                            <li>Click the <strong>pencil icon</strong> next to any page to jump directly to the WordPress editor with the missing field highlighted.</li>
+                            <li>Click <strong>Reset Filters</strong> to clear all active filters.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>The badge on each page shows a <strong>breakdown by category</strong> (e.g., "3 Links, 2 Other") rather than a single total count.</li>
+                            <li>Section labels in the field list are <strong>clickable links</strong> that jump directly to the corresponding ACF metabox anchor on the edit page.</li>
+                            <li>The scan uses <code>update_post_meta_cache</code> pre-loading for performance &mdash; safe to run on large sites.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: duplicate-page-detector -->
+                <div data-content="duplicate-page-detector">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>When WordPress cannot use the slug you want (because another page with that slug already exists), it automatically appends <code>-2</code>, <code>-3</code>, etc. to the new page&rsquo;s slug. These duplicates often go unnoticed and can cause SEO issues, broken loops, or sitemap pollution.</p>
+                        <p>The Duplicate Page Detector scans your entire site for pages with <code>-2</code>, <code>-3</code> (and beyond) suffixes and presents them in a table with one-click actions to fix or remove them.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to use it</h3>
+                        <ol>
+                            <li>Go to <strong>Hozio Pro &rarr; Sitemap Settings &rarr; Duplicate Detector</strong> tab.</li>
+                            <li>The scan runs automatically on page load and populates the results table.</li>
+                            <li>For each duplicate, you have three actions:
+                                <ul>
+                                    <li><strong>Fix</strong> &mdash; renames the slug to remove the <code>-2</code>/<code>-3</code> suffix (only safe if the clean slug is now available).</li>
+                                    <li><strong>Draft</strong> &mdash; moves the page to Draft status so it&rsquo;s no longer publicly accessible.</li>
+                                    <li><strong>Trash</strong> &mdash; moves the page to the Trash.</li>
+                                </ul>
+                            </li>
+                            <li>Use <strong>bulk select</strong> to select multiple pages at once. The <strong>smart pattern bar</strong> lets you select all pages matching a <code>-2</code> or <code>-3</code> pattern in one click.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>The scan uses a <strong>12-hour transient cache</strong> &mdash; results are fast even on large sites. The cache is cleared when you take any action.</li>
+                            <li>Each result shows the <strong>full URL</strong> under the page title so you can identify exactly which page is affected.</li>
+                            <li>An <strong>admin-wide warning banner</strong> appears at the top of all admin pages when published duplicate pages are detected, so you&rsquo;re alerted even if you&rsquo;re not on this screen.</li>
+                            <li>The Promote modal shows all URLs being removed before you confirm a bulk action.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: image-video-sitemap -->
+                <div data-content="image-video-sitemap">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Generates an XML sitemap extension that lists all images and videos on your site for Google Search Console. Having an image/video sitemap helps Google discover and index media it might otherwise miss, especially when images are loaded via JavaScript (Elementor) or stored in ACF fields.</p>
+                        <p>Hozio detects media through four methods: <strong>post_parent database join</strong> (attached media), <strong>featured image meta</strong>, <strong>Elementor JSON parsing</strong> (<code>_elementor_data</code>), and <strong>Gutenberg block content</strong>.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Go to <strong>Hozio Pro &rarr; Sitemap Settings &rarr; Image &amp; Video Sitemap</strong> tab.</li>
+                            <li>Toggle <strong>Enable Image Sitemap</strong> and/or <strong>Enable Video Sitemap</strong>.</li>
+                            <li>Click <strong>Save</strong>. The sitemap URLs are displayed below the toggles.</li>
+                            <li>Submit the sitemap URLs to <strong>Google Search Console</strong> as you would any XML sitemap.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>If you had the standalone <strong>Image Video XML Sitemap</strong> plugin installed, Hozio will automatically deactivate it to prevent duplicate sitemap entries.</li>
+                            <li>Image URLs are fetched directly from the database to bypass filter chains (e.g., CDN URL rewrites) that could produce incorrect URLs.</li>
+                            <li>The sitemap only includes <strong>published pages</strong> &mdash; drafts, private, and trashed pages are excluded.</li>
+                            <li>Sitemap output is cached. If you add new images/videos, allow up to 24 hours for them to appear, or clear the WordPress object cache.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: faq-schema -->
+                <div data-content="faq-schema">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Automatically outputs <strong>FAQPage JSON-LD structured data</strong> to the <code>&lt;head&gt;</code> of your pages. This tells Google your page contains FAQ content, which can trigger rich results (expandable Q&amp;A sections) in search results.</p>
+                        <p>FAQ data is pulled from ACF field groups. Three groups are supported: <strong>General Questions</strong>, <strong>Service page FAQs</strong>, and <strong>Town/HOG page FAQs</strong>. Each group can be toggled independently.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to set it up</h3>
+                        <ol>
+                            <li>Go to <strong>Hozio Pro &rarr; Hozio Pro Settings &rarr; FAQ Schema</strong> section.</li>
+                            <li>Toggle the <strong>Master Enable</strong> switch to turn FAQ schema on globally.</li>
+                            <li>Enable or disable each ACF field group individually:
+                                <ul>
+                                    <li><strong>General Questions</strong> &mdash; applies to all pages with a General Questions ACF field group.</li>
+                                    <li><strong>Service Pages</strong> &mdash; applies to pages identified as service pages.</li>
+                                    <li><strong>Town / HOG Pages</strong> &mdash; applies to town-level location pages.</li>
+                                </ul>
+                            </li>
+                            <li>Optionally, add page IDs to the <strong>Exclude List</strong> to suppress schema output on specific pages.</li>
+                            <li>Click <strong>Save Settings</strong>.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>JSON-LD is output in the <code>&lt;head&gt;</code> tag &mdash; Google&rsquo;s preferred method for structured data.</li>
+                            <li>Pages with no FAQ ACF fields will not output any schema, even if the toggle is enabled.</li>
+                            <li>After enabling, use <a href="https://search.google.com/test/rich-results" target="_blank" rel="noopener">Google&rsquo;s Rich Results Test</a> to verify the schema is valid and eligible for rich results.</li>
+                            <li>Requires the <strong>ACF</strong> plugin to be active and the corresponding field groups to be configured on your pages.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: acf-generic-shortcodes -->
+                <div data-content="acf-generic-shortcodes">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>These four universal shortcodes let you output <strong>any ACF field value</strong> anywhere WordPress renders shortcodes &mdash; Elementor HTML widgets, Gutenberg Custom HTML blocks, pages, and posts. They work on the current page by default but also support cross-page lookups by <code>post_id</code> or <code>slug</code>.</p>
+
+                        <h4 style="margin-top:16px;"><code>[acf_text field="field_name"]</code></h4>
+                        <p>Outputs a text/textarea ACF field value. HTML is passed through <code>wp_kses_post()</code> (safe but not stripped). Returns empty if the field is empty or is an array type.</p>
+
+                        <h4 style="margin-top:16px;"><code>[acf_img field="field_name" alt="optional"]</code></h4>
+                        <p>Outputs a full <code>&lt;img&gt;</code> tag from an ACF image field. Handles both <em>Array</em> and <em>URL</em> return formats. The <code>alt</code> attribute is read from the image field automatically if not provided.</p>
+
+                        <h4 style="margin-top:16px;"><code>[acf_img_url field="field_name"]</code></h4>
+                        <p>Returns <strong>only the image URL string</strong> &mdash; no <code>&lt;img&gt;</code> tag. Use this inside inline CSS when you need the URL for a <code>background-image</code>:</p>
+                        <pre style="background:#f3f4f6;padding:12px;border-radius:6px;font-size:13px;overflow-x:auto;margin:8px 0;">&lt;div style="background-image:url('[acf_img_url field=&quot;hero__banner_image&quot;]')"&gt;</pre>
+
+                        <h4 style="margin-top:16px;"><code>[acf_raw field="field_name"]</code></h4>
+                        <p>Outputs the raw, unescaped field value. Use for <strong>textarea fields that contain HTML</strong> such as iframe embeds, Google Maps embeds, or rich text you want to render as-is.</p>
+
+                        <h4 style="margin-top:16px;">Cross-page lookup attributes</h4>
+                        <p>All four shortcodes accept two optional attributes for pulling fields from <em>other</em> pages:</p>
+                        <ul>
+                            <li><code>post_id="42"</code> &mdash; pull from a specific page/post by ID.</li>
+                            <li><code>slug="services"</code> &mdash; look up a published page by its slug, then read the field from that page. Useful for hub/carousel templates that need service data.</li>
+                        </ul>
+                        <pre style="background:#f3f4f6;padding:12px;border-radius:6px;font-size:13px;overflow-x:auto;margin:8px 0;">[acf_text field="hero__section_headline" slug="plumbing"]
+[acf_img field="service_loop_item_background" post_id="88"]</pre>
+
+                        <h4 style="margin-top:16px;"><code>[acf]</code> alias</h4>
+                        <p><code>[acf field="field_name"]</code> is an alias for <code>[acf_text]</code>. It replaces the ACF Pro built-in <code>[acf]</code> shortcode which is disabled by default in ACF Pro.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>How to use</h3>
+                        <ol>
+                            <li>Place any shortcode in an <strong>Elementor HTML widget</strong>, a <strong>Gutenberg Custom HTML block</strong>, or any standard WordPress text area.</li>
+                            <li>Set <code>field</code> to the ACF field name (the <em>Field Name</em> shown in ACF, not the label).</li>
+                            <li>For images, use <code>[acf_img]</code> for a full <code>&lt;img&gt;</code> tag or <code>[acf_img_url]</code> if you only need the URL.</li>
+                            <li>For fields containing raw HTML (iframes, embeds), use <code>[acf_raw]</code>.</li>
+                            <li>To pull a field from a different page, add <code>post_id</code> or <code>slug</code>.</li>
+                        </ol>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>All shortcodes <strong>silently return empty</strong> if ACF is not active or the field doesn&rsquo;t exist &mdash; no errors shown to visitors.</li>
+                            <li>Works inside <strong>Elementor HTML widgets</strong> and <strong>Gutenberg Custom HTML blocks</strong> automatically &mdash; no extra configuration needed.</li>
+                            <li>For debugging, place <code>[acf_debug]</code> on a page to see exactly which post ID ACF is resolving to. Remove it before going live.</li>
+                            <li><code>[acf_raw]</code> outputs unescaped HTML &mdash; only use with fields you control. Never use with user-submitted content.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: acf-hog-shortcodes -->
+                <div data-content="acf-hog-shortcodes">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Hozio Pro registers a <strong>named shortcode for every ACF field</strong> on Town and HOG (Home of the Good) pages. Instead of typing <code>[acf_text field="hog_hero_body"]</code>, you can just write <code>[hog_hero_body]</code>. This makes HTML widget templates cleaner and faster to build.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>Available shortcodes by section</h3>
+                        <h4 style="margin-top:12px;">Hero</h4>
+                        <ul>
+                            <li><code>[hog_hero_seo_heading]</code></li>
+                            <li><code>[hog_hero_section_headline]</code></li>
+                            <li><code>[hog_hero_body]</code></li>
+                            <li><code>[hog_hero_image]</code> &mdash; outputs <code>&lt;img&gt;</code> tag</li>
+                        </ul>
+                        <h4 style="margin-top:12px;">Outcomes</h4>
+                        <ul>
+                            <li><code>[hog_outcomes_seo_heading]</code></li>
+                            <li><code>[hog_outcomes_section_headline]</code></li>
+                            <li><code>[hog_outcomes_body]</code></li>
+                            <li><code>[hog_outcomes_image]</code> &mdash; outputs <code>&lt;img&gt;</code> tag</li>
+                        </ul>
+                        <h4 style="margin-top:12px;">About Us</h4>
+                        <ul>
+                            <li><code>[hog_about_us_seo_heading]</code></li>
+                            <li><code>[hog_about_us_section_headline]</code></li>
+                            <li><code>[hog_about_us_body]</code></li>
+                            <li><code>[hog_about_us_image]</code> &mdash; outputs <code>&lt;img&gt;</code> tag</li>
+                        </ul>
+                        <h4 style="margin-top:12px;">How It Works</h4>
+                        <ul>
+                            <li><code>[hog_how_it_works_seo_heading]</code></li>
+                            <li><code>[hog_how_it_works_section_headline]</code></li>
+                            <li><code>[hog_how_it_works_body]</code></li>
+                            <li><code>[hog_how_it_works_image]</code> &mdash; outputs <code>&lt;img&gt;</code> tag</li>
+                        </ul>
+                        <h4 style="margin-top:12px;">Service-Related Information</h4>
+                        <ul>
+                            <li><code>[hog_service-related_information_seo_heading]</code></li>
+                            <li><code>[hog_service-related_information_section_headline]</code></li>
+                            <li><code>[hog_service-related_information_body]</code></li>
+                            <li><code>[hog_service_related_info_image]</code> &mdash; outputs <code>&lt;img&gt;</code> tag</li>
+                        </ul>
+                        <h4 style="margin-top:12px;">FAQ (6 Q&amp;A pairs)</h4>
+                        <ul>
+                            <li><code>[new_hog_faq_question_1]</code> through <code>[new_hog_faq_question_6]</code></li>
+                            <li><code>[new_hog_faq_answer_1]</code> through <code>[new_hog_faq_answer_6]</code></li>
+                        </ul>
+                        <h4 style="margin-top:12px;">Links</h4>
+                        <ul>
+                            <li><code>[hog_google_maps_link]</code></li>
+                            <li><code>[hog_usps_link]</code></li>
+                            <li><code>[hog_pharmacy_link]</code></li>
+                            <li><code>[hog_weather_link]</code></li>
+                            <li><code>[hog_county_and_state_wiki_link]</code></li>
+                        </ul>
+                        <h4 style="margin-top:12px;">Misc</h4>
+                        <ul>
+                            <li><code>[hog_location]</code> &mdash; maps to the <code>location</code> ACF field</li>
+                            <li><code>[hog_gmb_map]</code> &mdash; raw HTML output (iframe embed)</li>
+                        </ul>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li>Image shortcodes output a full <code>&lt;img&gt;</code> tag with <code>loading="lazy"</code> automatically.</li>
+                            <li><code>[hog_gmb_map]</code> uses raw output &mdash; make sure the ACF field contains a valid iframe embed.</li>
+                            <li>The <code>hog_hero_section_headline</code> ACF field has a trailing colon in its registered name &mdash; the shortcode handles this automatically.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Section: acf-service-shortcodes -->
+                <div data-content="acf-service-shortcodes">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>Hozio Pro registers a <strong>named shortcode for every ACF field</strong> on Service pages. Use them directly in Elementor HTML widgets or Gutenberg Custom HTML blocks on service page templates without needing to write <code>[acf_text field="..."]</code> each time.</p>
+                    </div>
+                    <div class="hozio-support-steps">
+                        <h3>Available shortcodes by section</h3>
+                        <h4 style="margin-top:12px;">Hero</h4>
+                        <ul>
+                            <li><code>[hero__seo_heading]</code></li>
+                            <li><code>[hero__section_headline]</code></li>
+                            <li><code>[hero__body]</code></li>
+                            <li><code>[hero__banner_image]</code> &mdash; outputs <code>&lt;img&gt;</code> tag</li>
+                        </ul>
+                        <h4 style="margin-top:12px;">Trust Symbols</h4>
+                        <ul>
+                            <li><code>[trust_symbols__section_headline]</code></li>
+                            <li><code>[trust_symbols__title_1]</code> through <code>[trust_symbols__title_4]</code></li>
+                            <li><code>[trust_symbols__description_1]</code> through <code>[trust_symbols__description_4]</code></li>
+                        </ul>
+                        <h4 style="margin-top:12px;">Service Intro</h4>
+                        <ul>
+                            <li><code>[service_intro__seo_heading]</code></li>
+                            <li><code>[service_intro__section_headline]</code></li>
+                            <li><code>[service_intro__body]</code> &mdash; raw HTML output</li>
+                            <li><code>[service_intro__image]</code> &mdash; outputs <code>&lt;img&gt;</code> tag</li>
+                        </ul>
+                        <h4 style="margin-top:12px;">Benefits</h4>
+                        <ul>
+                            <li><code>[benefits__seo_heading]</code></li>
+                            <li><code>[benefits__section_headline]</code></li>
+                            <li><code>[benefits__subheadline]</code></li>
+                            <li><code>[benefits__bullet_text_1]</code> through <code>[benefits__bullet_text_6]</code></li>
+                        </ul>
+                        <h4 style="margin-top:12px;">Service-Related Information (2 sections)</h4>
+                        <ul>
+                            <li><code>[service-related_information_1__seo_heading]</code></li>
+                            <li><code>[service-related_information_1__section_headline]</code></li>
+                            <li><code>[service-related_information_1__body]</code> &mdash; raw HTML output</li>
+                            <li><code>[service-related_information_1__image]</code> &mdash; outputs <code>&lt;img&gt;</code> tag</li>
+                            <li><code>[service-related_information_2__seo_heading]</code></li>
+                            <li><code>[service-related_information_2__section_headline]</code></li>
+                            <li><code>[service-related_information_2__body]</code> &mdash; raw HTML output</li>
+                            <li><code>[service-related_information_2__image]</code> &mdash; outputs <code>&lt;img&gt;</code> tag</li>
+                        </ul>
+                        <h4 style="margin-top:12px;">How It Works</h4>
+                        <ul>
+                            <li><code>[how_it_works__seo_heading]</code></li>
+                            <li><code>[how_it_works__section_headline]</code></li>
+                            <li><code>[how_it_works__icon_title_1]</code> through <code>[how_it_works__icon_title_3]</code></li>
+                            <li><code>[how_it_works__icon_description_1]</code> through <code>[how_it_works__icon_description_3]</code></li>
+                        </ul>
+                        <h4 style="margin-top:12px;">FAQ (6 Q&amp;A pairs)</h4>
+                        <ul>
+                            <li><code>[faq_question_1]</code> through <code>[faq_question_6]</code></li>
+                            <li><code>[faq_answer_1]</code> through <code>[faq_answer_6]</code></li>
+                        </ul>
+                        <h4 style="margin-top:12px;">Misc</h4>
+                        <ul>
+                            <li><code>[hog_areas]</code> &mdash; service areas text</li>
+                            <li><code>[service_loop_item_description]</code></li>
+                            <li><code>[faq_service_page_section]</code></li>
+                            <li><code>[service_loop_item_background]</code> &mdash; outputs <code>&lt;img&gt;</code> tag</li>
+                        </ul>
+                    </div>
+                    <div class="hozio-support-notes">
+                        <h3>Important notes</h3>
+                        <ul>
+                            <li><code>body</code> and <code>_body</code> fields (service intro, service-related info) use <strong>raw output</strong> &mdash; they output HTML as-is for rich text and iframe embeds.</li>
+                            <li>Image shortcodes output a full <code>&lt;img&gt;</code> tag with <code>loading="lazy"</code>.</li>
+                            <li>If you need the image as a URL only (for CSS backgrounds), use the generic <code>[acf_img_url field="..."]</code> shortcode instead.</li>
+                            <li>The AJAX endpoint <code>action=cb_get_acf_images</code> is available for JavaScript-driven carousels that need to batch-fetch ACF image URLs for multiple page IDs at once.</li>
                         </ul>
                     </div>
                 </div>
@@ -971,6 +1396,7 @@ function hozio_support_page() {
         .hozio-card[data-category="elementor"] .hozio-card-icon { color: #F7941D; }
         .hozio-card[data-category="sitemap"] .hozio-card-icon { color: #00A0E3; }
         .hozio-card[data-category="settings"] .hozio-card-icon { color: #6D6E71; }
+        .hozio-card[data-category="acf-shortcodes"] .hozio-card-icon { color: #e11d48; }
 
         .hozio-card-title {
             margin: 0 0 4px;

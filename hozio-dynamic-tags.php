@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.11.16
+Version:         4.11.17
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,7 +13,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.11.16');
+define('HOZIO_VERSION', '4.11.17');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -48,6 +48,7 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/support-page.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/sitemap-layout.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/image-sitemap.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/faq-schema.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/acf-shortcodes.php';
 
 // Hub integration files (defensive loading — file_exists prevents fatal errors on partial updates)
 $hozio_hub_includes = [
