@@ -1300,6 +1300,51 @@ function hozio_plugin_settings_page() {
 
     </div><!-- /.wrap -->
 
+    <!-- Auto-update pause modal (shown after a successful downgrade) -->
+    <div id="hozio-autoupdate-modal" style="display:none;position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;">
+        <div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:440px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.22);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                <span class="dashicons dashicons-warning" style="color:#d97706;font-size:22px;"></span>
+                <strong style="font-size:16px;">Auto-updates are on</strong>
+            </div>
+            <p style="margin:0 0 18px;color:#555;font-size:13px;">Auto-updates may re-install the latest version and undo this rollback. What would you like to do?</p>
+
+            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:2px solid #e5e7eb;border-radius:8px;" id="hozio-pause-option-wrap">
+                    <input type="radio" name="hozio_au_choice" value="pause" checked style="margin:0;">
+                    <div>
+                        <div style="font-weight:600;font-size:13px;">Pause for…</div>
+                        <select id="hozio-pause-hours" style="margin-top:4px;font-size:12px;">
+                            <option value="1">1 hour</option>
+                            <option value="6">6 hours</option>
+                            <option value="24" selected>24 hours</option>
+                            <option value="168">1 week</option>
+                        </select>
+                        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">Auto-updates re-enable automatically after this time.</div>
+                    </div>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:2px solid #e5e7eb;border-radius:8px;">
+                    <input type="radio" name="hozio_au_choice" value="keep" style="margin:0;">
+                    <div>
+                        <div style="font-weight:600;font-size:13px;">Keep auto-updates on</div>
+                        <div style="font-size:11px;color:#9ca3af;">The latest version may be re-installed automatically.</div>
+                    </div>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:2px solid #fecaca;border-radius:8px;background:#fff7f7;">
+                    <input type="radio" name="hozio_au_choice" value="disable" style="margin:0;">
+                    <div>
+                        <div style="font-weight:600;font-size:13px;color:#b91c1c;">Turn off completely</div>
+                        <div style="font-size:11px;color:#9ca3af;">Disables auto-updates until you manually re-enable them in Settings.</div>
+                    </div>
+                </label>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;">
+                <button type="button" id="hozio-autoupdate-confirm" style="background:#7c3aed;color:#fff;border:none;padding:9px 22px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;">Confirm &amp; Continue</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Full-page rollback overlay -->
     <div id="hozio-rollback-overlay" style="display:none;">
         <div class="hozio-overlay-box">
@@ -2484,25 +2529,33 @@ function hozio_plugin_settings_page() {
             $('[data-version]').prop('disabled', true);
         }
 
-        function hozioRollbackDone($btn, originalText, success, message) {
+        function hozioRollbackDone($btn, originalText, success, responseData) {
             $('.hozio-rollback-progress').hide();
             $('[data-version]').prop('disabled', false);
             $btn && $btn.text(originalText);
 
             if (success) {
-                // Update overlay to "Done" state and keep it visible until reload
+                var isDowngrade   = responseData && responseData.is_downgrade;
+                var autoUpdatesOn = responseData && responseData.auto_updates_enabled;
+
+                // Update overlay to "Done" state
                 $('#hozio-rollback-overlay')
                     .find('.hozio-overlay-icon').removeClass('hozio-spinning dashicons-update').addClass('hozio-overlay-done dashicons-yes-alt').end()
                     .find('.hozio-overlay-title').text('Done! Reloading…').end()
                     .find('.hozio-overlay-sub').text('The page will refresh automatically.').end();
-                setTimeout(function() { location.reload(); }, 2000);
+
+                if (isDowngrade && autoUpdatesOn) {
+                    // Show the auto-update pause modal before reloading
+                    $('#hozio-autoupdate-modal').css('display', 'flex');
+                } else {
+                    setTimeout(function() { location.reload(); }, 2000);
+                }
             } else {
+                var message = (typeof responseData === 'string') ? responseData : (responseData && responseData.message ? responseData.message : 'Unknown error.');
                 $('#hozio-rollback-overlay').hide();
-                var color = '#991b1b';
-                var bg    = '#fee2e2';
                 $('.hozio-rollback-result')
                     .show()
-                    .html('<div style="padding:12px 16px;background:' + bg + ';border-radius:8px;color:' + color + ';display:flex;gap:10px;align-items:center;">' +
+                    .html('<div style="padding:12px 16px;background:#fee2e2;border-radius:8px;color:#991b1b;display:flex;gap:10px;align-items:center;">' +
                           '<span class="dashicons dashicons-warning" style="font-size:20px;"></span>' +
                           '<div>' + message + '</div>' +
                           '</div>');
@@ -2547,7 +2600,7 @@ function hozio_plugin_settings_page() {
                 url: ajaxurl, type: 'POST',
                 data: { action: 'hozio_rollback_to_version', nonce: nonce, version: version },
                 timeout: 300000,
-                success: function(r) { hozioRollbackDone($btn, 'Revert to v' + version, r.success, r.success ? r.data.message : r.data); },
+                success: function(r) { hozioRollbackDone($btn, 'Revert to v' + version, r.success, r.success ? r.data : r.data); },
                 error: function()    { hozioRollbackDone($btn, 'Revert to v' + version, false, 'Network error. Check your server error log.'); }
             });
         });
@@ -2640,8 +2693,30 @@ function hozio_plugin_settings_page() {
                 url: ajaxurl, type: 'POST',
                 data: { action: 'hozio_rollback_to_version', nonce: nonce, version: version },
                 timeout: 300000,
-                success: function(r) { hozioRollbackDone($btn, orig, r.success, r.success ? r.data.message : r.data); },
+                success: function(r) { hozioRollbackDone($btn, orig, r.success, r.success ? r.data : r.data); },
                 error: function()    { hozioRollbackDone($btn, orig, false, 'Network error. Check your server error log.'); }
+            });
+        });
+
+        // Auto-update pause modal — confirm button
+        $('#hozio-autoupdate-confirm').on('click', function() {
+            var $btn   = $(this);
+            var choice = $('input[name="hozio_au_choice"]:checked').val();
+            var hours  = parseInt($('#hozio-pause-hours').val(), 10);
+            var nonce  = '<?php echo esc_js(wp_create_nonce("hozio_rollback_nonce")); ?>';
+
+            $btn.prop('disabled', true).text('Saving…');
+
+            $.post(ajaxurl, {
+                action: 'hozio_set_auto_update_pause',
+                nonce:  nonce,
+                choice: choice,
+                hours:  hours
+            }, function() {
+                location.reload();
+            }).fail(function() {
+                // Reload anyway so the page reflects the installed version
+                location.reload();
             });
         });
 

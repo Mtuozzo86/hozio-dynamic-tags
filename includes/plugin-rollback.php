@@ -295,15 +295,41 @@ function hozio_ajax_rollback_to_version() {
 
     @set_time_limit(300);
 
+    $current_before = hozio_get_plugin_version();
     $result = hozio_perform_rollback($version);
 
     if ($result['success']) {
+        $result['is_downgrade'] = version_compare($version, $current_before, '<');
+        $result['auto_updates_enabled'] = get_option('hozio_auto_updates_enabled', '1') === '1';
         wp_send_json_success($result);
     } else {
         wp_send_json_error($result['message']);
     }
 }
 add_action('wp_ajax_hozio_rollback_to_version', 'hozio_ajax_rollback_to_version');
+
+function hozio_ajax_set_auto_update_pause() {
+    check_ajax_referer('hozio_rollback_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('Permission denied');
+
+    $choice = sanitize_text_field($_POST['choice'] ?? '');
+    $hours  = (int) ($_POST['hours'] ?? 0);
+
+    if ($choice === 'pause' && $hours > 0) {
+        update_option('hozio_auto_updates_paused_until', time() + ($hours * HOUR_IN_SECONDS));
+        wp_send_json_success(['message' => "Auto-updates paused for {$hours} hour(s)."]);
+    } elseif ($choice === 'disable') {
+        update_option('hozio_auto_updates_enabled', '0');
+        delete_option('hozio_auto_updates_paused_until');
+        wp_send_json_success(['message' => 'Auto-updates disabled.']);
+    } elseif ($choice === 'keep') {
+        delete_option('hozio_auto_updates_paused_until');
+        wp_send_json_success(['message' => 'Auto-updates kept on.']);
+    } else {
+        wp_send_json_error('Invalid choice.');
+    }
+}
+add_action('wp_ajax_hozio_set_auto_update_pause', 'hozio_ajax_set_auto_update_pause');
 
 function hozio_ajax_get_version_history() {
     check_ajax_referer('hozio_rollback_nonce', 'nonce');

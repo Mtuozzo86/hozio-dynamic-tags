@@ -230,6 +230,16 @@ class Hozio_Plugin_Updater {
             return false;
         }
 
+        // Check if auto-updates are temporarily paused after a rollback
+        $paused_until = (int) get_option('hozio_auto_updates_paused_until', 0);
+        if ($paused_until !== 0) {
+            if (time() < $paused_until) {
+                return false;
+            }
+            // Pause window expired — clear it automatically
+            delete_option('hozio_auto_updates_paused_until');
+        }
+
         // Check if auto-updates are enabled in settings
         if (get_option('hozio_auto_updates_enabled', '1') !== '1') {
             return false;

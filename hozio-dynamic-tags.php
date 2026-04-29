@@ -531,44 +531,26 @@ function hozio_dynamic_nav_menu_inline_styles() {
     <?php
 }
 
-add_action('admin_head', 'hozio_set_icon');
+add_action('admin_footer', 'hozio_set_icon');
 function hozio_set_icon() {
     global $pagenow;
     if (!in_array($pagenow, ['plugins.php', 'update-core.php'], true)) return;
 
-    $svg = file_get_contents(plugin_dir_path(__FILE__) . 'assets/hozio-burst.svg');
-    if (!$svg) return;
+    $svg_url = plugins_url('assets/hozio-burst.svg', __FILE__);
     ?>
-    <style>
-    .hozio-icon-wrap { width:64px; height:64px; display:inline-block; vertical-align:middle; margin-right:10px; flex-shrink:0; }
-    .hozio-icon-wrap svg { width:64px; height:64px; display:block; }
-    .hozio-icon-wrap .swoosh-blue,
-    .hozio-icon-wrap .swoosh-green,
-    .hozio-icon-wrap .swoosh-orange { transform-box:fill-box; transform-origin:center; }
-    .hozio-icon-wrap .swoosh-blue   { animation: hozio-icon-in 0.65s cubic-bezier(0.34,1.56,0.64,1) 0.05s both; }
-    .hozio-icon-wrap .swoosh-green  { animation: hozio-icon-in 0.65s cubic-bezier(0.34,1.56,0.64,1) 0.20s both; }
-    .hozio-icon-wrap .swoosh-orange { animation: hozio-icon-in 0.65s cubic-bezier(0.34,1.56,0.64,1) 0.35s both; }
-    @keyframes hozio-icon-in {
-        0%   { opacity:0; transform:scale(0.25) rotate(-25deg); }
-        100% { opacity:1; transform:scale(1) rotate(0deg); }
-    }
-    </style>
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        var svgSrc = <?php echo wp_json_encode($svg); ?>;
-        var parser = new DOMParser();
-        document.querySelectorAll('.plugin-title').forEach(function(cell) {
-            if (cell.textContent.indexOf('Hozio Pro') === -1) return;
+    (function() {
+        var svgUrl = <?php echo wp_json_encode($svg_url); ?>;
+        document.querySelectorAll('td').forEach(function(cell) {
+            var strong = cell.querySelector('strong');
+            if (!strong || strong.textContent.trim() !== 'Hozio Pro') return;
             var img = cell.querySelector('img');
             if (!img) return;
-            var svgDoc = parser.parseFromString(svgSrc, 'image/svg+xml');
-            var svgEl = svgDoc.documentElement;
-            var wrap = document.createElement('div');
-            wrap.className = 'hozio-icon-wrap';
-            wrap.appendChild(svgEl);
-            img.replaceWith(wrap);
+            img.src = svgUrl;
+            img.style.width = '64px';
+            img.style.height = '64px';
         });
-    });
+    })();
     </script>
     <?php
 }
