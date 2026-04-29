@@ -1113,189 +1113,131 @@ function hozio_plugin_settings_page() {
         </div><!-- /#hozio-tab-settings -->
 
         <div id="hozio-tab-shortcodes" class="hozio-tab-panel" style="display:none;">
-            <div class="hozio-sc-page">
 
-                <!-- ── GROUP: Town / HOG Page ──────────────────────────────── -->
-                <div class="hozio-sc-group">
-                    <div class="hozio-sc-group-header">
-                        <h2 class="hozio-sc-group-title">Town / HOG Page</h2>
-                        <button type="button" class="hozio-copy-all-btn button button-secondary">
-                            <span class="dashicons dashicons-clipboard"></span> Copy All
-                        </button>
-                    </div>
-                    <div class="hozio-sc-sub">
-                        <span class="hozio-sc-type-badge hozio-badge-text">text</span>
-                        <div class="hozio-sc-grid">
-                            <?php foreach ([
-                                'hog_hero_seo_heading','hog_hero_section_headline','hog_hero_body',
-                                'hog_outcomes_seo_heading','hog_outcomes_section_headline','hog_outcomes_body',
-                                'hog_about_us_seo_heading','hog_about_us_section_headline','hog_about_us_body',
-                                'hog_how_it_works_seo_heading','hog_how_it_works_section_headline','hog_how_it_works_body',
-                                'hog_service-related_information_seo_heading','hog_service-related_information_section_headline','hog_service-related_information_body',
-                                'new_hog_faq_question_1','new_hog_faq_answer_1',
-                                'new_hog_faq_question_2','new_hog_faq_answer_2',
-                                'new_hog_faq_question_3','new_hog_faq_answer_3',
-                                'new_hog_faq_question_4','new_hog_faq_answer_4',
-                                'new_hog_faq_question_5','new_hog_faq_answer_5',
-                                'new_hog_faq_question_6','new_hog_faq_answer_6',
-                                'hog_google_maps_link','hog_usps_link','hog_pharmacy_link',
-                                'hog_weather_link','hog_county_and_state_wiki_link','hog_location',
-                            ] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?>
-                        </div>
-                    </div>
-                    <div class="hozio-sc-sub">
-                        <span class="hozio-sc-type-badge hozio-badge-img">image</span>
-                        <div class="hozio-sc-grid">
-                            <?php foreach (['hog_hero_image','hog_outcomes_image','hog_about_us_image','hog_how_it_works_image','hog_service_related_info_image'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?>
-                        </div>
-                    </div>
-                    <div class="hozio-sc-sub">
-                        <span class="hozio-sc-type-badge hozio-badge-raw">raw/embed</span>
-                        <div class="hozio-sc-grid">
-                            <code class="hozio-sc-chip" title="Click to copy">[hog_gmb_map]</code>
-                        </div>
-                    </div>
+            <!-- ── Sub-tab navigation ───────────────────────────────────── -->
+            <div class="hozio-sc-subnav">
+                <button type="button" class="hozio-sc-subbtn hozio-sc-subbtn-active" data-panel="hozio-sc-town">Town / HOG Page</button>
+                <button type="button" class="hozio-sc-subbtn" data-panel="hozio-sc-service">Service Page</button>
+                <button type="button" class="hozio-sc-subbtn" data-panel="hozio-sc-generic">Generic</button>
+            </div>
+
+            <!-- ══ PANEL: Town / HOG Page ═══════════════════════════════════ -->
+            <div id="hozio-sc-town" class="hozio-sc-panel">
+                <div class="hozio-sc-panel-header">
+                    <span style="font-size:13px;color:#6b7280;">Click any shortcode to copy it.</span>
+                    <button type="button" class="hozio-copy-all-btn button button-secondary" data-scope="#hozio-sc-town">
+                        <span class="dashicons dashicons-clipboard"></span> Copy All
+                    </button>
                 </div>
 
-                <!-- ── GROUP: Service Page ──────────────────────────────────── -->
-                <div class="hozio-sc-group">
-                    <div class="hozio-sc-group-header">
-                        <h2 class="hozio-sc-group-title">Service Page</h2>
-                        <button type="button" class="hozio-copy-all-btn button button-secondary">
-                            <span class="dashicons dashicons-clipboard"></span> Copy All
-                        </button>
-                    </div>
-                    <div class="hozio-sc-sub">
-                        <span class="hozio-sc-type-badge hozio-badge-text">text</span>
-                        <div class="hozio-sc-grid">
-                            <?php foreach ([
-                                'hero__seo_heading','hero__section_headline','hero__body',
-                                'trust_symbols__section_headline',
-                                'trust_symbols__title_1','trust_symbols__description_1',
-                                'trust_symbols__title_2','trust_symbols__description_2',
-                                'trust_symbols__title_3','trust_symbols__description_3',
-                                'trust_symbols__title_4','trust_symbols__description_4',
-                                'service_intro__seo_heading','service_intro__section_headline',
-                                'benefits__seo_heading','benefits__section_headline','benefits__subheadline',
-                                'benefits__bullet_text_1','benefits__bullet_text_2','benefits__bullet_text_3',
-                                'benefits__bullet_text_4','benefits__bullet_text_5','benefits__bullet_text_6',
-                                'service-related_information_1__seo_heading','service-related_information_1__section_headline',
-                                'service-related_information_2__seo_heading','service-related_information_2__section_headline',
-                                'faq_question_1','faq_answer_1','faq_question_2','faq_answer_2',
-                                'faq_question_3','faq_answer_3','faq_question_4','faq_answer_4',
-                                'faq_question_5','faq_answer_5','faq_question_6','faq_answer_6',
-                                'how_it_works__seo_heading','how_it_works__section_headline',
-                                'how_it_works__icon_title_1','how_it_works__icon_description_1',
-                                'how_it_works__icon_title_2','how_it_works__icon_description_2',
-                                'how_it_works__icon_title_3','how_it_works__icon_description_3',
-                                'service_loop_item_description',
-                            ] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?>
-                        </div>
-                    </div>
-                    <div class="hozio-sc-sub">
-                        <span class="hozio-sc-type-badge hozio-badge-img">image</span>
-                        <div class="hozio-sc-grid">
-                            <?php foreach (['hero__banner_image','service_intro__image','service_loop_item_background','service-related_information_1__image','service-related_information_2__image'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?>
-                        </div>
-                    </div>
-                    <div class="hozio-sc-sub">
-                        <span class="hozio-sc-type-badge hozio-badge-raw">raw/embed</span>
-                        <div class="hozio-sc-grid">
-                            <?php foreach (['service_intro__body','service-related_information_1__body','service-related_information_2__body'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?>
-                        </div>
-                    </div>
-                    <div class="hozio-sc-sub">
-                        <span class="hozio-sc-type-badge hozio-badge-misc">miscellaneous</span>
-                        <div class="hozio-sc-grid">
-                            <?php foreach (['hog_areas','faq_service_page_section'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?>
-                        </div>
-                    </div>
+                <details class="hozio-sc-accordion" open><summary>Hero</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['hog_hero_seo_heading','hog_hero_section_headline','hog_hero_body'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[hog_hero_image]</code></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>Outcomes</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['hog_outcomes_seo_heading','hog_outcomes_section_headline','hog_outcomes_body'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[hog_outcomes_image]</code></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>About Us</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['hog_about_us_seo_heading','hog_about_us_section_headline','hog_about_us_body'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[hog_about_us_image]</code></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>How It Works</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['hog_how_it_works_seo_heading','hog_how_it_works_section_headline','hog_how_it_works_body'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[hog_how_it_works_image]</code></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>Service-Related Information</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['hog_service-related_information_seo_heading','hog_service-related_information_section_headline','hog_service-related_information_body'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[hog_service_related_info_image]</code></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>FAQ Questions &amp; Answers</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php for ($i=1;$i<=6;$i++): ?><code class="hozio-sc-chip" title="Click to copy">[new_hog_faq_question_<?php echo $i; ?>]</code><code class="hozio-sc-chip" title="Click to copy">[new_hog_faq_answer_<?php echo $i; ?>]</code><?php endfor; ?></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>Links</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['hog_google_maps_link','hog_usps_link','hog_pharmacy_link','hog_weather_link','hog_county_and_state_wiki_link','hog_location'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>GMB Map</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-raw">raw/embed</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[hog_gmb_map]</code></div></div>
+                </details>
+            </div><!-- /#hozio-sc-town -->
+
+            <!-- ══ PANEL: Service Page ════════════════════════════════════════ -->
+            <div id="hozio-sc-service" class="hozio-sc-panel" style="display:none;">
+                <div class="hozio-sc-panel-header">
+                    <span style="font-size:13px;color:#6b7280;">Click any shortcode to copy it.</span>
+                    <button type="button" class="hozio-copy-all-btn button button-secondary" data-scope="#hozio-sc-service">
+                        <span class="dashicons dashicons-clipboard"></span> Copy All
+                    </button>
                 </div>
 
-                <!-- ── GROUP: Generic ───────────────────────────────────────── -->
-                <div class="hozio-sc-group">
-                    <div class="hozio-sc-group-header">
-                        <h2 class="hozio-sc-group-title">Generic (any field)</h2>
-                        <button type="button" class="hozio-copy-all-btn button button-secondary">
-                            <span class="dashicons dashicons-clipboard"></span> Copy All
-                        </button>
-                    </div>
-                    <p class="hozio-sc-group-desc">Accept any ACF field name via the <code>field</code> attribute — use these when your field isn't in the lists above.</p>
-                    <div class="hozio-sc-grid">
-                        <code class="hozio-sc-chip" title="Click to copy">[acf field="field_name"]</code>
-                        <code class="hozio-sc-chip" title="Click to copy">[acf_text field="field_name"]</code>
-                        <code class="hozio-sc-chip" title="Click to copy">[acf_img field="field_name" alt="description"]</code>
-                        <code class="hozio-sc-chip" title="Click to copy">[acf_raw field="field_name"]</code>
-                    </div>
-                </div>
+                <details class="hozio-sc-accordion" open><summary>Hero</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['hero__seo_heading','hero__section_headline','hero__body'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[hero__banner_image]</code></div></div>
+                </details>
 
-                <!-- ── GROUP: Dynamic ACF Field Groups ──────────────────────── -->
-                <?php if (function_exists('acf_get_field_groups')): ?>
-                <?php
-                $acf_groups = acf_get_field_groups();
-                foreach ($acf_groups as $group):
-                    $fields = acf_get_fields($group['key']);
-                    if (empty($fields)) continue;
+                <details class="hozio-sc-accordion"><summary>Trust Symbols</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['trust_symbols__section_headline','trust_symbols__title_1','trust_symbols__description_1','trust_symbols__title_2','trust_symbols__description_2','trust_symbols__title_3','trust_symbols__description_3','trust_symbols__title_4','trust_symbols__description_4'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                </details>
 
-                    $text_fields = [];
-                    $img_fields  = [];
-                    $raw_fields  = [];
-                    foreach ($fields as $field) {
-                        if ($field['type'] === 'image') {
-                            $img_fields[] = $field;
-                        } elseif (in_array($field['type'], ['wysiwyg', 'textarea'], true)) {
-                            $raw_fields[] = $field;
-                        } else {
-                            $text_fields[] = $field;
-                        }
-                    }
-                ?>
-                <div class="hozio-sc-group">
-                    <div class="hozio-sc-group-header">
-                        <h2 class="hozio-sc-group-title"><?php echo esc_html($group['title']); ?></h2>
-                        <button type="button" class="hozio-copy-all-btn button button-secondary">
-                            <span class="dashicons dashicons-clipboard"></span> Copy All
-                        </button>
-                    </div>
-                    <?php if (!empty($text_fields)): ?>
-                    <div class="hozio-sc-sub">
-                        <span class="hozio-sc-type-badge hozio-badge-text">text</span>
-                        <div class="hozio-sc-grid">
-                            <?php foreach ($text_fields as $f): ?>
-                            <code class="hozio-sc-chip" title="Click to copy">[acf field="<?php echo esc_attr($f['name']); ?>"]</code>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                    <?php if (!empty($img_fields)): ?>
-                    <div class="hozio-sc-sub">
-                        <span class="hozio-sc-type-badge hozio-badge-img">image</span>
-                        <div class="hozio-sc-grid">
-                            <?php foreach ($img_fields as $f): ?>
-                            <code class="hozio-sc-chip" title="Click to copy">[acf_img field="<?php echo esc_attr($f['name']); ?>"]</code>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                    <?php if (!empty($raw_fields)): ?>
-                    <div class="hozio-sc-sub">
-                        <span class="hozio-sc-type-badge hozio-badge-raw">raw/embed</span>
-                        <div class="hozio-sc-grid">
-                            <?php foreach ($raw_fields as $f): ?>
-                            <code class="hozio-sc-chip" title="Click to copy">[acf_raw field="<?php echo esc_attr($f['name']); ?>"]</code>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                <?php endforeach; ?>
-                <?php else: ?>
-                <div class="hozio-sc-group" style="border-left: 4px solid #e5e7eb;">
-                    <p style="color:#6b7280;font-size:13px;margin:0;">ACF is not active — field groups are not available.</p>
-                </div>
-                <?php endif; ?>
+                <details class="hozio-sc-accordion"><summary>Service Intro</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['service_intro__seo_heading','service_intro__section_headline'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[service_intro__image]</code></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-raw">raw/embed</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[service_intro__body]</code></div></div>
+                </details>
 
-            </div><!-- /.hozio-sc-page -->
+                <details class="hozio-sc-accordion"><summary>Benefits</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['benefits__seo_heading','benefits__section_headline','benefits__subheadline','benefits__bullet_text_1','benefits__bullet_text_2','benefits__bullet_text_3','benefits__bullet_text_4','benefits__bullet_text_5','benefits__bullet_text_6'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>Service-Related Info 1</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['service-related_information_1__seo_heading','service-related_information_1__section_headline'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[service-related_information_1__image]</code></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-raw">raw/embed</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[service-related_information_1__body]</code></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>Service-Related Info 2</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['service-related_information_2__seo_heading','service-related_information_2__section_headline'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[service-related_information_2__image]</code></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-raw">raw/embed</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[service-related_information_2__body]</code></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>FAQ Questions &amp; Answers</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php for ($i=1;$i<=6;$i++): ?><code class="hozio-sc-chip" title="Click to copy">[faq_question_<?php echo $i; ?>]</code><code class="hozio-sc-chip" title="Click to copy">[faq_answer_<?php echo $i; ?>]</code><?php endfor; ?></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>How It Works</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-text">text</span><div class="hozio-sc-grid"><?php foreach (['how_it_works__seo_heading','how_it_works__section_headline','how_it_works__icon_title_1','how_it_works__icon_description_1','how_it_works__icon_title_2','how_it_works__icon_description_2','how_it_works__icon_title_3','how_it_works__icon_description_3'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                </details>
+
+                <details class="hozio-sc-accordion"><summary>Miscellaneous</summary>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-misc">misc</span><div class="hozio-sc-grid"><?php foreach (['hog_areas','faq_service_page_section','service_loop_item_description'] as $sc): ?><code class="hozio-sc-chip" title="Click to copy">[<?php echo esc_html($sc); ?>]</code><?php endforeach; ?></div></div>
+                    <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[service_loop_item_background]</code></div></div>
+                </details>
+            </div><!-- /#hozio-sc-service -->
+
+            <!-- ══ PANEL: Generic ════════════════════════════════════════════ -->
+            <div id="hozio-sc-generic" class="hozio-sc-panel" style="display:none;">
+                <div class="hozio-sc-panel-header">
+                    <span style="font-size:13px;color:#6b7280;">Use these when your field isn't in the lists above.</span>
+                    <button type="button" class="hozio-copy-all-btn button button-secondary" data-scope="#hozio-sc-generic">
+                        <span class="dashicons dashicons-clipboard"></span> Copy All
+                    </button>
+                </div>
+                <div class="hozio-sc-grid" style="padding:16px 0;">
+                    <code class="hozio-sc-chip" title="Click to copy">[acf field="field_name"]</code>
+                    <code class="hozio-sc-chip" title="Click to copy">[acf_text field="field_name"]</code>
+                    <code class="hozio-sc-chip" title="Click to copy">[acf_img field="field_name" alt="description"]</code>
+                    <code class="hozio-sc-chip" title="Click to copy">[acf_raw field="field_name"]</code>
+                </div>
+            </div><!-- /#hozio-sc-generic -->
+
         </div><!-- /#hozio-tab-shortcodes -->
 
     </div><!-- /.wrap -->
@@ -2301,6 +2243,69 @@ function hozio_plugin_settings_page() {
         color: #065f46;
     }
     .hozio-copy-all-btn .dashicons { margin-top: 3px; }
+
+    /* ── Shortcode sub-tab navigation ─────────────────────────────── */
+    .hozio-sc-subnav {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 16px;
+        border-bottom: 2px solid #e5e7eb;
+        padding-bottom: 0;
+    }
+    .hozio-sc-subbtn {
+        background: none;
+        border: none;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #6b7280;
+        cursor: pointer;
+        border-radius: 6px 6px 0 0;
+        transition: color 0.15s, border-color 0.15s;
+    }
+    .hozio-sc-subbtn:hover { color: #374151; }
+    .hozio-sc-subbtn-active {
+        color: #7c3aed;
+        border-bottom-color: #7c3aed;
+        background: #faf5ff;
+    }
+    .hozio-sc-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+    .hozio-sc-accordion {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        overflow: hidden;
+    }
+    .hozio-sc-accordion summary {
+        padding: 10px 14px;
+        font-weight: 600;
+        font-size: 13px;
+        color: #374151;
+        cursor: pointer;
+        background: #f9fafb;
+        user-select: none;
+        list-style: none;
+    }
+    .hozio-sc-accordion summary::-webkit-details-marker { display: none; }
+    .hozio-sc-accordion summary::before {
+        content: '▶';
+        display: inline-block;
+        font-size: 10px;
+        margin-right: 8px;
+        color: #9ca3af;
+        transition: transform 0.2s;
+    }
+    .hozio-sc-accordion[open] > summary::before { transform: rotate(90deg); }
+    .hozio-sc-accordion[open] > summary { border-bottom: 1px solid #e5e7eb; }
+    .hozio-sc-accordion .hozio-sc-sub { padding: 12px 14px 0; }
+    .hozio-sc-accordion .hozio-sc-sub:last-child { padding-bottom: 12px; }
     </style>
 
     <script>
@@ -2857,10 +2862,21 @@ function hozio_plugin_settings_page() {
             });
         });
 
+        // ── Shortcode sub-tab switching ──────────────────────────────
+        $(document).on('click', '.hozio-sc-subbtn', function() {
+            var panelId = $(this).data('panel');
+            $('.hozio-sc-subbtn').removeClass('hozio-sc-subbtn-active');
+            $(this).addClass('hozio-sc-subbtn-active');
+            $('.hozio-sc-panel').hide();
+            $('#' + panelId).show();
+        });
+
         // ── Copy All button ──────────────────────────────────────────
         $(document).on('click', '.hozio-copy-all-btn', function() {
-            var $btn = $(this);
-            var codes = $btn.closest('.hozio-sc-group').find('.hozio-sc-chip').map(function() {
+            var $btn   = $(this);
+            var scope  = $btn.data('scope');
+            var $panel = scope ? $(scope) : $btn.closest('.hozio-sc-panel, .hozio-sc-group');
+            var codes  = $panel.find('.hozio-sc-chip').map(function() {
                 return $(this).text();
             }).get();
             navigator.clipboard.writeText(codes.join('\n')).then(function() {
