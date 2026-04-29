@@ -1304,30 +1304,33 @@ function hozio_plugin_settings_page() {
     <div id="hozio-autoupdate-modal" style="display:none;position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;">
         <div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:440px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.22);">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-                <span class="dashicons dashicons-warning" style="color:#d97706;font-size:22px;"></span>
-                <strong style="font-size:16px;">Auto-updates paused (1 hour)</strong>
+                <span class="dashicons dashicons-shield" style="color:#059669;font-size:22px;"></span>
+                <strong style="font-size:16px;">Rollback complete — auto-updates paused</strong>
             </div>
-            <p style="margin:0 0 18px;color:#555;font-size:13px;">Auto-updates have been paused for 1 hour to protect this rollback. Would you like to adjust this?</p>
+            <p style="margin:0 0 18px;color:#555;font-size:13px;">Auto-updates are paused to protect this rollback. How long would you like to keep them paused?</p>
 
             <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
                 <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:2px solid #e5e7eb;border-radius:8px;" id="hozio-pause-option-wrap">
                     <input type="radio" name="hozio_au_choice" value="pause" checked style="margin:0;">
                     <div>
-                        <div style="font-weight:600;font-size:13px;">Pause for…</div>
+                        <div style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;">
+                            Keep paused for…
+                            <span style="font-size:10px;font-weight:700;background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:20px;letter-spacing:.3px;">Recommended</span>
+                        </div>
                         <select id="hozio-pause-hours" style="margin-top:4px;font-size:12px;">
-                            <option value="1">1 hour</option>
+                            <option value="1" selected>1 hour</option>
                             <option value="6">6 hours</option>
-                            <option value="24" selected>24 hours</option>
+                            <option value="24">24 hours</option>
                             <option value="168">1 week</option>
                         </select>
-                        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">Auto-updates re-enable automatically after this time.</div>
+                        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">Auto-updates resume automatically when the time expires.</div>
                     </div>
                 </label>
                 <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:2px solid #e5e7eb;border-radius:8px;">
                     <input type="radio" name="hozio_au_choice" value="keep" style="margin:0;">
                     <div>
                         <div style="font-weight:600;font-size:13px;">Resume auto-updates now</div>
-                        <div style="font-size:11px;color:#9ca3af;">Cancels the pause. The latest version may be re-installed automatically.</div>
+                        <div style="font-size:11px;color:#9ca3af;">Cancels the pause immediately. Auto-updates will be active again.</div>
                     </div>
                 </label>
                 <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:2px solid #fecaca;border-radius:8px;background:#fff7f7;">
