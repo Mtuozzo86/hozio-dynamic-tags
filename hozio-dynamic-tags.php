@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.11.17
+Version:         4.11.18
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,7 +13,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.11.17');
+define('HOZIO_VERSION', '4.11.18');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -533,14 +533,44 @@ function hozio_dynamic_nav_menu_inline_styles() {
 
 add_action('admin_head', 'hozio_set_icon');
 function hozio_set_icon() {
-    $icon_url = plugins_url('assets/hozio-logo.gif', __FILE__); // Update with correct path
-    echo '<style>
-        .plugin-title img[src*="geopattern-icon"] {
-            content: url("' . esc_url($icon_url) . '") !important;
-            width: 64px !important;
-            height: 64px !important;
-        }
-    </style>';
+    global $pagenow;
+    if (!in_array($pagenow, ['plugins.php', 'update-core.php'], true)) return;
+
+    $svg = file_get_contents(plugin_dir_path(__FILE__) . 'assets/hozio-burst.svg');
+    if (!$svg) return;
+    ?>
+    <style>
+    .hozio-icon-wrap { width:64px; height:64px; display:inline-block; vertical-align:middle; margin-right:10px; flex-shrink:0; }
+    .hozio-icon-wrap svg { width:64px; height:64px; display:block; }
+    .hozio-icon-wrap .swoosh-blue,
+    .hozio-icon-wrap .swoosh-green,
+    .hozio-icon-wrap .swoosh-orange { transform-box:fill-box; transform-origin:center; }
+    .hozio-icon-wrap .swoosh-blue   { animation: hozio-icon-in 0.65s cubic-bezier(0.34,1.56,0.64,1) 0.05s both; }
+    .hozio-icon-wrap .swoosh-green  { animation: hozio-icon-in 0.65s cubic-bezier(0.34,1.56,0.64,1) 0.20s both; }
+    .hozio-icon-wrap .swoosh-orange { animation: hozio-icon-in 0.65s cubic-bezier(0.34,1.56,0.64,1) 0.35s both; }
+    @keyframes hozio-icon-in {
+        0%   { opacity:0; transform:scale(0.25) rotate(-25deg); }
+        100% { opacity:1; transform:scale(1) rotate(0deg); }
+    }
+    </style>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var svgSrc = <?php echo wp_json_encode($svg); ?>;
+        var parser = new DOMParser();
+        document.querySelectorAll('.plugin-title').forEach(function(cell) {
+            if (cell.textContent.indexOf('Hozio Pro') === -1) return;
+            var img = cell.querySelector('img');
+            if (!img) return;
+            var svgDoc = parser.parseFromString(svgSrc, 'image/svg+xml');
+            var svgEl = svgDoc.documentElement;
+            var wrap = document.createElement('div');
+            wrap.className = 'hozio-icon-wrap';
+            wrap.appendChild(svgEl);
+            img.replaceWith(wrap);
+        });
+    });
+    </script>
+    <?php
 }
 
 // Modify the query for child pages of "Services" when the query ID is "services_children"
