@@ -250,6 +250,21 @@ function hozio_perform_rollback($target_version, $from_hub = false) {
     hozio_record_version_snapshot($target_version, $snap_method, $current_version);
     delete_option('hozio_pre_upgrade_version');
 
+    if (!$is_upgrade) {
+        // Block auto-updates immediately so WP-Cron can't re-install the latest
+        // version before the user makes a choice in the modal. Default: 1 hour.
+        // The modal lets the user extend, keep, or disable permanently.
+        update_option('hozio_auto_updates_paused_until', time() + HOUR_IN_SECONDS);
+
+        // Remove our plugin from WordPress's update_plugins transient so the
+        // cron job doesn't see an available update on the very next page load.
+        $upd = get_site_transient('update_plugins');
+        if ($upd && isset($upd->response[$plugin_file])) {
+            unset($upd->response[$plugin_file]);
+            set_site_transient('update_plugins', $upd);
+        }
+    }
+
     if (function_exists('activate_plugin')) {
         activate_plugin($plugin_file);
     }

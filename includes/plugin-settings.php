@@ -1305,9 +1305,9 @@ function hozio_plugin_settings_page() {
         <div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:440px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.22);">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
                 <span class="dashicons dashicons-warning" style="color:#d97706;font-size:22px;"></span>
-                <strong style="font-size:16px;">Auto-updates are on</strong>
+                <strong style="font-size:16px;">Auto-updates paused (1 hour)</strong>
             </div>
-            <p style="margin:0 0 18px;color:#555;font-size:13px;">Auto-updates may re-install the latest version and undo this rollback. What would you like to do?</p>
+            <p style="margin:0 0 18px;color:#555;font-size:13px;">Auto-updates have been paused for 1 hour to protect this rollback. Would you like to adjust this?</p>
 
             <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
                 <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:2px solid #e5e7eb;border-radius:8px;" id="hozio-pause-option-wrap">
@@ -1326,8 +1326,8 @@ function hozio_plugin_settings_page() {
                 <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:2px solid #e5e7eb;border-radius:8px;">
                     <input type="radio" name="hozio_au_choice" value="keep" style="margin:0;">
                     <div>
-                        <div style="font-weight:600;font-size:13px;">Keep auto-updates on</div>
-                        <div style="font-size:11px;color:#9ca3af;">The latest version may be re-installed automatically.</div>
+                        <div style="font-weight:600;font-size:13px;">Resume auto-updates now</div>
+                        <div style="font-size:11px;color:#9ca3af;">Cancels the pause. The latest version may be re-installed automatically.</div>
                     </div>
                 </label>
                 <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:2px solid #fecaca;border-radius:8px;background:#fff7f7;">
@@ -2538,16 +2538,16 @@ function hozio_plugin_settings_page() {
                 var isDowngrade   = responseData && responseData.is_downgrade;
                 var autoUpdatesOn = responseData && responseData.auto_updates_enabled;
 
-                // Update overlay to "Done" state
-                $('#hozio-rollback-overlay')
-                    .find('.hozio-overlay-icon').removeClass('hozio-spinning dashicons-update').addClass('hozio-overlay-done dashicons-yes-alt').end()
-                    .find('.hozio-overlay-title').text('Done! Reloading…').end()
-                    .find('.hozio-overlay-sub').text('The page will refresh automatically.').end();
-
                 if (isDowngrade && autoUpdatesOn) {
-                    // Show the auto-update pause modal before reloading
+                    // Hide the rollback overlay and show the auto-update choice modal
+                    $('#hozio-rollback-overlay').hide();
                     $('#hozio-autoupdate-modal').css('display', 'flex');
                 } else {
+                    // Update overlay to "Done" state then reload
+                    $('#hozio-rollback-overlay')
+                        .find('.hozio-overlay-icon').removeClass('hozio-spinning dashicons-update').addClass('hozio-overlay-done dashicons-yes-alt').end()
+                        .find('.hozio-overlay-title').text('Done! Reloading…').end()
+                        .find('.hozio-overlay-sub').text('The page will refresh automatically.').end();
                     setTimeout(function() { location.reload(); }, 2000);
                 }
             } else {
