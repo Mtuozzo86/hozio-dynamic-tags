@@ -980,6 +980,7 @@ function hozio_leads_list_page() {
         </a>
       </div>
 
+      <?php if ( current_user_can( 'manage_options' ) ) : ?>
       <!-- Webhook URL Banner -->
       <div class="hl-webhook-banner">
         <div class="hl-webhook-info">
@@ -995,6 +996,7 @@ function hozio_leads_list_page() {
         </div>
         <p class="hl-webhook-hint">Include a <code>source</code> field (e.g. <code>"source": "WPForms"</code>) so you can tell which platform sent it. POST JSON or form-encoded body with any fields you want to capture.</p>
       </div>
+      <?php endif; ?>
 
       <!-- Stat Cards -->
       <div class="hl-stats">

@@ -35,7 +35,7 @@ add_action('save_post_page', function($post_id) {
     // Only reset the per-user banner dismiss when the saved page itself has a -N duplicate slug.
     // Resetting on every page save was unnecessarily dismissing banners for all admins constantly.
     $saved_post = get_post($post_id);
-    if ($saved_post && preg_match('/^(.+)-([2-9]|\d{2,})$/', $saved_post->post_name)) {
+    if ($saved_post && preg_match('/^(.+)-([2-9]|\d{2,3})$/', $saved_post->post_name)) {
         delete_metadata('user', 0, 'hozio_duplicate_banner_dismissed', '', true);
     }
 }, 20);
@@ -76,7 +76,7 @@ add_action('admin_notices', function() {
         $count = (int) $wpdb->get_var(
             "SELECT COUNT(*) FROM {$wpdb->posts}
              WHERE post_type = 'page' AND post_status = 'publish'
-             AND post_name REGEXP '-([2-9]|[0-9]{2,})$'"
+             AND post_name REGEXP '-([2-9]|[0-9]{2,3})$'"
         );
     }
     if ($count <= 0) return;
@@ -529,7 +529,7 @@ add_action('wp_ajax_hozio_duplicate_slug_scan', function() {
     $groups_map = array(); // key: "parentId:base_slug" => array of duplicate pages
     foreach ($all_pages as $p) {
         if ($p->post_status === 'trash') continue; // Don't show trashed pages
-        if (preg_match('/^(.+)-([2-9]|\d{2,})$/', $p->post_name, $m)) {
+        if (preg_match('/^(.+)-([2-9]|\d{2,3})$/', $p->post_name, $m)) {
             // Verify the permalink actually contains the -N suffixed slug.
             // WordPress allows hierarchical pages to share slugs across different parents,
             // and permalink plugins may rewrite URLs without the suffix.
