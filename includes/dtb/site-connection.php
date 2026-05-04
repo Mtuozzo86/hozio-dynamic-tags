@@ -279,6 +279,8 @@ function hozio_dtb_render_connection_tab() {
 
     /* Diagnostics — collapsed by default */
     .hozio-dtb-diag { margin-top:18px; }
+    @keyframes hozio-spin { to { transform:rotate(360deg); } }
+    .hozio-spin { animation:hozio-spin .7s linear infinite;display:inline-block; }
     .hozio-dtb-diag-result { margin-top:12px;font-size:12.5px; }
     .hozio-dtb-status-grid { display:grid;grid-template-columns:max-content 1fr;gap:5px 14px;margin-top:8px;font-size:12px; }
     .hozio-dtb-status-grid dt { color:#6b7280;font-weight:500; }
@@ -393,9 +395,15 @@ function hozio_dtb_render_connection_tab() {
             // Diagnostics — collapsed test button
             var diagHtml =
                 '<div class="hozio-dtb-diag">' +
-                    '<button type="button" class="button" id="hozio-dtb-test-btn">' +
-                        '<span class="dashicons dashicons-update" style="margin-top:3px;"></span> Run diagnostics' +
-                    '</button>' +
+                    '<div class="hozio-dtb-actions">' +
+                        '<button type="button" class="button" id="hozio-dtb-refresh-btn">' +
+                            '<span class="dashicons dashicons-update" style="margin-top:3px;"></span>' +
+                            '<span class="hozio-dtb-refresh-label"> Refresh</span>' +
+                        '</button>' +
+                        '<button type="button" class="button" id="hozio-dtb-test-btn">' +
+                            '<span class="dashicons dashicons-search" style="margin-top:3px;"></span> Run diagnostics' +
+                        '</button>' +
+                    '</div>' +
                     '<div class="hozio-dtb-diag-result" id="hozio-dtb-test-result"></div>' +
                 '</div>';
 
@@ -452,6 +460,31 @@ function hozio_dtb_render_connection_tab() {
                 '</table>'
             ).slideDown(140);
             $btn.text($btn.text().replace('▾', '▴'));
+        });
+
+        $(document).on('click', '#hozio-dtb-refresh-btn', function() {
+            var $btn = $(this);
+            $btn.prop('disabled', true).find('.dashicons').addClass('hozio-spin');
+            $btn.find('span.hozio-dtb-refresh-label').text(' Refreshing…');
+            $.post(ajaxurl, { action: 'hozio_dtb_deploy_state', nonce: nonce })
+                .done(function(resp) {
+                    if (resp.success) {
+                        renderStatus(resp.data);
+                    } else {
+                        $('#hozio-dtb-status-root').prepend(
+                            '<p class="hozio-dtb-msg-error" style="margin:0 0 8px;">' + escHtml(resp.data) + '</p>'
+                        );
+                    }
+                })
+                .fail(function() {
+                    $('#hozio-dtb-status-root').prepend(
+                        '<p class="hozio-dtb-msg-error" style="margin:0 0 8px;">Network error — could not refresh.</p>'
+                    );
+                })
+                .always(function() {
+                    $btn.prop('disabled', false).find('.dashicons').removeClass('hozio-spin');
+                    $btn.find('span.hozio-dtb-refresh-label').text(' Refresh');
+                });
         });
 
         $(document).on('click', '#hozio-dtb-test-btn', function() {
