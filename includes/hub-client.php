@@ -168,6 +168,12 @@ class Hozio_Hub_Client {
         if (!empty($body['commands']) && is_array($body['commands'])) {
             self::process_commands($body['commands']);
         }
+
+        // Note: prior versions read $body['github'] to receive a Hub-distributed
+        // GitHub credential. That mechanism was removed in v4.13.0 in favor of
+        // a per-site HOZIO_DEPLOY_SECRET wp-config.php constant + GitHub Actions
+        // HMAC. Heartbeat may still carry the field on older Hubs; we just
+        // ignore it.
     }
 
     /**

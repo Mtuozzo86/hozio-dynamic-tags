@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.11.19
+Version:         4.13.1
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,9 +13,23 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.11.19');
+define('HOZIO_VERSION', '4.13.1');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
+
+// DTB engine paths. The engine bundles primitives.css + shortcode handlers.
+// Per-client website content lives in wp-content/uploads/dtb-site/ (resolved
+// at runtime via hozio_dtb_content_path() in includes/dtb/content-resolver.php).
+define( 'HOZIO_DTB_ENGINE_PATH', plugin_dir_path( __FILE__ ) );
+define( 'HOZIO_DTB_ENGINE_URL',  plugin_dir_url( __FILE__ ) );
+
+// Raw-HTML tag whitelist for [hozio] (TrustIndex / Google Reviews embed codes).
+// Read by hozio_shortcode_handler(); kept global so /dtb/ files can extend it.
+$GLOBALS['dtb_hozio_raw_tags'] = array(
+    'trustindex-button',
+    'trustindex-slider',
+    'google-reviews-embed',
+);
 
 // Load custom logger first (enables HOZIO_DEBUG logging without WP_DEBUG)
 require_once plugin_dir_path( __FILE__ ) . 'includes/hozio-logger.php';
@@ -48,6 +62,26 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/support-page.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/sitemap-layout.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/image-sitemap.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/faq-schema.php';
+// DTB engine (merged from Dynamic Tags Bridge plugin) — shortcode bridge for
+// per-client website content stored in wp-content/uploads/dtb-site/.
+// Loads BEFORE legacy acf-shortcodes.php so DTB's post_id/slug-aware
+// [acf_text]/[acf_img]/[acf_raw] handlers register first; the legacy file
+// has shortcode_exists() guards on those tags so it skips re-registration.
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/content-resolver.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/helpers.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/wp-shortcodes.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/acf-shortcodes.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/wc-shortcodes.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/wc-loop-shortcodes.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/review-shortcodes.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/template-loader.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/rest-api.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/export-static.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/dtb/site-connection.php';
+
+// Legacy ACF shortcodes (HOG/town field-specific tags + simple [acf] alias).
+// Loaded AFTER DTB so the DTB versions of acf_text / acf_img / acf_raw
+// (which support post_id and slug overrides) take precedence.
 require_once plugin_dir_path( __FILE__ ) . 'includes/acf-shortcodes.php';
 
 // Hub integration files (defensive loading — file_exists prevents fatal errors on partial updates)
@@ -156,6 +190,34 @@ function hozio_shortcode_handler( $atts ) {
 
     if ( empty( $tag ) ) {
         return '';
+    }
+
+    // --- hozio-config.php: used only as deploy-time seed for wp_options ---
+    // Values are synced from hozio-config.php into wp_options on every deploy
+    // (see hozio_dtb_sync_config_to_options in site-connection.php). Keys that
+    // have no wp_options equivalent (client-name, client-url, header-cta-*,
+    // geo-*, etc.) are still read directly from the file as a fallback below.
+    $file_only_tags = array(
+        'client-name', 'client-shortname', 'client-url', 'client-description',
+        'main-service-name', 'header-cta-text', 'header-cta-url',
+        'contact-form-template-id',
+        'company-address-street', 'company-address-city',
+        'company-address-state', 'company-address-zip',
+        'geo-latitude', 'geo-longitude', 'google-fonts-url',
+        'trustindex-button', 'trustindex-slider',
+    );
+    if ( in_array( $tag, $file_only_tags, true ) && function_exists( 'hozio_dtb_get_tag' ) ) {
+        $file_value = hozio_dtb_get_tag( $tag );
+        if ( $file_value !== null && $file_value !== '' ) {
+            $raw_tags = isset( $GLOBALS['dtb_hozio_raw_tags'] ) ? (array) $GLOBALS['dtb_hozio_raw_tags'] : array();
+            if ( in_array( $tag, $raw_tags, true ) ) {
+                return $file_value;
+            }
+            if ( $format === 'url' ) {
+                return esc_url( $file_value );
+            }
+            return esc_html( $file_value );
+        }
     }
 
     // --- Calculated: years-of-experience ---
@@ -270,6 +332,196 @@ function hozio_shortcode_handler( $atts ) {
     return esc_html( $value );
 }
 add_shortcode( 'hozio', 'hozio_shortcode_handler' );
+
+/**
+ * [hozio_tel tag="company-phone-1"] — formats a phone number as XXX-XXX-XXXX
+ * for use inside tel: hrefs and visible call buttons. Reads from wp_options
+ * (set via backend or synced from hozio-config.php on deploy).
+ */
+function hozio_tel_shortcode_handler( $atts ) {
+    $atts = shortcode_atts( array( 'tag' => '' ), $atts, 'hozio_tel' );
+    $tag  = sanitize_text_field( $atts['tag'] );
+    if ( $tag === '' ) {
+        return '';
+    }
+
+    $option_keys = array(
+        'company-phone-1'  => 'hozio_company_phone_1',
+        'company-phone-2'  => 'hozio_company_phone_2',
+        'google-ads-phone' => 'hozio_google_ads_phone',
+        'sms-phone'        => 'hozio_sms_phone',
+    );
+    $value = isset( $option_keys[ $tag ] ) ? (string) get_option( $option_keys[ $tag ], '' ) : '';
+
+    $digits = preg_replace( '/[^0-9]/', '', $value );
+    if ( strlen( $digits ) === 10 ) {
+        return substr( $digits, 0, 3 ) . '-' . substr( $digits, 3, 3 ) . '-' . substr( $digits, 6 );
+    }
+    return $digits;
+}
+add_shortcode( 'hozio_tel', 'hozio_tel_shortcode_handler' );
+
+
+// ─── DTB front-end asset enqueues ───────────────────────────────────────
+// primitives.css ships with the engine (universal hz-* design tokens).
+// main.css, woocommerce.css, trustindex.css, main.js live in the per-client
+// content dir at wp-content/uploads/dtb-site/. Skipped silently if no
+// content has been deployed yet.
+
+if ( ! function_exists( 'hozio_dtb_page_uses_trustindex' ) ) {
+    function hozio_dtb_page_uses_trustindex() {
+        if ( ! function_exists( 'hozio_dtb_get_tags' ) ) {
+            return false;
+        }
+        $tags   = hozio_dtb_get_tags();
+        $button = isset( $tags['trustindex-button'] ) ? $tags['trustindex-button'] : '';
+        $slider = isset( $tags['trustindex-slider'] ) ? $tags['trustindex-slider'] : '';
+        if ( empty( $button ) && empty( $slider ) ) {
+            return false;
+        }
+        if ( ! is_singular() ) {
+            return false;
+        }
+        $post_id = get_queried_object_id();
+        if ( ! $post_id ) {
+            return false;
+        }
+        $haystacks = array();
+        $post = get_post( $post_id );
+        if ( $post && ! empty( $post->post_content ) ) {
+            $haystacks[] = $post->post_content;
+        }
+        $elementor_data = get_post_meta( $post_id, '_elementor_data', true );
+        if ( ! empty( $elementor_data ) ) {
+            $haystacks[] = is_string( $elementor_data ) ? $elementor_data : wp_json_encode( $elementor_data );
+        }
+        $signals = array(
+            '[hozio tag="trustindex-button"]', '[hozio tag="trustindex-slider"]',
+            "[hozio tag='trustindex-button']", "[hozio tag='trustindex-slider']",
+            'ti-widget',
+        );
+        foreach ( $haystacks as $hay ) {
+            foreach ( $signals as $signal ) {
+                if ( strpos( $hay, $signal ) !== false ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+}
+
+// Engine asset cache-buster (uses file mtime; falls back to plugin version).
+if ( ! function_exists( 'hozio_dtb_engine_asset_ver' ) ) {
+    function hozio_dtb_engine_asset_ver( $relative_path ) {
+        $abs = HOZIO_DTB_ENGINE_PATH . ltrim( $relative_path, '/' );
+        return file_exists( $abs ) ? (string) filemtime( $abs ) : HOZIO_VERSION;
+    }
+}
+
+// Priority 9: register Google Fonts (URL from hozio-config.php) before primitives.
+add_action( 'wp_enqueue_scripts', function () {
+    if ( ! function_exists( 'hozio_dtb_get_tag' ) ) {
+        return;
+    }
+    $fonts_url = (string) hozio_dtb_get_tag( 'google-fonts-url' );
+    if ( $fonts_url !== '' ) {
+        wp_enqueue_style( 'dtb-google-fonts', $fonts_url, array(), null );
+    }
+}, 9 );
+
+// Priority 999: load AFTER theme + Elementor so cascade wins.
+add_action( 'wp_enqueue_scripts', function () {
+    $deps = array();
+    if ( wp_style_is( 'dtb-google-fonts', 'enqueued' ) || wp_style_is( 'dtb-google-fonts', 'registered' ) ) {
+        $deps[] = 'dtb-google-fonts';
+    }
+    foreach ( array( 'elementor-frontend', 'hello-elementor', 'hello-elementor-theme-style', 'hello-elementor-header-footer', 'woocommerce-general' ) as $handle ) {
+        if ( wp_style_is( $handle, 'enqueued' ) || wp_style_is( $handle, 'registered' ) ) {
+            $deps[] = $handle;
+        }
+    }
+
+    // Engine primitives (always available, regardless of content deploy state)
+    if ( file_exists( HOZIO_DTB_ENGINE_PATH . 'assets/dtb/css/primitives.css' ) ) {
+        wp_enqueue_style(
+            'dtb-primitives',
+            HOZIO_DTB_ENGINE_URL . 'assets/dtb/css/primitives.css',
+            $deps,
+            hozio_dtb_engine_asset_ver( 'assets/dtb/css/primitives.css' )
+        );
+    }
+
+    // Per-client content (skipped silently if nothing deployed)
+    if ( ! function_exists( 'hozio_dtb_content_installed' ) || ! hozio_dtb_content_installed() ) {
+        return;
+    }
+    $content_path = hozio_dtb_content_path();
+    $content_url  = hozio_dtb_content_url();
+
+    if ( file_exists( $content_path . 'assets/css/main.css' ) ) {
+        wp_enqueue_style(
+            'dtb-main',
+            $content_url . 'assets/css/main.css',
+            array_merge( $deps, array( 'dtb-primitives' ) ),
+            hozio_dtb_content_asset_ver( 'assets/css/main.css' )
+        );
+    }
+
+    if ( function_exists( 'is_woocommerce' ) && ( is_woocommerce() || is_cart() || is_checkout() )
+        && file_exists( $content_path . 'assets/css/woocommerce.css' ) ) {
+        wp_enqueue_style(
+            'dtb-wc',
+            $content_url . 'assets/css/woocommerce.css',
+            array( 'dtb-main' ),
+            hozio_dtb_content_asset_ver( 'assets/css/woocommerce.css' )
+        );
+    }
+
+    if ( file_exists( $content_path . 'assets/css/trustindex.css' ) && hozio_dtb_page_uses_trustindex() ) {
+        wp_enqueue_style(
+            'dtb-trustindex',
+            $content_url . 'assets/css/trustindex.css',
+            array( 'dtb-main' ),
+            hozio_dtb_content_asset_ver( 'assets/css/trustindex.css' )
+        );
+    }
+
+    if ( file_exists( $content_path . 'assets/js/main.js' ) && filesize( $content_path . 'assets/js/main.js' ) > 0 ) {
+        wp_enqueue_script(
+            'dtb-main',
+            $content_url . 'assets/js/main.js',
+            array( 'jquery' ),
+            hozio_dtb_content_asset_ver( 'assets/js/main.js' ),
+            true
+        );
+    }
+}, 999 );
+
+// Register Elementor Theme Builder header/footer locations (overrides any theme).
+add_action( 'elementor/theme/register_locations', function ( $elementor_theme_manager ) {
+    $elementor_theme_manager->register_location( 'header', array( 'is_core' => true, 'overwrite' => true ) );
+    $elementor_theme_manager->register_location( 'footer', array( 'is_core' => true, 'overwrite' => true ) );
+} );
+
+// Enable shortcodes inside Elementor HTML widgets.
+add_filter( 'elementor/widget/render_content', function ( $content, $widget ) {
+    if ( 'html' === $widget->get_name() ) {
+        return do_shortcode( $content );
+    }
+    return $content;
+}, 10, 2 );
+
+// Enable shortcodes inside Gutenberg core/html blocks.
+add_filter( 'render_block', function ( $block_content, $block ) {
+    if ( isset( $block['blockName'] ) && $block['blockName'] === 'core/html' ) {
+        return do_shortcode( $block_content );
+    }
+    return $block_content;
+}, 10, 2 );
+
+// Enable shortcodes inside legacy text widgets.
+add_filter( 'widget_text', 'do_shortcode' );
 
 
 // Hide all third-party admin notices on Hozio plugin pages

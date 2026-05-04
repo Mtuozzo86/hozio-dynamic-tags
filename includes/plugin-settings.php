@@ -516,6 +516,11 @@ function hozio_plugin_settings_page() {
             <button type="button" class="hozio-tab-btn" data-target="hozio-tab-shortcodes">
                 <span class="dashicons dashicons-shortcode"></span> Shortcode Reference
             </button>
+            <?php if ( function_exists( 'hozio_dtb_user_can_see_site_connection' ) && hozio_dtb_user_can_see_site_connection() ): ?>
+            <button type="button" class="hozio-tab-btn" data-target="hozio-tab-connection">
+                <span class="dashicons dashicons-admin-network"></span> Site Connection
+            </button>
+            <?php endif; ?>
         </div>
 
         <div id="hozio-tab-settings" class="hozio-tab-panel">
@@ -1239,6 +1244,16 @@ function hozio_plugin_settings_page() {
             </div><!-- /#hozio-sc-generic -->
 
         </div><!-- /#hozio-tab-shortcodes -->
+
+        <?php if ( function_exists( 'hozio_dtb_user_can_see_site_connection' ) && hozio_dtb_user_can_see_site_connection() ): ?>
+        <div id="hozio-tab-connection" class="hozio-tab-panel" style="display:none;">
+            <?php if ( function_exists( 'hozio_dtb_render_connection_tab' ) ) {
+                hozio_dtb_render_connection_tab();
+            } else {
+                echo '<p style="color:#991b1b;">Site Connection module is not loaded. Make sure includes/dtb/site-connection.php exists.</p>';
+            } ?>
+        </div><!-- /#hozio-tab-connection -->
+        <?php endif; ?>
 
     </div><!-- /.wrap -->
 

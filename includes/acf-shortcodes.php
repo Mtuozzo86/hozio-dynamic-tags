@@ -236,30 +236,40 @@ $hozio_acf_text_handler = function($atts) {
     if (is_array($value)) return '';
     return $value ? wp_kses_post((string) $value) : '';
 };
-add_shortcode('acf',      $hozio_acf_text_handler);
-add_shortcode('acf_text', $hozio_acf_text_handler);
+// [acf] is a legacy alias not provided by DTB; always register.
+add_shortcode('acf', $hozio_acf_text_handler);
 
-add_shortcode('acf_img', function($atts) {
-    if (!function_exists('get_field')) return '';
-    $atts = shortcode_atts(['field' => '', 'alt' => ''], $atts);
-    if (empty($atts['field'])) return '';
-    $img = get_field($atts['field']);
-    if (empty($img)) return '';
-    // ACF image fields can return an array (return format: array) or a URL string
-    if (is_array($img)) {
-        $url = $img['url'] ?? '';
-        $alt = !empty($atts['alt']) ? $atts['alt'] : ($img['alt'] ?? '');
-    } else {
-        $url = (string) $img;
-        $alt = $atts['alt'];
-    }
-    if (empty($url)) return '';
-    return '<img src="' . esc_url($url) . '" alt="' . esc_attr($alt) . '" loading="lazy">';
-});
+// [acf_text], [acf_img], [acf_raw] are provided by DTB with post_id/slug
+// support. Only fall back to these simpler handlers if DTB hasn't loaded.
+if (!shortcode_exists('acf_text')) {
+    add_shortcode('acf_text', $hozio_acf_text_handler);
+}
 
-add_shortcode('acf_raw', function($atts) {
-    if (!function_exists('get_field')) return '';
-    $atts = shortcode_atts(['field' => ''], $atts);
-    if (empty($atts['field'])) return '';
-    return (string) get_field($atts['field']);
-});
+if (!shortcode_exists('acf_img')) {
+    add_shortcode('acf_img', function($atts) {
+        if (!function_exists('get_field')) return '';
+        $atts = shortcode_atts(['field' => '', 'alt' => ''], $atts);
+        if (empty($atts['field'])) return '';
+        $img = get_field($atts['field']);
+        if (empty($img)) return '';
+        // ACF image fields can return an array (return format: array) or a URL string
+        if (is_array($img)) {
+            $url = $img['url'] ?? '';
+            $alt = !empty($atts['alt']) ? $atts['alt'] : ($img['alt'] ?? '');
+        } else {
+            $url = (string) $img;
+            $alt = $atts['alt'];
+        }
+        if (empty($url)) return '';
+        return '<img src="' . esc_url($url) . '" alt="' . esc_attr($alt) . '" loading="lazy">';
+    });
+}
+
+if (!shortcode_exists('acf_raw')) {
+    add_shortcode('acf_raw', function($atts) {
+        if (!function_exists('get_field')) return '';
+        $atts = shortcode_atts(['field' => ''], $atts);
+        if (empty($atts['field'])) return '';
+        return (string) get_field($atts['field']);
+    });
+}

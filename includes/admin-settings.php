@@ -496,8 +496,9 @@ function hozio_dynamic_tags_inline_styles() {
 
         @media (max-width: 782px) {
             .hozio-grid,
-            .hozio-grid-3 {
-                grid-template-columns: 1fr;
+            .hozio-grid-3,
+            .hozio-address-grid {
+                grid-template-columns: 1fr !important;
             }
             .hozio-header {
                 padding: 30px 20px;
@@ -508,6 +509,11 @@ function hozio_dynamic_tags_inline_styles() {
             .hozio-color-field {
                 flex-direction: column;
                 gap: 12px;
+            }
+        }
+        @media (max-width: 1100px) and (min-width: 783px) {
+            .hozio-address-grid {
+                grid-template-columns: 1fr 1fr !important;
             }
         }
     </style>
@@ -523,6 +529,10 @@ function hozio_dynamic_tags_register_settings() {
         'hozio_sms_phone',
         'hozio_company_email',
         'hozio_company_address',
+        'hozio_address_street',
+        'hozio_address_city',
+        'hozio_address_state',
+        'hozio_address_zip',
         'hozio_business_hours',
         'hozio_yelp_url',
         'hozio_youtube_url',
@@ -796,21 +806,58 @@ function hozio_dynamic_tags_settings_page() {
                         <span class="dashicons dashicons-building"></span>
                         <h2>Business Details</h2>
                     </div>
-                    <div class="hozio-grid">
-                        <?php
-                        $business_fields = [
-                            'hozio_company_address' => 'Company Address',
-                            'hozio_business_hours' => 'Business Hours',
-                            'hozio_start_year' => 'Start Year',
-                            'hozio_nav_text_color' => 'Navigation Text Color',
-                        ];
-                        
-                        foreach ($business_fields as $key => $label) {
-                            echo '<div class="hozio-field"><label>' . esc_html($label) . '</label>';
-                            hozio_dynamic_tags_render_input(['label_for' => $key]);
-                            echo '</div>';
-                        }
-                        ?>
+
+                    <!-- Structured address row: Street(2fr) City(1.5fr) State(0.7fr) ZIP(0.7fr) -->
+                    <div style="display:grid;grid-template-columns:2fr 1.5fr 0.7fr 0.7fr;gap:16px;margin-bottom:16px;" class="hozio-address-grid">
+                        <div class="hozio-field">
+                            <label>Street Address</label>
+                            <div class="hozio-input-group">
+                                <span class="hozio-input-icon"><span class="dashicons dashicons-location"></span></span>
+                                <input type="text" name="hozio_address_street" value="<?php echo esc_attr( get_option('hozio_address_street','') ); ?>" class="hozio-input" placeholder="123 Main St">
+                            </div>
+                        </div>
+                        <div class="hozio-field">
+                            <label>City</label>
+                            <input type="text" name="hozio_address_city" value="<?php echo esc_attr( get_option('hozio_address_city','') ); ?>" class="hozio-input" placeholder="New York">
+                        </div>
+                        <div class="hozio-field">
+                            <label>State</label>
+                            <input type="text" name="hozio_address_state" value="<?php echo esc_attr( get_option('hozio_address_state','') ); ?>" class="hozio-input" placeholder="NY" maxlength="2">
+                        </div>
+                        <div class="hozio-field">
+                            <label>ZIP Code</label>
+                            <input type="text" name="hozio_address_zip" value="<?php echo esc_attr( get_option('hozio_address_zip','') ); ?>" class="hozio-input" placeholder="10001">
+                        </div>
+                    </div>
+
+                    <!-- Company Address textarea (auto-built from above; editable for legacy/override) -->
+                    <div class="hozio-field" style="margin-bottom:24px;">
+                        <label>Company Address
+                            <span style="font-weight:400;color:#6b7280;font-size:12px;margin-left:6px;">— auto-built from fields above when filled; edit directly to customize</span>
+                        </label>
+                        <textarea name="hozio_company_address" class="hozio-textarea" rows="3" placeholder="Full address HTML (e.g. 123 Main St&lt;br&gt;New York, NY 10001)"><?php echo esc_textarea( get_option('hozio_company_address','') ); ?></textarea>
+                        <p class="hozio-field-description">HTML tags allowed. Used by <code>[hozio tag="company-address"]</code>.</p>
+                        <button type="button" class="hozio-copy-shortcode" data-shortcode="[hozio tag=&quot;company-address&quot;]" title="Copy shortcode">
+                            <code>company-address</code>
+                            <svg class="hozio-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M11 2H5.5A1.5 1.5 0 004 3.5v9A1.5 1.5 0 005.5 14h5a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0011 2z"/><path d="M4.5 0A1.5 1.5 0 003 1.5V11a.5.5 0 001 0V1.5a.5.5 0 01.5-.5H9a.5.5 0 000-1H4.5z"/></svg>
+                            <svg class="hozio-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+                        </button>
+                    </div>
+
+                    <!-- Business Hours + Start Year + Nav Color in a tidy 3-col grid -->
+                    <div class="hozio-grid" style="grid-template-columns:1.5fr 1fr 1fr;">
+                        <div class="hozio-field">
+                            <label>Business Hours</label>
+                            <?php hozio_dynamic_tags_render_input(['label_for' => 'hozio_business_hours']); ?>
+                        </div>
+                        <div class="hozio-field">
+                            <label>Start Year</label>
+                            <?php hozio_dynamic_tags_render_input(['label_for' => 'hozio_start_year']); ?>
+                        </div>
+                        <div class="hozio-field">
+                            <label>Navigation Text Color</label>
+                            <?php hozio_dynamic_tags_render_input(['label_for' => 'hozio_nav_text_color']); ?>
+                        </div>
                     </div>
                 </div>
 
@@ -944,13 +991,36 @@ function hozio_dynamic_tags_save_settings() {
         wp_die('Nonce verification failed');
     }
 
+    // Save structured address fields
+    $street = isset( $_POST['hozio_address_street'] ) ? sanitize_text_field( $_POST['hozio_address_street'] ) : '';
+    $city   = isset( $_POST['hozio_address_city'] )   ? sanitize_text_field( $_POST['hozio_address_city'] )   : '';
+    $state  = isset( $_POST['hozio_address_state'] )  ? sanitize_text_field( $_POST['hozio_address_state'] )  : '';
+    $zip    = isset( $_POST['hozio_address_zip'] )    ? sanitize_text_field( $_POST['hozio_address_zip'] )    : '';
+    update_option( 'hozio_address_street', $street );
+    update_option( 'hozio_address_city',   $city );
+    update_option( 'hozio_address_state',  $state );
+    update_option( 'hozio_address_zip',    $zip );
+
+    // Auto-build company_address from structured fields when any are filled.
+    // If all structured fields are empty, save the textarea value directly
+    // so existing sites that only have hozio_company_address set are unaffected.
+    if ( $street || $city || $state || $zip ) {
+        $built = $street;
+        if ( $city || $state || $zip ) {
+            $line2 = trim( $city . ( $state ? ', ' . $state : '' ) . ( $zip ? ' ' . $zip : '' ) );
+            $built .= ( $built ? '<br>' : '' ) . $line2;
+        }
+        update_option( 'hozio_company_address', $built );
+    } elseif ( isset( $_POST['hozio_company_address'] ) ) {
+        update_option( 'hozio_company_address', wp_kses_post( wp_unslash( $_POST['hozio_company_address'] ) ) );
+    }
+
     $fields = [
         'hozio_company_phone_1',
         'hozio_company_phone_2',
         'hozio_google_ads_phone',
         'hozio_sms_phone',
         'hozio_company_email',
-        'hozio_company_address',
         'hozio_business_hours',
         'hozio_yelp_url',
         'hozio_youtube_url',
@@ -970,7 +1040,7 @@ function hozio_dynamic_tags_save_settings() {
 
     foreach ($fields as $field) {
         if (isset($_POST[$field])) {
-            if ($field === 'hozio_company_address' || $field === 'hozio_business_hours') {
+            if ($field === 'hozio_business_hours') {
                 update_option($field, wp_kses_post($_POST[$field]));
             } else {
                 update_option($field, sanitize_text_field($_POST[$field]));

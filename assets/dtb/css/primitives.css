@@ -1,0 +1,1228 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   HOZIO PRIMITIVE LAYER — class-scoped only
+
+   Every rule below is scoped to a .hz-* class. Nothing targets raw
+   element selectors (h1-h6, a, p, input, etc). Nothing targets
+   third-party markup (.elementor-*, .gform_*). This file activates only
+   when a template explicitly uses a .hz-* class — the Global Kit
+   preview page or any new template you build on the Hozio vocabulary.
+
+   Existing client templates using .tga-* or .bs-* classes are UNAFFECTED
+   because this stylesheet does not touch their selectors.
+
+   Elementor override shields (!important) are used only where Elementor
+   Kit CSS reliably overrides us on the .hz-* surface.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Utility color tokens (additive; warning + info not in main.css) ─── */
+:root {
+    --color-warning:        #D97706;
+    --color-warning-bg:     #FFFBEB;
+    --color-info:           #2563EB;
+    --color-info-bg:        #EFF6FF;
+    --color-warm-highlight: #FFF8E5;
+}
+
+/* ─── Elementor compatibility shields ──────────────────────────────────
+   Elementor wraps every HTML widget in 5+ nested containers (section >
+   container > column > widget-wrap > widget > widget-container) each
+   with default padding, margin, and max-width values. DTB templates
+   control their own spacing via .hz-section + .hz-container and must
+   neutralize Elementor's defaults to avoid double-padding, capped widths,
+   and other layout drift. See quality-rules.md §1.1.
+   ──────────────────────────────────────────────────────────────────── */
+.elementor-widget-wrap.elementor-element-populated { padding: 0 !important; }
+.elementor-widget-html { margin-bottom: 0 !important; }
+.elementor-widget-html > .elementor-widget-container { padding: 0 !important; }
+.elementor-section.elementor-section-full_width { padding: 0 !important; }
+.elementor-section-full_width > .elementor-container { max-width: 100% !important; }
+.e-con { --container-max-width: 100% !important; padding: 0 !important; }
+.e-con-full { max-width: 100% !important; }
+
+/* ─── Container ─────────────────────────────────────────────────────── */
+/* Uses --hz-container-max-width (namespaced) to avoid the
+   --container-max-width name collision with Elementor's Kit CSS, which
+   sets a 1140px value on every .elementor-kit-* body and would otherwise
+   override our value via cascade specificity. */
+.hz-container {
+    max-width: var(--hz-container-max-width);
+    margin: 0 auto;
+    padding: 0 var(--container-padding-mobile);
+}
+@media (min-width: 768px) {
+    .hz-container { padding: 0 var(--container-padding-tablet); }
+}
+@media (min-width: 1250px) {
+    .hz-container { padding: 0 var(--container-padding-desktop); }
+}
+
+/* ─── Typography ────────────────────────────────────────────────────── */
+.hz-display {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: clamp(2rem, 3.75vw, 3.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.015em;
+    color: var(--text-heading);
+    margin: 0 0 var(--space-lg);
+}
+.hz-subtitle {
+    font-family: var(--font-body);
+    font-size: 1.25rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-xl);
+}
+.hz-lead {
+    font-size: 1.25rem;
+    line-height: 1.5;
+    color: var(--text-body);
+    margin: 0 0 var(--space-lg);
+}
+.hz-small {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-md);
+}
+.hz-eyebrow {
+    display: inline-block;
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--accent-text);
+    margin: 0 0 var(--space-md);
+}
+/* SEO pattern: eyebrows ARE the heading tags (h1-h6) for keyword placement.
+   The class must fully override heading element defaults AND Elementor Kit
+   heading styles. !important on every property Elementor Kit sets on headings
+   (font-family, font-size, font-weight, color, line-height, text-transform,
+   letter-spacing, margin). See quality-rules.md §6.2. */
+h1.hz-eyebrow, h2.hz-eyebrow, h3.hz-eyebrow,
+h4.hz-eyebrow, h5.hz-eyebrow, h6.hz-eyebrow {
+    display: inline-block !important;
+    font-family: var(--font-body) !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.7px !important;
+    color: var(--accent-text) !important;
+    margin: 0 0 var(--space-md) !important;
+}
+.hz-meta {
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+.hz-caption {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-muted);
+    font-style: italic;
+    line-height: 1.5;
+    margin: var(--space-sm) 0 0;
+}
+
+/* ─── Dark section (class-scoped; only activates via .hz-section--dark) ── */
+.hz-section--dark { background: var(--bg-dark-section); color: #fff; }
+.hz-section--dark h1, .hz-section--dark h2, .hz-section--dark h3, .hz-section--dark h4, .hz-section--dark h5, .hz-section--dark h6 { color: #fff; }
+.hz-section--dark p { color: rgba(255,255,255,0.85); }
+.hz-section--dark a { color: #fff; }
+.hz-section--dark .hz-eyebrow,
+.hz-section--dark h1.hz-eyebrow,
+.hz-section--dark h2.hz-eyebrow,
+.hz-section--dark h3.hz-eyebrow,
+.hz-section--dark h4.hz-eyebrow { color: var(--accent) !important; }
+
+/* ─── Navigation link ───────────────────────────────────────────────── */
+.hz-nav-link {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--nav-link);
+    text-decoration: none;
+    transition: color 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.hz-nav-link:hover { color: var(--nav-link-hover); }
+
+/* ─── Breadcrumb ────────────────────────────────────────────────────── */
+.hz-breadcrumb {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.hz-breadcrumb a {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.15s;
+}
+.hz-breadcrumb a:hover { color: var(--brand); }
+.hz-breadcrumb__sep { color: var(--border); margin: 0 2px; }
+.hz-breadcrumb [aria-current="page"] { color: var(--text-body); font-weight: 500; }
+
+/* ─── Stats ─────────────────────────────────────────────────────────── */
+.hz-stat-number {
+    font-family: var(--font-number);
+    font-size: clamp(2.25rem, 4vw, 3rem);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--brand);
+    letter-spacing: -0.01em;
+    margin: 0 0 var(--space-sm);
+}
+.hz-stat-label {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    line-height: 1.4;
+}
+
+/* ─── Footer typography (for dark footer contexts) ──────────────────── */
+.hz-footer-heading {
+    display: block;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #fff;
+    margin: 0 0 var(--space-lg);
+}
+.hz-footer-link {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.8) !important;
+    text-decoration: none !important;
+    line-height: 1.5;
+    padding: 8px 0;
+    transition: color 0.15s;
+    display: block;
+    width: fit-content;  /* stack vertically, but only clickable on the text itself */
+}
+.hz-footer-link:hover { color: #fff !important; }
+.hz-footer-legal {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: rgba(255,255,255,0.65);
+    line-height: 1.6;
+}
+
+/* NAP (Name, Address, Phone) block — for the footer contact column and any
+   other spot that needs a formatted business-info listing. Each row has a
+   small accent-colored icon on the left and text/link on the right. */
+.hz-footer-nap {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+}
+.hz-footer-nap__name {
+    font-family: var(--font-body);
+    font-weight: 700;
+    color: #fff;
+    font-size: 15px;
+    margin: 0 0 4px;
+}
+.hz-footer-nap__row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.85);
+    margin: 0;
+}
+.hz-footer-nap__icon {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    color: var(--accent);
+    margin-top: 3px;
+}
+.hz-footer-nap__row a,
+.hz-footer-nap__row a:visited {
+    color: inherit;
+    text-decoration: none;
+    transition: color 0.15s;
+}
+.hz-footer-nap__row a:hover,
+.hz-footer-nap__row a:visited:hover { color: #fff; }
+
+/* Light footer variant — when the footer sits on a light background. */
+.hz-site-footer--light { background: var(--bg-alt); color: var(--text-body); }
+.hz-site-footer--light .hz-footer-heading { color: var(--text-heading); }
+.hz-site-footer--light .hz-footer-link { color: var(--footer-link) !important; }
+.hz-site-footer--light .hz-footer-link:hover { color: var(--footer-link-hover) !important; }
+.hz-site-footer--light .hz-footer-legal { color: var(--text-muted); }
+.hz-site-footer--light a { color: var(--text-body) !important; }
+
+/* ─── Buttons ────────────────────────────────────────────────────────
+   !important only on properties Elementor Kit CSS reliably overrides. */
+.hz-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 32px !important;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none !important;
+    border-radius: var(--radius-pill) !important;
+    border: 1px solid transparent !important;
+    cursor: pointer;
+    transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-base), transform 0.1s;
+    min-height: 48px;
+    line-height: 1;
+    white-space: nowrap;
+    background: var(--accent) !important;
+    color: var(--text-on-accent) !important;
+}
+.hz-btn:hover, .hz-btn.is-hover {
+    background: var(--accent-hover-on-light) !important;
+    color: var(--text-on-accent) !important;
+}
+.hz-btn:focus, .hz-btn.is-focus {
+    outline: 3px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+.hz-btn.is-active, .hz-btn:active { transform: translateY(1px); }
+.hz-btn.is-disabled, .hz-btn[disabled], .hz-btn[aria-disabled="true"] {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.hz-btn--primary {
+    background: var(--accent) !important;
+    color: var(--text-on-accent) !important;
+    border-color: var(--accent) !important;
+}
+.hz-btn--primary:hover {
+    background: var(--accent-hover-on-light) !important;
+    border-color: var(--accent-hover-on-light) !important;
+    color: var(--text-on-accent) !important;
+}
+.hz-btn--secondary {
+    background: var(--brand) !important;
+    color: var(--text-on-brand) !important;
+    border-color: var(--brand) !important;
+}
+.hz-btn--secondary:hover {
+    background: var(--brand-hover-on-light) !important;
+    border-color: var(--brand-hover-on-light) !important;
+    color: var(--text-on-brand) !important;
+}
+.hz-btn--outline {
+    background: transparent !important;
+    color: var(--brand) !important;
+    border-color: var(--brand) !important;
+}
+.hz-btn--outline:hover {
+    background: var(--brand) !important;
+    color: var(--text-on-brand) !important;
+    border-color: var(--brand) !important;
+}
+.hz-btn--ghost {
+    background: transparent !important;
+    color: var(--brand) !important;
+    border-color: transparent !important;
+}
+.hz-btn--ghost:hover {
+    background: var(--brand-pale) !important;
+    color: var(--brand) !important;
+}
+.hz-btn--danger {
+    background: var(--error) !important;
+    color: #fff !important;
+    border-color: var(--error) !important;
+}
+.hz-btn--danger:hover {
+    background: #B91C1C !important;
+    border-color: #B91C1C !important;
+    color: #fff !important;
+}
+
+.hz-btn--sm { padding: 10px 22px !important; font-size: 0.875rem; min-height: 36px; }
+.hz-btn--lg { padding: 16px 40px !important; font-size: 1.125rem; min-height: 52px; }
+
+/* Mobile: buttons go full-width by default for easier tapping + stacked
+   layout. Opt out with .hz-btn--inline when a button needs to stay
+   intrinsic width on mobile (icon buttons, side-by-side pairs, etc.). */
+@media (max-width: 767px) {
+    .hz-btn:not(.hz-btn--inline) { width: 100%; }
+}
+
+/* Dark-section button overrides.
+   On brand-colored dark sections, the SECONDARY button (now blue) would
+   disappear since it shares the section's color. Flip it to a white button
+   with brand text for clear visibility. Primary (green) stays green — it
+   has plenty of contrast against blue — and its hover gets the lighter
+   on-dark variant for extra feedback. */
+.hz-btn--on-dark.hz-btn--primary:hover {
+    background: var(--accent-hover-on-dark) !important;
+    border-color: var(--accent-hover-on-dark) !important;
+    color: var(--text-on-accent) !important;
+}
+.hz-btn--on-dark.hz-btn--secondary {
+    background: #fff !important;
+    color: var(--brand) !important;
+    border-color: #fff !important;
+}
+.hz-btn--on-dark.hz-btn--secondary:hover {
+    background: #F3F4F6 !important;
+    border-color: #F3F4F6 !important;
+    color: var(--brand-hover-on-light) !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+.hz-btn--on-dark.hz-btn--outline {
+    color: #fff !important;
+    border-color: #fff !important;
+    background: transparent !important;
+}
+.hz-btn--on-dark.hz-btn--outline:hover {
+    background: #fff !important;
+    color: var(--brand) !important;
+}
+.hz-btn--on-dark.hz-btn--ghost { color: #fff !important; }
+.hz-btn--on-dark.hz-btn--ghost:hover {
+    background: rgba(255,255,255,0.1) !important;
+    color: #fff !important;
+}
+
+/* ─── Cards ─────────────────────────────────────────────────────────── */
+.hz-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    transition: box-shadow var(--transition-base), transform var(--transition-base);
+}
+.hz-card:hover { box-shadow: var(--shadow-md); }
+/* Badges, icons, and other inline-sized elements inside cards shouldn't
+   stretch to full width (default flex behavior). */
+.hz-card > .hz-badge,
+.hz-card > .hz-card__icon { align-self: flex-start; }
+.hz-card__icon {
+    width: 56px;
+    height: 56px;
+    background: var(--brand-pale);
+    border-radius: var(--radius-input);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--brand);
+    font-size: 28px;
+    line-height: 1;
+    margin-bottom: var(--space-sm);
+}
+.hz-card__title {
+    font-family: var(--font-heading);
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    margin: 0;
+    letter-spacing: 0.015em;
+}
+.hz-card__text {
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.6;
+}
+.hz-card__link {
+    color: var(--accent-text) !important;
+    font-weight: 600;
+    text-decoration: none !important;
+    align-self: flex-start;  /* inline — don't stretch to full card width */
+    margin-top: auto;
+    padding-top: var(--space-sm);
+    transition: color 0.15s;
+}
+.hz-card__link:hover { color: color-mix(in srgb, var(--accent-text) 70%, black) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SITE HEADER · NAV · DROPDOWN · HAMBURGER · MOBILE MENU
+   Structure ported from the TGA production header. Uses hz-* classes
+   throughout. Breakpoints: hamburger below 1250px, horizontal nav above.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.hz-site-header {
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.hz-site-header__inner {
+    display: flex;
+    align-items: center;
+    min-height: 64px;
+    gap: 16px;
+}
+@media (min-width: 1250px) {
+    .hz-site-header__inner { min-height: 70px; }
+}
+
+/* ─── Logo ─────────────────────────────────────────────────────────── */
+.hz-site-logo {
+    flex-shrink: 1;
+    min-width: 0;
+    font-family: var(--font-heading);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--brand);
+    text-decoration: none !important;
+    display: inline-flex;
+    align-items: center;
+}
+.hz-site-logo img { height: 40px; width: auto; max-width: 260px; display: block; }
+@media (min-width: 1250px) {
+    .hz-site-logo img { height: 46px; max-width: 300px; }
+}
+
+/* ─── Desktop nav menu (UL/LI structure) ────────────────────────── */
+.hz-site-nav {
+    display: none;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    align-items: center;
+    gap: 0;
+    flex: 1;
+    justify-content: center;
+}
+@media (min-width: 1250px) { .hz-site-nav { display: flex; } }
+
+.hz-nav-item { position: relative; }
+
+.hz-site-nav__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 22px 13px;
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--nav-link) !important;
+    text-decoration: none !important;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 200ms ease;
+}
+/* Non-clickable dropdown parents: <span> triggers have no href, so no pointer cursor */
+span.hz-site-nav__link { cursor: default; }
+
+.hz-site-nav__link:hover,
+.hz-nav-item:hover > .hz-site-nav__link,
+.hz-nav-item.is-open > .hz-site-nav__link { color: var(--nav-link-hover) !important; }
+
+.hz-nav-chevron {
+    flex-shrink: 0;
+    opacity: 0.45;
+    transition: transform 200ms ease, opacity 200ms ease;
+}
+.hz-nav-item:hover > .hz-site-nav__link .hz-nav-chevron,
+.hz-nav-item.is-open > .hz-site-nav__link .hz-nav-chevron {
+    transform: rotate(180deg);
+    opacity: 0.8;
+}
+
+/* ─── Dropdown (mega menu) ─────────────────────────────────────────
+   Centered under the parent nav item. Fades + slides in on hover/open.
+   Uses opacity+visibility+transform so it animates cleanly both ways. */
+.hz-mega-menu {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    min-width: 220px;
+    background: #fff;
+    border-top: 2px solid var(--accent);
+    border-radius: 0 0 var(--radius-input) var(--radius-input);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.04);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    overflow: hidden; /* clip link hover backgrounds to the rounded corners */
+    transition: opacity 200ms ease, transform 200ms ease, visibility 200ms;
+}
+.hz-nav-item:hover > .hz-mega-menu,
+.hz-nav-item.is-open > .hz-mega-menu {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+}
+
+.hz-mega-menu__list { list-style: none; margin: 0; padding: 0; }
+.hz-mega-menu__link {
+    display: block;
+    padding: 14px 24px;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--nav-link) !important;
+    text-decoration: none !important;
+    white-space: nowrap;
+    transition: color 200ms ease, background-color 200ms ease;
+}
+.hz-mega-menu__link:hover {
+    color: var(--nav-link-hover) !important;
+    background: var(--bg-alt);
+}
+
+/* ─── Desktop CTAs (right side) ─────────────────────────────────── */
+.hz-site-nav__ctas {
+    display: none;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+@media (min-width: 1250px) { .hz-site-nav__ctas { display: flex; } }
+
+/* ─── Hamburger trigger (below 1250px) ─────────────────────────── */
+.hz-mobile-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    margin-left: auto;
+    /* Visual right-edge alignment: the SVG has ~10px of internal whitespace
+       padding to its icon, so the icon appears inset from the button's right
+       edge. Pull the button -10px right so the icon's visible edge aligns
+       with the container's right edge (matching the logo's left alignment). */
+    margin-right: -10px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    color: var(--text-heading);
+    flex-shrink: 0;
+}
+@media (min-width: 1250px) { .hz-mobile-trigger { display: none; } }
+
+/* ─── Mobile menu overlay (backdrop) ──────────────────────────── */
+.hz-mobile-menu {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: var(--z-overlay);
+    opacity: 0;
+    visibility: hidden;
+    overflow: hidden; /* clip the translateX'd panel so it can't cause horizontal scroll */
+    transition: opacity 300ms ease, visibility 300ms;
+}
+.hz-mobile-menu.is-open { opacity: 1; visibility: visible; }
+
+/* Mobile menu panel (slides from the right) */
+.hz-mobile-menu__panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 360px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.hz-mobile-menu.is-open .hz-mobile-menu__panel { transform: translateX(0); }
+
+/* Sidebar header: logo + close */
+.hz-mobile-menu__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    min-height: 60px;
+}
+.hz-mobile-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    color: var(--text-body);
+    flex-shrink: 0;
+}
+
+/* Sidebar nav */
+.hz-mobile-nav {
+    flex: 1;
+    padding: 4px 0;
+    overflow-y: auto;
+}
+
+/* Base mobile menu link — context wrappers (.hz-mobile-simple, .hz-mobile-panel)
+   layer padding + background on top; this rule guarantees color + no underline
+   even when the class is used standalone. */
+.hz-mobile-menu__link,
+.hz-mobile-menu__link:visited {
+    color: var(--text-body);
+    text-decoration: none;
+    display: block;
+}
+.hz-mobile-menu__link:hover,
+.hz-mobile-menu__link:visited:hover { color: var(--nav-link-hover); }
+
+/* Simple (non-accordion) row — a single link */
+.hz-mobile-simple { border-bottom: 1px solid var(--border); }
+.hz-mobile-simple > .hz-mobile-menu__link {
+    display: block;
+    padding: 16px 24px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text-body) !important;
+    text-decoration: none !important;
+    transition: color 200ms ease;
+}
+.hz-mobile-simple > .hz-mobile-menu__link:hover { color: var(--nav-link-hover) !important; }
+
+/* Accordion row (nav item with sub-items) */
+.hz-mobile-accordion { border-bottom: 1px solid var(--border); }
+.hz-mobile-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 16px 24px;
+    border: 0;
+    background: transparent;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text-body);
+    cursor: pointer;
+    text-align: left;
+}
+.hz-mobile-accordion.is-expanded > .hz-mobile-toggle { color: var(--nav-link-hover); }
+
+.hz-mobile-chevron {
+    flex-shrink: 0;
+    display: block;
+    opacity: 0.4;
+    margin-left: 12px;
+    transition: transform 300ms ease, opacity 200ms ease;
+}
+.hz-mobile-accordion.is-expanded > .hz-mobile-toggle > .hz-mobile-chevron {
+    transform: rotate(180deg);
+    opacity: 0.7;
+}
+
+/* Accordion collapsible panel */
+.hz-mobile-panel {
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: max-height 300ms ease;
+}
+.hz-mobile-accordion.is-expanded > .hz-mobile-panel { max-height: 600px; }
+
+.hz-mobile-panel > .hz-mobile-menu__link {
+    display: block;
+    padding: 12px 24px 12px 32px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-body) !important;
+    text-decoration: none !important;
+    border-bottom: 1px solid var(--border);
+    transition: color 200ms ease, background 200ms ease;
+}
+.hz-mobile-panel > .hz-mobile-menu__link:last-child { border-bottom: 0; }
+.hz-mobile-panel > .hz-mobile-menu__link:hover {
+    color: var(--nav-link-hover) !important;
+    background: var(--bg-alt);
+}
+
+/* Sidebar footer (contact info) */
+.hz-mobile-menu__footer {
+    padding: 24px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-alt);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.hz-mobile-menu__contact {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-body) !important;
+    text-decoration: none !important;
+    transition: color 200ms ease;
+}
+.hz-mobile-menu__contact:hover { color: var(--nav-link-hover) !important; }
+.hz-mobile-menu__contact svg { color: var(--accent); flex-shrink: 0; }
+
+/* Prevent body scroll when menu is open */
+body.hz-menu-open { overflow: hidden; }
+
+.hz-utility-bar {
+    background: var(--brand);
+    color: #fff;
+    font-size: 13px;
+    padding: 7px 0;
+}
+.hz-utility-bar__inner {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end; /* desktop/tablet: right-aligned */
+    gap: 12px;
+}
+.hz-utility-bar__links {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.hz-utility-bar__divider { color: rgba(255,255,255,0.3); user-select: none; }
+
+.hz-utility-bar a,
+.hz-utility-bar a:visited {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--utility-link) !important;
+    text-decoration: none !important;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: color 200ms ease;
+}
+.hz-utility-bar a:hover,
+.hz-utility-bar a:visited:hover { color: var(--utility-link-hover) !important; }
+.hz-utility-bar a svg { flex-shrink: 0; }
+
+/* Mobile: center the links (no hours on mobile) */
+@media (max-width: 767px) {
+    .hz-utility-bar__inner { justify-content: center; }
+}
+
+/* Light utility bar variant — pale background with dark text/links.
+   CSS custom properties are scoped to this selector, so --utility-link
+   and --utility-link-hover resolve to the lighter-context values for
+   everything inside. Apply via: <div class="hz-utility-bar hz-utility-bar--light"> */
+.hz-utility-bar--light {
+    background: var(--bg-alt);
+    color: var(--text-body);
+    border-bottom: 1px solid var(--border);
+    --utility-link: var(--text-muted);
+    --utility-link-hover: var(--brand);
+}
+
+.hz-mega-menu__close:hover { color: var(--brand); }
+
+/* ─── Site footer chrome ────────────────────────────────────────────── */
+.hz-site-footer { color: #fff; }
+.hz-site-footer a { color: rgba(255,255,255,0.85); text-decoration: none; }
+.hz-site-footer a:hover { color: #fff; }
+
+/* Footer column grid — single column on mobile, 4-column on tablet+.
+   Brand column (first) takes 2× the width of the other columns on desktop. */
+.hz-site-footer__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
+}
+@media (min-width: 768px) {
+    .hz-site-footer__grid {
+        grid-template-columns: 2fr 1fr 1fr 1fr;
+        gap: 40px;
+    }
+}
+
+/* Footer legal bar — stacks on mobile, spreads on tablet+ */
+.hz-site-footer__legal {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+}
+@media (min-width: 768px) {
+    .hz-site-footer__legal {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+    }
+}
+
+/* ─── Alerts ────────────────────────────────────────────────────────── */
+.hz-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--space-md) var(--space-lg);
+    border-left: 4px solid;
+    border-radius: 4px;
+    font-size: 15px;
+    line-height: 1.5;
+}
+.hz-alert > svg { flex-shrink: 0; }
+.hz-alert--info    { background: var(--color-info-bg);    border-color: var(--color-info);    color: var(--color-info); }
+.hz-alert--success { background: var(--success-bg);       border-color: var(--success);       color: #166534; }
+.hz-alert--warning { background: var(--color-warning-bg); border-color: var(--color-warning); color: #92400E; }
+.hz-alert--error   { background: var(--error-bg);         border-color: var(--error);         color: #991B1B; }
+
+/* ─── Badges ─────────────────────────────────────────────────────── */
+.hz-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background: var(--bg-alt);
+    color: var(--text-body);
+}
+.hz-badge--primary   { background: var(--brand); color: var(--text-on-brand); }
+.hz-badge--secondary { background: var(--accent); color: var(--text-on-accent); }
+.hz-badge--success   { background: var(--success); color: #fff; }
+.hz-badge--warning   { background: var(--color-warning); color: #fff; }
+.hz-badge--error     { background: var(--error); color: #fff; }
+.hz-badge--info      { background: var(--color-info); color: #fff; }
+.hz-badge--outline   { background: transparent; color: var(--brand); border: 1px solid var(--brand); }
+
+/* ─── Tables ───────────────────────────────────────────────────────── */
+.hz-table { font-family: var(--font-body); }
+.hz-table thead th { font-family: var(--font-heading); color: var(--text-heading); }
+
+/* Responsive table: on mobile, rows stack vertically and each <td> shows
+   its column label via the data-label attribute. Requires each <td> to
+   have data-label="Column Name" so the label appears next to the value.
+   Desktop rendering is unchanged. */
+@media (max-width: 767px) {
+    .hz-table thead { display: none; }
+    .hz-table,
+    .hz-table tbody,
+    .hz-table tr,
+    .hz-table td { display: block; width: 100%; box-sizing: border-box; }
+    .hz-table tr {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-input);
+        padding: 8px 16px;
+        margin-bottom: 12px;
+    }
+    .hz-table td {
+        padding: 10px 0 !important;
+        border: 0 !important;
+        border-bottom: 1px solid var(--border) !important;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        font-size: 14px;
+    }
+    .hz-table tr td:last-child { border-bottom: 0 !important; }
+    .hz-table td[data-label]::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--text-muted);
+        flex-shrink: 0;
+    }
+}
+
+/* ─── Accordion ─────────────────────────────────────────────────── */
+.hz-accordion { display: flex; flex-direction: column; gap: 8px; }
+.hz-accordion__item {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    overflow: hidden;
+}
+.hz-accordion__question {
+    padding: 18px 20px;
+    font-family: var(--font-heading);
+    font-size: 1.0625rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+.hz-accordion__question::-webkit-details-marker,
+.hz-accordion__question::marker { display: none; content: none; }
+
+.hz-accordion__icon {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    color: var(--accent);
+    transition: transform 300ms ease;
+    opacity: 0.7;
+}
+.hz-accordion__item[open] > .hz-accordion__question > .hz-accordion__icon {
+    transform: rotate(180deg);
+    opacity: 1;
+}
+
+.hz-accordion__answer { padding: 0 20px 20px; color: var(--text-muted); }
+
+/* ─── Tabs ─────────────────────────────────────────────────────── */
+.hz-tabs__list {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.hz-tabs__list::-webkit-scrollbar { display: none; }
+.hz-tabs__tab {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-tap-highlight-color: transparent;
+    padding: 14px 24px !important;
+    font-family: var(--font-body) !important;
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    color: var(--text-muted) !important;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px;
+    line-height: 1.2;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.hz-tabs__tab:hover { color: var(--brand) !important; }
+.hz-tabs__tab:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 35%, transparent) !important; border-radius: 3px !important; }
+.hz-tabs__tab.is-active {
+    color: var(--brand) !important;
+    border-bottom-color: var(--brand) !important;
+    font-weight: 600 !important;
+}
+
+/* ─── Forms (opt-in via .hz-form wrapper) ──────────────────────
+   Styles activate only inside a .hz-form container. Targets Elementor,
+   Gravity, and plain HTML form markup. Scoped so it does NOT interfere
+   with site-wide forms on any page that isn't opted in. */
+.hz-form { max-width: 640px; }
+.hz-form .elementor-field,
+.hz-form input[type="text"],
+.hz-form input[type="email"],
+.hz-form input[type="tel"],
+.hz-form input[type="number"],
+.hz-form input[type="url"],
+.hz-form input[type="password"],
+.hz-form input[type="date"],
+.hz-form textarea,
+.hz-form select,
+.hz-form .gform_input,
+.hz-form .gform_textarea {
+    width: 100%;
+    padding: 12px 16px !important;
+    font-family: var(--font-body) !important;
+    font-size: 1rem !important;
+    color: var(--text-body) !important;
+    background: #fff !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-input) !important;
+    line-height: 1.5;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    box-sizing: border-box;
+}
+.hz-form input:focus,
+.hz-form textarea:focus,
+.hz-form select:focus,
+.hz-form .elementor-field:focus,
+.hz-form .gform_input:focus,
+.hz-form .gform_textarea:focus {
+    outline: none;
+    border-color: var(--focus-ring) !important;
+    box-shadow: 0 0 0 2px var(--brand-pale) !important;
+}
+.hz-form input::placeholder,
+.hz-form textarea::placeholder,
+.hz-form .elementor-field::placeholder { color: #9ca3af; }
+
+/* Select dropdown: hide native arrow, paint a custom chevron (Magnori-style).
+   Uses the `background` shorthand to override the .hz-form input/select
+   rule above (which also uses the shorthand with !important).
+   Stroke color #1F2937 matches --text-heading for stronger contrast. */
+.hz-form select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 44px !important;
+    background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231F2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") no-repeat right 16px center / 16px 16px !important;
+    cursor: pointer;
+}
+
+.hz-form .elementor-field-label,
+.hz-form .gfield_label {
+    display: block;
+    font-family: var(--font-heading);
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--text-heading);
+    margin-bottom: 6px;
+}
+.hz-form .elementor-field-description,
+.hz-form .gfield_description {
+    font-size: 15px;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+.hz-form .elementor-message-danger { color: var(--error); }
+.hz-form .elementor-message-success { color: var(--success); }
+.hz-form .elementor-field-option,
+.hz-form .gchoice label {
+    display: inline-flex;
+    align-items: center;
+    font-size: 15px;
+    color: var(--text-body);
+    line-height: 1.4;
+    padding: 6px 0;
+    cursor: pointer;
+}
+
+/* Custom-styled checkboxes and radios.
+   Magnori-style: 20px square/round, border --border, filled --brand when checked
+   with white check/dot indicator. */
+.hz-form input[type="checkbox"],
+.hz-form input[type="radio"] {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    width: 20px !important;
+    height: 20px !important;
+    padding: 0 !important;
+    margin-right: 10px !important;
+    border: 1.5px solid var(--border) !important;
+    background: #fff !important;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    flex-shrink: 0;
+    position: relative;
+    display: inline-block;
+}
+.hz-form input[type="checkbox"] { border-radius: 4px !important; }
+.hz-form input[type="radio"]    { border-radius: 50% !important; }
+
+.hz-form input[type="checkbox"]:hover,
+.hz-form input[type="radio"]:hover {
+    border-color: var(--focus-ring) !important;
+}
+
+.hz-form input[type="checkbox"]:focus-visible,
+.hz-form input[type="radio"]:focus-visible {
+    outline: none !important;
+    border-color: var(--focus-ring) !important;
+    box-shadow: 0 0 0 3px var(--brand-pale) !important;
+}
+
+.hz-form input[type="checkbox"]:checked,
+.hz-form input[type="radio"]:checked {
+    background: var(--brand) !important;
+    border-color: var(--brand) !important;
+}
+
+/* Checkmark for checked checkbox */
+.hz-form input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 1px;
+    width: 6px;
+    height: 11px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* Dot for selected radio */
+.hz-form input[type="radio"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    transform: translate(-50%, -50%);
+}
+
+/* ─── :visited state normalization ───────────────────────────────────
+   Browsers default :visited links to dark purple/grey, which overrides
+   our styling once a link has been clicked. Each class-based link type
+   below resets :visited to match its base color. This is critical for
+   nav, footer, and card CTAs where visited links would otherwise shift
+   color after a visitor's first navigation. */
+.hz-nav-link:visited,
+.hz-site-nav__link:visited,
+.hz-mega-menu__link:visited,
+.hz-mobile-menu__link:visited { color: var(--nav-link); }
+
+/* :visited:hover — must be re-declared because :visited and :hover have the
+   same specificity, so without this block the :visited rule above (which
+   comes later in source order) would win on hover-over-visited links. */
+.hz-nav-link:visited:hover,
+.hz-site-nav__link:visited:hover,
+.hz-mega-menu__link:visited:hover,
+.hz-mobile-menu__link:visited:hover { color: var(--nav-link-hover); }
+
+.hz-breadcrumb a:visited { color: var(--text-muted); }
+.hz-breadcrumb a:visited:hover { color: var(--brand); }
+.hz-breadcrumb [aria-current="page"]:visited { color: var(--text-body); }
+
+.hz-card__link:visited { color: var(--accent-text) !important; }
+.hz-card__link:visited:hover { color: color-mix(in srgb, var(--accent-text) 70%, black) !important; }
+
+.hz-site-logo:visited { color: var(--brand); }
+
+/* Dark-footer variant */
+.hz-site-footer a:visited { color: rgba(255,255,255,0.85); }
+.hz-footer-link:visited { color: rgba(255,255,255,0.8) !important; }
+
+/* Light-footer variant */
+.hz-site-footer--light a:visited { color: var(--text-body) !important; }
+.hz-site-footer--light .hz-footer-link:visited { color: var(--footer-link) !important; }
+
+/* Buttons do NOT need :visited rules. The base .hz-btn rules use !important
+   which already overrides a:visited from main.css. Adding :visited here
+   creates a maintenance trap: if the base color changes, the :visited rule
+   goes stale and shows the wrong color once a button link has been clicked. */
