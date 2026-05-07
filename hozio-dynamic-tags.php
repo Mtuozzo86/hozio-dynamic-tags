@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.11.19
+Version:         4.12.0
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,7 +13,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.11.19');
+define('HOZIO_VERSION', '4.12.0');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -138,6 +138,85 @@ function hozio_current_year() {
 add_shortcode('hozio_current_year','hozio_current_year');
 
 /**
+ * Default schema for the structured (Classic) Business Hours.
+ * Mon–Fri default to 9 AM – 5 PM, weekends closed.
+ * Times stored in 24-hour HH:MM form.
+ */
+function hozio_default_business_hours_classic() {
+    $weekday = array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' );
+    $weekend = array( 'status' => 'closed', 'open' => '09:00', 'close' => '17:00' );
+    return array(
+        'always_open' => false,
+        'days' => array(
+            'monday'    => $weekday,
+            'tuesday'   => $weekday,
+            'wednesday' => $weekday,
+            'thursday'  => $weekday,
+            'friday'    => $weekday,
+            'saturday'  => $weekend,
+            'sunday'    => $weekend,
+        ),
+    );
+}
+
+/**
+ * Convert "HH:MM" 24-hour to "h:MM AM/PM" 12-hour for display.
+ */
+function hozio_format_time_12h( $time24 ) {
+    if ( ! preg_match( '/^(\d{1,2}):(\d{2})$/', $time24, $m ) ) {
+        return '';
+    }
+    $h  = (int) $m[1];
+    $mm = $m[2];
+    $period = ( $h >= 12 ) ? 'PM' : 'AM';
+    $h12 = ( $h % 12 === 0 ) ? 12 : ( $h % 12 );
+    return $h12 . ':' . $mm . ' ' . $period;
+}
+
+/**
+ * Format the structured Business Hours array as <br>-separated display string.
+ */
+function hozio_format_business_hours_classic( $data ) {
+    if ( ! is_array( $data ) ) {
+        $data = hozio_default_business_hours_classic();
+    }
+    if ( ! empty( $data['always_open'] ) ) {
+        return 'Open 24/7';
+    }
+    $labels = array(
+        'monday'    => 'Mon', 'tuesday' => 'Tue', 'wednesday' => 'Wed',
+        'thursday'  => 'Thu', 'friday'  => 'Fri', 'saturday'  => 'Sat',
+        'sunday'    => 'Sun',
+    );
+    $lines = array();
+    foreach ( $labels as $key => $label ) {
+        $day = isset( $data['days'][ $key ] ) ? $data['days'][ $key ] : null;
+        if ( ! $day ) { continue; }
+        if ( ( $day['status'] ?? 'closed' ) === 'closed' ) {
+            $lines[] = $label . ': Closed';
+        } else {
+            $open  = hozio_format_time_12h( $day['open']  ?? '' );
+            $close = hozio_format_time_12h( $day['close'] ?? '' );
+            $lines[] = $label . ': ' . $open . ' &ndash; ' . $close;
+        }
+    }
+    return implode( '<br>', $lines );
+}
+
+/**
+ * Returns the Business Hours value to render on the frontend.
+ * Switches between HTML mode (raw textarea) and Classic mode (structured).
+ */
+function hozio_get_business_hours_output() {
+    $mode = get_option( 'hozio_business_hours_mode', 'html' );
+    if ( $mode === 'classic' ) {
+        $data = get_option( 'hozio_business_hours_classic', hozio_default_business_hours_classic() );
+        return hozio_format_business_hours_classic( $data );
+    }
+    return get_option( 'hozio_business_hours', '' );
+}
+
+/**
  * Universal [hozio] shortcode — use any dynamic tag value in HTML widgets.
  *
  * Usage:
@@ -211,6 +290,17 @@ function hozio_shortcode_handler( $atts ) {
         return $format === 'url' ? esc_url( 'mailto:' . esc_attr( $val ) ) : esc_html( $val );
     }
 
+    // --- Individual address part tags ---
+    $addr_tags = array(
+        'company-address-street' => 'hozio_address_street',
+        'company-address-town'   => 'hozio_address_town',
+        'company-address-state'  => 'hozio_address_state',
+        'company-address-zip'    => 'hozio_address_zip',
+    );
+    if ( isset( $addr_tags[ $tag ] ) ) {
+        return esc_html( get_option( $addr_tags[ $tag ], '' ) );
+    }
+
     // --- Name display tags (return formatted display value) ---
     $name_tags = array(
         'company-phone-1-name' => 'hozio_company_phone_1',
@@ -228,6 +318,9 @@ function hozio_shortcode_handler( $atts ) {
             'b' => array(), 'i' => array(), 'p' => array(),
             'ul' => array(), 'ol' => array(), 'li' => array(),
         );
+        if ( $tag === 'business-hours' ) {
+            return wp_kses( hozio_get_business_hours_output(), $allowed );
+        }
         return wp_kses( get_option( 'hozio_' . str_replace( '-', '_', $tag ), '' ), $allowed );
     }
 

@@ -2,6 +2,55 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.0 (May 2026) ==
+
+= New Features =
+
+* NEW: Business Hours "Classic" mode — toggle between freeform HTML textarea and structured per-day editor
+  - Master "Open 24/7" toggle that overrides everything
+  - Per-day Open/Closed status pills with 15-minute time increments (Mon–Sun, AM/PM)
+  - "Apply Mon to Tue–Fri" quick-action button
+  - Frontend output formats as "Mon: 9:00 AM – 5:00 PM<br>...<br>Sat: Closed" automatically
+  - Existing sites stay on HTML mode by default — zero behavior change until toggled
+
+* NEW: Structured address fields — Street / Town / State / ZIP added alongside the existing Company Address textarea
+  - Live company-address auto-build as user types in any of the 4 fields
+  - "Clear All" button restores original company-address on clear
+  - 4 new dynamic tags + shortcodes:
+    [hozio tag="company-address-street"], [hozio tag="company-address-town"],
+    [hozio tag="company-address-state"], [hozio tag="company-address-zip"]
+  - Existing hozio_company_address option preserved for legacy sites
+
+* NEW: Custom State dropdown with all 50 US states
+  - Dedicated search-as-you-type filter (matches abbreviation or full name)
+  - Auto-highlights top match for one-key Enter selection
+  - Keyboard navigation (Arrow Up/Down, Enter, Escape)
+  - Compact toggle to output as initial (NY) or full name (New York)
+
+* NEW: Street address autocomplete (Photon API, free, no key required)
+  - Live US-only address suggestions after 3+ chars typed
+  - Click to populate Street / Town / State / ZIP at once
+  - Optional — never forces selection, type freely if not found
+
+* NEW: Live "Years of Experience" badge — recalculates as Start Year is typed
+
+= Improvements =
+
+* Business Details section completely redesigned: Business Hours / Start Year /
+  Navigation Text Color now in 3 polished cards on a single row, each with
+  iconography and contextual quick-actions
+* Navigation Text Color picker UI replaced with a polished full-width swatch
+  button showing the chosen color; dropdown popover with shadow + rounded corners
+* Loop Configurations admin page: fixed flash of unstyled content (FOUC) on
+  initial load by buffering HTML output and emitting <style> first
+
+= Files Changed =
+
+* hozio-dynamic-tags.php — helpers for classic business-hours format/output, mode-aware shortcode handler
+* includes/admin-settings.php — full Business Details redesign, classic editor UI, custom state dropdown, address autocomplete
+* includes/dynamic-tags.php — 4 new address-part dynamic tags + business-hours mode-aware render
+* includes/loop-configurations.php — FOUC fix via output buffering
+
 == Version 4.11.2 (April 2026) ==
 
 = Improvements =

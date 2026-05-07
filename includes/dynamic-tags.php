@@ -313,12 +313,56 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         }
     }
 
+    if (!class_exists('My_Company_Address_Street_Tag')) {
+        class My_Company_Address_Street_Tag extends Hozio_Text_Base_Tag {
+            protected $tag_name   = 'company-address-street';
+            protected $tag_title  = 'Company Address — Street';
+            protected $option_key = 'hozio_address_street';
+        }
+    }
+
+    if (!class_exists('My_Company_Address_Town_Tag')) {
+        class My_Company_Address_Town_Tag extends Hozio_Text_Base_Tag {
+            protected $tag_name   = 'company-address-town';
+            protected $tag_title  = 'Company Address — Town';
+            protected $option_key = 'hozio_address_town';
+        }
+    }
+
+    if (!class_exists('My_Company_Address_State_Tag')) {
+        class My_Company_Address_State_Tag extends Hozio_Text_Base_Tag {
+            protected $tag_name   = 'company-address-state';
+            protected $tag_title  = 'Company Address — State';
+            protected $option_key = 'hozio_address_state';
+        }
+    }
+
+    if (!class_exists('My_Company_Address_Zip_Tag')) {
+        class My_Company_Address_Zip_Tag extends Hozio_Text_Base_Tag {
+            protected $tag_name   = 'company-address-zip';
+            protected $tag_title  = 'Company Address — ZIP';
+            protected $option_key = 'hozio_address_zip';
+        }
+    }
+
     if (!class_exists('My_Business_Hours_Tag')) {
         class My_Business_Hours_Tag extends Hozio_Text_Base_Tag {
             protected $tag_name   = 'business-hours';
             protected $tag_title  = 'Business Hours';
             protected $option_key = 'hozio_business_hours';
             protected $render_as  = 'html';
+
+            public function render() {
+                $value = function_exists( 'hozio_get_business_hours_output' )
+                    ? hozio_get_business_hours_output()
+                    : get_option( $this->option_key, '' );
+                $allowed = array(
+                    'br' => array(), 'a' => array( 'href' => array(), 'title' => array() ),
+                    'b' => array(), 'i' => array(), 'p' => array(),
+                    'ul' => array(), 'ol' => array(), 'li' => array(),
+                );
+                echo wp_kses( $value, $allowed );
+            }
         }
     }
 
@@ -397,6 +441,10 @@ add_action('elementor/dynamic_tags/register', function ($dynamic_tags) {
         'My_Sms_Phone_Name_Tag',
         'My_Google_Ads_Phone_Name_Tag',
         'My_Company_Address_Tag',
+        'My_Company_Address_Street_Tag',
+        'My_Company_Address_Town_Tag',
+        'My_Company_Address_State_Tag',
+        'My_Company_Address_Zip_Tag',
         'My_Business_Hours_Tag',
         'My_To_Email_Contact_Form_Tag',
         'My_Years_Of_Experience_Tag',

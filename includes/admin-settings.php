@@ -32,7 +32,552 @@ function hozio_color_picker_init() {
     ?>
     <script>
     jQuery(document).ready(function($) {
-        $('.hozio-color-picker').wpColorPicker();
+        // Init color pickers — Nav Text Color updates its swatch on change
+        var $navColor = $('#hozio_nav_text_color');
+
+        function paintNavSwatch(color) {
+            var $btn = $('.hozio-nav-color-card .wp-color-result.button');
+            if (!$btn.length) return;
+            $btn[0].style.setProperty('--hozio-swatch-color', color || '#ffffff');
+        }
+
+        if ($navColor.length) {
+            $navColor.wpColorPicker({
+                change: function(event, ui) { paintNavSwatch(ui.color.toString()); },
+                clear:  function()           { paintNavSwatch(''); }
+            });
+            // Initial paint based on saved value
+            paintNavSwatch($navColor.val());
+        }
+        $('.hozio-color-picker').not('#hozio_nav_text_color').wpColorPicker();
+
+        // Live address builder — updates Company Address textarea as user types
+        (function() {
+            var streetEl = document.querySelector('[name="hozio_address_street"]');
+            var townEl   = document.querySelector('[name="hozio_address_town"]');
+            var stateEl  = document.querySelector('[name="hozio_address_state"]');
+            var zipEl    = document.querySelector('[name="hozio_address_zip"]');
+            var output   = document.getElementById('hozio-addr-output');
+            var badge    = document.getElementById('hozio-addr-badge');
+            var desc     = document.getElementById('hozio-addr-desc');
+            var clearBtn = document.getElementById('hozio-addr-clear');
+            if (!streetEl || !output) return;
+
+            // Capture the pre-existing address so we can restore it when all fields are cleared
+            var originalAddr = output.value;
+
+            function rebuild() {
+                var street = streetEl.value.trim();
+                var town   = townEl   ? townEl.value.trim()  : '';
+                var state  = stateEl  ? stateEl.value.trim() : '';
+                var zip    = zipEl    ? zipEl.value.trim()   : '';
+                var hasAny = street || town || state || zip;
+
+                if (hasAny) {
+                    var line2 = town;
+                    if (state) line2 += (line2 ? ', ' : '') + state;
+                    if (zip)   line2 += (line2 ? ' '  : '') + zip;
+                    output.value    = street + (line2 ? '<br>' + line2 : '');
+                    output.readOnly = true;
+                    output.classList.add('hozio-addr-auto');
+                    if (badge) badge.style.display = 'inline-flex';
+                    if (desc)  desc.textContent = 'Formatted from the fields above. Clear all address fields to edit manually.';
+                } else {
+                    output.value = originalAddr;
+                    output.readOnly = false;
+                    output.classList.remove('hozio-addr-auto');
+                    if (badge) badge.style.display = 'none';
+                    if (desc)  desc.textContent = 'HTML tags allowed. Fill Street / Town / State / ZIP above to auto-build this field.';
+                }
+            }
+
+            // Run on page load so existing saved values trigger readonly state immediately
+            rebuild();
+
+            [streetEl, townEl, stateEl, zipEl].forEach(function(el) {
+                if (el) el.addEventListener('input', rebuild);
+            });
+
+            // Clear All: wipe the 4 structured fields and restore original address
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function() {
+                    [streetEl, townEl, stateEl, zipEl].forEach(function(el) {
+                        if (el) el.value = '';
+                    });
+                    // Also reset the state custom dropdown UI
+                    var stateDisplay = document.getElementById('hozio-state-display');
+                    var stateHidden  = document.getElementById('hozio-state-hidden');
+                    if (stateDisplay) stateDisplay.value = '';
+                    if (stateHidden)  stateHidden.value = '';
+                    var stateOpts = document.querySelectorAll('.hozio-state-option-selected');
+                    for (var i = 0; i < stateOpts.length; i++) {
+                        stateOpts[i].classList.remove('hozio-state-option-selected');
+                    }
+                    rebuild();
+                });
+            }
+        })();
+
+        // Custom State Dropdown — always shows all states, dedicated search, keyboard nav
+        (function() {
+            var wrap     = document.getElementById('hozio-state-combo-wrap');
+            var display  = document.getElementById('hozio-state-display');
+            var dropdown = document.getElementById('hozio-state-dropdown');
+            var search   = document.getElementById('hozio-state-search-input');
+            var optsEl   = document.getElementById('hozio-state-options');
+            var hidden   = document.getElementById('hozio-state-hidden');
+            var fmtChk   = document.getElementById('hozio-state-fmt-chk');
+            var fmtHid   = document.getElementById('hozio-state-fmt-hidden');
+            if (!wrap || !display || !hidden || !optsEl) return;
+
+            var states = {
+                'AL':'Alabama','AK':'Alaska','AZ':'Arizona','AR':'Arkansas',
+                'CA':'California','CO':'Colorado','CT':'Connecticut','DE':'Delaware',
+                'FL':'Florida','GA':'Georgia','HI':'Hawaii','ID':'Idaho',
+                'IL':'Illinois','IN':'Indiana','IA':'Iowa','KS':'Kansas',
+                'KY':'Kentucky','LA':'Louisiana','ME':'Maine','MD':'Maryland',
+                'MA':'Massachusetts','MI':'Michigan','MN':'Minnesota','MS':'Mississippi',
+                'MO':'Missouri','MT':'Montana','NE':'Nebraska','NV':'Nevada',
+                'NH':'New Hampshire','NJ':'New Jersey','NM':'New Mexico','NY':'New York',
+                'NC':'North Carolina','ND':'North Dakota','OH':'Ohio','OK':'Oklahoma',
+                'OR':'Oregon','PA':'Pennsylvania','RI':'Rhode Island','SC':'South Carolina',
+                'SD':'South Dakota','TN':'Tennessee','TX':'Texas','UT':'Utah',
+                'VT':'Vermont','VA':'Virginia','WA':'Washington','WV':'West Virginia',
+                'WI':'Wisconsin','WY':'Wyoming'
+            };
+            var options = optsEl.querySelectorAll('.hozio-state-option');
+            var noneEl  = null;
+            var activeIdx = -1;
+
+            function isFull() { return fmtChk && fmtChk.checked; }
+
+            function buildDisplay(abbr) {
+                if (!abbr || !states[abbr]) return '';
+                return abbr + ' \u2014 ' + states[abbr];
+            }
+
+            function getSelectedAbbr() {
+                for (var i = 0; i < options.length; i++) {
+                    if (options[i].classList.contains('hozio-state-option-selected')) return options[i].dataset.abbr;
+                }
+                return '';
+            }
+
+            function setSelection(abbr) {
+                hidden.value = abbr ? (isFull() ? states[abbr] : abbr) : '';
+                if (fmtHid) fmtHid.value = isFull() ? 'full' : 'abbr';
+                display.value = buildDisplay(abbr);
+                for (var i = 0; i < options.length; i++) {
+                    options[i].classList.toggle('hozio-state-option-selected', options[i].dataset.abbr === abbr);
+                }
+                hidden.dispatchEvent(new Event('input'));
+            }
+
+            function clearActive() {
+                for (var i = 0; i < options.length; i++) options[i].classList.remove('hozio-state-option-active');
+            }
+
+            function getVisibleOptions() {
+                var visible = [];
+                for (var i = 0; i < options.length; i++) {
+                    if (!options[i].hidden) visible.push(options[i]);
+                }
+                return visible;
+            }
+
+            function setActive(idx) {
+                clearActive();
+                var visible = getVisibleOptions();
+                if (idx < 0 || idx >= visible.length) { activeIdx = -1; return; }
+                activeIdx = idx;
+                visible[idx].classList.add('hozio-state-option-active');
+                visible[idx].scrollIntoView({ block: 'nearest' });
+            }
+
+            function filterOptions(q) {
+                q = (q || '').trim().toLowerCase();
+                var anyVisible = false;
+                for (var i = 0; i < options.length; i++) {
+                    var abbr = options[i].dataset.abbr.toLowerCase();
+                    var name = options[i].dataset.name.toLowerCase();
+                    var match = !q || abbr.indexOf(q) === 0 || name.indexOf(q) !== -1;
+                    options[i].hidden = !match;
+                    if (match) anyVisible = true;
+                }
+                if (!anyVisible) {
+                    if (!noneEl) {
+                        noneEl = document.createElement('div');
+                        noneEl.className = 'hozio-state-option-none';
+                        noneEl.textContent = 'No states match your search';
+                        optsEl.appendChild(noneEl);
+                    }
+                    noneEl.hidden = false;
+                } else if (noneEl) {
+                    noneEl.hidden = true;
+                }
+            }
+
+            function openDropdown() {
+                dropdown.hidden = false;
+                wrap.classList.add('open');
+                if (search) {
+                    search.value = '';
+                    filterOptions('');
+                    setTimeout(function() { search.focus(); }, 30);
+                }
+                activeIdx = -1;
+                clearActive();
+                var sel = optsEl.querySelector('.hozio-state-option-selected');
+                if (sel) setTimeout(function() { sel.scrollIntoView({ block: 'center' }); }, 30);
+            }
+
+            function closeDropdown() {
+                dropdown.hidden = true;
+                wrap.classList.remove('open');
+                activeIdx = -1;
+                clearActive();
+            }
+
+            display.addEventListener('click', function() {
+                if (dropdown.hidden) openDropdown(); else closeDropdown();
+            });
+
+            optsEl.addEventListener('click', function(e) {
+                var opt = e.target.closest('.hozio-state-option');
+                if (!opt) return;
+                setSelection(opt.dataset.abbr);
+                closeDropdown();
+            });
+
+            if (search) {
+                search.addEventListener('input', function(e) {
+                    filterOptions(e.target.value);
+                    // Auto-highlight the first visible match so Enter selects it
+                    var visible = getVisibleOptions();
+                    if (e.target.value.trim() && visible.length > 0) {
+                        setActive(0);
+                    } else {
+                        activeIdx = -1;
+                        clearActive();
+                    }
+                });
+                search.addEventListener('keydown', function(e) {
+                    var visible = getVisibleOptions();
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setActive(activeIdx < 0 ? 0 : Math.min(activeIdx + 1, visible.length - 1));
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setActive(Math.max(activeIdx - 1, 0));
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (activeIdx >= 0 && visible[activeIdx]) {
+                            setSelection(visible[activeIdx].dataset.abbr);
+                            closeDropdown();
+                        }
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        closeDropdown();
+                    }
+                });
+            }
+
+            document.addEventListener('click', function(e) {
+                if (!wrap.contains(e.target) && !dropdown.hidden) closeDropdown();
+            });
+
+            if (fmtChk) {
+                fmtChk.addEventListener('change', function() {
+                    var current = getSelectedAbbr();
+                    if (current) setSelection(current);
+                    else if (fmtHid) fmtHid.value = isFull() ? 'full' : 'abbr';
+                });
+            }
+
+            // Initialize display value from saved hidden value on page load
+            var saved = hidden.value;
+            if (saved) {
+                var initAbbr = states[saved] ? saved : '';
+                if (!initAbbr) {
+                    for (var a in states) { if (states[a] === saved) { initAbbr = a; break; } }
+                }
+                if (initAbbr) display.value = buildDisplay(initAbbr);
+            }
+        })();
+
+        // Street address autocomplete via Photon (free OSM-based, no API key)
+        (function() {
+            var streetInput = document.querySelector('[name="hozio_address_street"]');
+            if (!streetInput) return;
+            var streetGroup = streetInput.closest('.hozio-input-group');
+            if (!streetGroup) return;
+
+            // Mount the dropdown inside the input-group (which is already position: relative)
+            var dropdown = document.createElement('div');
+            dropdown.className = 'hozio-addr-autocomplete';
+            dropdown.hidden = true;
+            streetGroup.appendChild(dropdown);
+
+            var townInput  = document.querySelector('[name="hozio_address_town"]');
+            var zipInput   = document.querySelector('[name="hozio_address_zip"]');
+
+            var debounceId = null;
+            var activeFetch = null;
+            var currentResults = [];
+            var activeIdx = -1;
+
+            function clearChildren(el) {
+                while (el.firstChild) el.removeChild(el.firstChild);
+            }
+
+            function showLoading() {
+                clearChildren(dropdown);
+                var wrap = document.createElement('div');
+                wrap.className = 'hozio-addr-loading';
+                var spin = document.createElement('span');
+                spin.className = 'dashicons dashicons-update';
+                wrap.appendChild(spin);
+                wrap.appendChild(document.createTextNode(' Searching addresses…'));
+                dropdown.appendChild(wrap);
+                dropdown.hidden = false;
+            }
+            function showEmpty() {
+                clearChildren(dropdown);
+                var wrap = document.createElement('div');
+                wrap.className = 'hozio-addr-empty';
+                wrap.textContent = 'No matches — keep typing or fill in the fields manually';
+                dropdown.appendChild(wrap);
+                dropdown.hidden = false;
+            }
+            function hideDropdown() {
+                dropdown.hidden = true;
+                currentResults = [];
+                activeIdx = -1;
+            }
+
+            function fetchSuggestions(query) {
+                if (activeFetch && activeFetch.abort) try { activeFetch.abort(); } catch(e) {}
+                showLoading();
+                var url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(query) + '&limit=8&lang=en';
+                activeFetch = new AbortController();
+                fetch(url, { signal: activeFetch.signal })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        var results = (data && data.features) ? data.features : [];
+                        results = results.filter(function(f) {
+                            var p = f.properties || {};
+                            return p.countrycode === 'US' || p.country === 'United States';
+                        });
+                        renderResults(results);
+                    })
+                    .catch(function(err) {
+                        if (err && err.name === 'AbortError') return;
+                        hideDropdown();
+                    });
+            }
+
+            function buildSuggestionEl(r, i) {
+                var p = r.properties || {};
+                var line1 = '';
+                if (p.housenumber) line1 += p.housenumber + ' ';
+                if (p.street)      line1 += p.street;
+                if (!line1)        line1 = p.name || '';
+                var parts = [];
+                if (p.city)     parts.push(p.city);
+                if (p.state)    parts.push(p.state);
+                if (p.postcode) parts.push(p.postcode);
+
+                var item = document.createElement('div');
+                item.className = 'hozio-addr-suggestion';
+                item.setAttribute('data-idx', String(i));
+                var l1 = document.createElement('div');
+                l1.className = 'hozio-addr-suggestion-line1';
+                l1.textContent = line1;
+                var l2 = document.createElement('div');
+                l2.className = 'hozio-addr-suggestion-line2';
+                l2.textContent = parts.join(', ');
+                item.appendChild(l1);
+                item.appendChild(l2);
+                return item;
+            }
+
+            function renderResults(results) {
+                currentResults = results;
+                activeIdx = -1;
+                clearChildren(dropdown);
+                if (!results.length) { showEmpty(); return; }
+                results.forEach(function(r, i) {
+                    dropdown.appendChild(buildSuggestionEl(r, i));
+                });
+                var credit = document.createElement('div');
+                credit.className = 'hozio-addr-credit';
+                credit.textContent = 'Powered by Photon · OpenStreetMap';
+                dropdown.appendChild(credit);
+                dropdown.hidden = false;
+            }
+
+            function setActive(idx) {
+                var items = dropdown.querySelectorAll('.hozio-addr-suggestion');
+                for (var i = 0; i < items.length; i++) items[i].classList.remove('hozio-addr-active');
+                if (idx < 0 || idx >= items.length) { activeIdx = -1; return; }
+                activeIdx = idx;
+                items[idx].classList.add('hozio-addr-active');
+                items[idx].scrollIntoView({ block: 'nearest' });
+            }
+
+            function applyResult(idx) {
+                var r = currentResults[idx];
+                if (!r) return;
+                var p = r.properties || {};
+
+                var street = '';
+                if (p.housenumber) street += p.housenumber + ' ';
+                if (p.street)      street += p.street;
+                if (!street.trim() && p.name) street = p.name;
+                streetInput.value = street.trim();
+
+                if (townInput && p.city)     townInput.value = p.city;
+                if (zipInput  && p.postcode) zipInput.value  = p.postcode;
+
+                // State: find matching option by data-name and trigger its click handler
+                if (p.state) {
+                    var allOpts = document.querySelectorAll('.hozio-state-option');
+                    for (var i = 0; i < allOpts.length; i++) {
+                        if (allOpts[i].getAttribute('data-name') === p.state) {
+                            allOpts[i].click();
+                            break;
+                        }
+                    }
+                }
+
+                hideDropdown();
+
+                streetInput.dispatchEvent(new Event('input', { bubbles: true }));
+                if (townInput) townInput.dispatchEvent(new Event('input', { bubbles: true }));
+                if (zipInput)  zipInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            streetInput.addEventListener('input', function() {
+                clearTimeout(debounceId);
+                var q = streetInput.value.trim();
+                if (q.length < 3) { hideDropdown(); return; }
+                debounceId = setTimeout(function() { fetchSuggestions(q); }, 350);
+            });
+
+            dropdown.addEventListener('click', function(e) {
+                var item = e.target.closest('.hozio-addr-suggestion');
+                if (!item) return;
+                applyResult(parseInt(item.getAttribute('data-idx'), 10));
+            });
+
+            streetInput.addEventListener('keydown', function(e) {
+                if (dropdown.hidden) return;
+                var items = dropdown.querySelectorAll('.hozio-addr-suggestion');
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setActive(activeIdx < items.length - 1 ? activeIdx + 1 : 0);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setActive(activeIdx > 0 ? activeIdx - 1 : items.length - 1);
+                } else if (e.key === 'Enter' && activeIdx >= 0) {
+                    e.preventDefault();
+                    applyResult(activeIdx);
+                } else if (e.key === 'Escape') {
+                    hideDropdown();
+                }
+            });
+
+            document.addEventListener('click', function(e) {
+                if (!streetGroup.contains(e.target) && !dropdown.hidden) hideDropdown();
+            });
+        })();
+
+        // Business Hours: mode toggle (HTML / Classic) + per-day status + 24/7 master + apply-Mon
+        (function() {
+            var modeBtns   = document.querySelectorAll('.hozio-bh-mode-btn');
+            var modeInput  = document.getElementById('hozio-bh-mode-input');
+            var htmlView   = document.querySelector('.hozio-bh-html-view');
+            var classicView= document.querySelector('.hozio-bh-classic-view');
+            if (!modeBtns.length || !modeInput) return;
+
+            // Mode toggle
+            modeBtns.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var mode = btn.getAttribute('data-mode');
+                    modeBtns.forEach(function(b) { b.classList.toggle('hozio-bh-mode-active', b === btn); });
+                    modeInput.value = mode;
+                    if (htmlView)    htmlView.hidden    = (mode !== 'html');
+                    if (classicView) classicView.hidden = (mode !== 'classic');
+                });
+            });
+
+            // 24/7 master toggle dims/disables day rows
+            var chk247 = document.getElementById('hozio-bh-247-chk');
+            if (chk247 && classicView) {
+                var apply247 = function() {
+                    classicView.classList.toggle('is-247', chk247.checked);
+                };
+                chk247.addEventListener('change', apply247);
+                apply247();
+            }
+
+            // Per-day status pills
+            document.querySelectorAll('.hozio-bh-day').forEach(function(row) {
+                var statusInput = row.querySelector('.hozio-bh-day-status-input');
+                row.querySelectorAll('.hozio-bh-status-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var st = btn.getAttribute('data-status');
+                        row.querySelectorAll('.hozio-bh-status-btn').forEach(function(b) {
+                            b.classList.toggle('is-active', b === btn);
+                        });
+                        if (statusInput) statusInput.value = st;
+                        row.classList.toggle('is-closed', st === 'closed');
+                    });
+                });
+            });
+
+            // Apply Monday's hours to Tue–Fri
+            var applyBtn = document.getElementById('hozio-bh-apply-weekdays');
+            if (applyBtn) {
+                applyBtn.addEventListener('click', function() {
+                    var monRow = document.querySelector('.hozio-bh-day[data-day="monday"]');
+                    if (!monRow) return;
+                    var monStatus = monRow.querySelector('.hozio-bh-day-status-input').value;
+                    var monOpen   = monRow.querySelector('select[name*="[open]"]').value;
+                    var monClose  = monRow.querySelector('select[name*="[close]"]').value;
+                    ['tuesday','wednesday','thursday','friday'].forEach(function(dayKey) {
+                        var row = document.querySelector('.hozio-bh-day[data-day="' + dayKey + '"]');
+                        if (!row) return;
+                        // Set status
+                        row.querySelectorAll('.hozio-bh-status-btn').forEach(function(b) {
+                            b.classList.toggle('is-active', b.getAttribute('data-status') === monStatus);
+                        });
+                        row.querySelector('.hozio-bh-day-status-input').value = monStatus;
+                        row.classList.toggle('is-closed', monStatus === 'closed');
+                        // Set times
+                        row.querySelector('select[name*="[open]"]').value  = monOpen;
+                        row.querySelector('select[name*="[close]"]').value = monClose;
+                    });
+                });
+            }
+        })();
+
+        // Live "Years of Experience" calculation as the start year is typed
+        (function() {
+            var yearInput = document.getElementById('hozio_start_year');
+            var yearsOut  = document.querySelector('.hozio-years-num');
+            if (!yearInput || !yearsOut) return;
+
+            function recalc() {
+                var startYear = parseInt(yearInput.value, 10);
+                var current   = new Date().getFullYear();
+                var years     = (startYear && startYear >= 1900 && startYear <= current) ? (current - startYear) : 0;
+                yearsOut.textContent = years;
+            }
+
+            yearInput.addEventListener('input', recalc);
+            recalc();
+        })();
 
         // Copy shortcode to clipboard
         $(document).on('click', '.hozio-copy-shortcode', function(e) {
@@ -494,9 +1039,781 @@ function hozio_dynamic_tags_inline_styles() {
             display: block;
         }
 
+        /* Structured address grid */
+        .hozio-address-grid {
+            display: grid;
+            grid-template-columns: 2fr 1.5fr 0.65fr 0.65fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        /* Read-only company address display (when structured fields filled) */
+        .hozio-address-readonly {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #f9fafb;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            color: #374151;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        .hozio-address-readonly .hozio-lock-icon {
+            color: #9ca3af;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .hozio-address-readonly-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            color: #6b7280;
+            background: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            border-radius: 20px;
+            padding: 2px 8px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        /* Business Details bottom — 3 cards in one row */
+        .hozio-biz-bottom {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 14px;
+            margin-top: 24px;
+            align-items: stretch;
+        }
+        .hozio-biz-card {
+            background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 18px 20px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .hozio-biz-card:hover {
+            border-color: #cfe9f5;
+            box-shadow: 0 2px 10px rgba(0,160,227,0.08);
+        }
+        .hozio-biz-card-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .hozio-biz-card-header .dashicons {
+            color: var(--hozio-blue);
+            font-size: 18px;
+            width: 18px;
+            height: 18px;
+        }
+        .hozio-biz-card-header h3 {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 700;
+            color: #1f2937;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        /* Bulletproof full-width input — beats WP admin defaults via !important */
+        .hozio-biz-input {
+            width: 100% !important;
+            max-width: none !important;
+            display: block !important;
+            box-sizing: border-box !important;
+            padding: 12px 14px !important;
+            border: 2px solid #e5e7eb !important;
+            border-radius: 8px !important;
+            font-size: 14px !important;
+            font-family: inherit !important;
+            background: white !important;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            margin: 0 !important;
+        }
+        .hozio-biz-input:focus {
+            outline: none !important;
+            border-color: var(--hozio-blue) !important;
+            box-shadow: 0 0 0 3px rgba(0,160,227,0.1) !important;
+        }
+        textarea.hozio-biz-input {
+            min-height: 130px !important;
+            resize: vertical !important;
+            line-height: 1.6 !important;
+        }
+        .hozio-biz-row-2col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+        .hozio-biz-year-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: linear-gradient(135deg, rgba(0,160,227,0.08), rgba(141,198,63,0.08));
+            border: 1px solid rgba(0,160,227,0.15);
+            border-radius: 8px;
+            font-size: 13px;
+            color: #374151;
+            margin-top: 10px;
+        }
+        .hozio-biz-year-badge .dashicons {
+            color: var(--hozio-orange);
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+        }
+        .hozio-biz-year-badge .hozio-years-num {
+            color: var(--hozio-orange);
+            font-weight: 700;
+            font-size: 16px;
+        }
+        .hozio-biz-card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid #f1f5f9;
+            min-height: 24px;
+        }
+        .hozio-biz-card-help {
+            font-size: 11px;
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        /* Business Hours mode toggle (HTML / Classic) */
+        .hozio-bh-mode-toggle {
+            display: inline-flex;
+            margin-left: auto;
+            background: #f3f4f6;
+            border-radius: 8px;
+            padding: 3px;
+            gap: 2px;
+        }
+        .hozio-bh-mode-btn {
+            border: none;
+            background: transparent;
+            padding: 5px 14px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6b7280;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.15s;
+        }
+        .hozio-bh-mode-btn:hover { color: #1f2937; }
+        .hozio-bh-mode-btn.hozio-bh-mode-active {
+            background: white;
+            color: var(--hozio-blue);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .hozio-biz-card-header { gap: 8px; }
+        .hozio-bh-html-view[hidden],
+        .hozio-bh-classic-view[hidden] { display: none !important; }
+
+        /* 24/7 master row */
+        .hozio-bh-247-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            background: linear-gradient(135deg, rgba(141,198,63,0.08), rgba(0,160,227,0.08));
+            border: 1px solid rgba(0,160,227,0.18);
+            border-radius: 8px;
+            margin-bottom: 14px;
+            cursor: pointer;
+        }
+        .hozio-bh-247-row .hozio-bh-247-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 22px;
+            flex-shrink: 0;
+        }
+        .hozio-bh-247-row .hozio-bh-247-switch input {
+            opacity: 0; width: 0; height: 0;
+        }
+        .hozio-bh-247-row .hozio-bh-247-slider {
+            position: absolute;
+            inset: 0;
+            background: #d1d5db;
+            border-radius: 22px;
+            cursor: pointer;
+            transition: .3s;
+        }
+        .hozio-bh-247-row .hozio-bh-247-slider:before {
+            content: "";
+            position: absolute;
+            width: 16px; height: 16px;
+            left: 3px; bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: .3s;
+        }
+        .hozio-bh-247-row input:checked + .hozio-bh-247-slider {
+            background: var(--hozio-blue);
+        }
+        .hozio-bh-247-row input:checked + .hozio-bh-247-slider:before {
+            transform: translateX(18px);
+        }
+        .hozio-bh-247-row strong {
+            font-size: 13px;
+            color: #1f2937;
+            font-weight: 700;
+        }
+        .hozio-bh-247-row .hozio-bh-247-help {
+            font-size: 11px;
+            color: #6b7280;
+            font-style: italic;
+            margin-left: auto;
+        }
+
+        /* When 24/7 is on — dim the day rows */
+        .hozio-bh-classic-view.is-247 .hozio-bh-days {
+            opacity: 0.45;
+            pointer-events: none;
+            filter: grayscale(0.4);
+        }
+
+        /* Day rows */
+        .hozio-bh-days {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            transition: opacity 0.2s;
+        }
+        .hozio-bh-day {
+            display: grid;
+            grid-template-columns: 50px 160px 1fr;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 12px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .hozio-bh-day:hover { border-color: #cfe9f5; }
+        .hozio-bh-day.is-closed { background: #fafbfc; }
+        .hozio-bh-day-label {
+            font-weight: 700;
+            font-size: 13px;
+            color: #1f2937;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .hozio-bh-status-pills {
+            display: inline-flex;
+            background: #f3f4f6;
+            border-radius: 6px;
+            padding: 2px;
+            gap: 2px;
+        }
+        .hozio-bh-status-btn {
+            border: none;
+            background: transparent;
+            padding: 4px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #6b7280;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.15s;
+        }
+        .hozio-bh-status-btn:hover { color: #1f2937; }
+        .hozio-bh-status-btn.is-active {
+            background: white;
+            color: var(--hozio-blue);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .hozio-bh-day.is-closed .hozio-bh-status-btn.is-active {
+            color: #9ca3af;
+        }
+        .hozio-bh-day-times {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+        .hozio-bh-day.is-closed .hozio-bh-day-times {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .hozio-bh-time-select {
+            padding: 6px 8px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 12px;
+            background: white;
+            cursor: pointer;
+            min-width: 90px;
+        }
+        .hozio-bh-time-select:focus {
+            outline: none;
+            border-color: var(--hozio-blue);
+            box-shadow: 0 0 0 2px rgba(0,160,227,0.1);
+        }
+        .hozio-bh-time-sep {
+            font-size: 12px;
+            color: #9ca3af;
+            font-weight: 500;
+        }
+
+        .hozio-bh-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 12px;
+        }
+        .hozio-bh-apply-weekdays {
+            background: transparent;
+            border: 1px solid #e5e7eb;
+            color: #6b7280;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .hozio-bh-apply-weekdays:hover {
+            border-color: var(--hozio-blue);
+            color: var(--hozio-blue);
+            background: #f0f9ff;
+        }
+        .hozio-bh-apply-weekdays .dashicons {
+            font-size: 14px; width: 14px; height: 14px;
+        }
+
+        @media (max-width: 600px) {
+            .hozio-bh-day {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            .hozio-bh-day-times {
+                justify-content: flex-start;
+            }
+        }
+
+        /* Restyled WP Color Picker — full-width, polished button */
+        .hozio-nav-color-card .wp-picker-container {
+            display: block;
+            width: 100%;
+        }
+        .hozio-nav-color-card .wp-picker-container .wp-color-result.button {
+            width: 100% !important;
+            height: 44px !important;
+            margin: 0 0 8px 0 !important;
+            padding: 0 14px 0 50px !important;
+            border: 2px solid #e5e7eb !important;
+            border-radius: 8px !important;
+            background: white !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            color: #374151 !important;
+            text-align: left !important;
+            box-shadow: none !important;
+            cursor: pointer !important;
+            transition: border-color 0.2s, box-shadow 0.2s !important;
+            position: relative !important;
+            line-height: 40px !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        .hozio-nav-color-card .wp-picker-container .wp-color-result.button:hover {
+            border-color: var(--hozio-blue) !important;
+            box-shadow: 0 2px 8px rgba(0,160,227,0.12) !important;
+        }
+        .hozio-nav-color-card .wp-picker-container .wp-color-result.button:focus {
+            border-color: var(--hozio-blue) !important;
+            box-shadow: 0 0 0 3px rgba(0,160,227,0.15) !important;
+            outline: none !important;
+        }
+        .hozio-nav-color-card .wp-picker-container .wp-color-result-text {
+            background: transparent !important;
+            color: inherit !important;
+            border-left: none !important;
+            padding: 0 !important;
+            line-height: 40px !important;
+            font-weight: 600 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.3px !important;
+            font-size: 12px !important;
+        }
+        .hozio-nav-color-card .wp-picker-container .wp-color-result.button:after {
+            content: '' !important;
+            position: absolute !important;
+            left: 8px !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+            width: 32px !important;
+            height: 32px !important;
+            border-radius: 6px !important;
+            border: 1px solid rgba(0,0,0,0.12) !important;
+            background-color: inherit !important;
+            background-image:
+                linear-gradient(45deg, #ddd 25%, transparent 25%),
+                linear-gradient(-45deg, #ddd 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #ddd 75%),
+                linear-gradient(-45deg, transparent 75%, #ddd 75%) !important;
+            background-size: 8px 8px !important;
+            background-position: 0 0, 0 4px, 4px -4px, -4px 0 !important;
+        }
+        /* Apply chosen color via CSS variable on the swatch */
+        .hozio-nav-color-card .wp-picker-container .wp-color-result.button {
+            --hozio-swatch-color: #ffffff;
+        }
+        .hozio-nav-color-card .wp-picker-container .wp-color-result.button:after {
+            background-color: var(--hozio-swatch-color) !important;
+            background-image: none !important;
+        }
+        /* Hide WP's default tiny color square inside the result button */
+        .hozio-nav-color-card .wp-picker-container .wp-color-result-text {
+            margin-left: 4px !important;
+        }
+        .hozio-nav-color-card .wp-picker-container .wp-picker-input-wrap {
+            margin-top: 4px !important;
+        }
+        .hozio-nav-color-card .wp-picker-container .wp-picker-holder {
+            margin-top: 4px !important;
+            border-radius: 8px !important;
+            overflow: hidden !important;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important;
+            border: 1px solid #e5e7eb !important;
+        }
+
+        /* Auto-built textarea state */
+        .hozio-textarea.hozio-addr-auto {
+            background: #f9fafb;
+            color: #374151;
+            border-color: #d1d5db;
+            border-style: dashed;
+            cursor: not-allowed;
+            resize: none;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+        }
+
+        /* Address subsection divider */
+        .hozio-address-subsection {
+            padding: 20px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .hozio-address-subsection-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6b7280;
+            margin: 0 0 16px 0;
+        }
+        .hozio-address-subsection-title .dashicons {
+            font-size: 16px;
+            color: var(--hozio-blue);
+        }
+        .hozio-addr-clear-btn {
+            margin-left: auto;
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            background: transparent;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            color: #9ca3af;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+        .hozio-addr-clear-btn:hover {
+            border-color: #ef4444;
+            color: #ef4444;
+            background: #fef2f2;
+        }
+        .hozio-addr-clear-btn .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+            color: inherit;
+        }
+
+        /* State combo + compact format toggle */
+        .hozio-state-fmt-row {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-top: 6px;
+        }
+        .hozio-state-fmt-toggle {
+            position: relative;
+            display: inline-block;
+            width: 30px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+        .hozio-state-fmt-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .hozio-state-fmt-toggle .hozio-toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: #d1d5db;
+            border-radius: 16px;
+            transition: .3s;
+        }
+        .hozio-state-fmt-toggle .hozio-toggle-slider:before {
+            content: "";
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            left: 2px;
+            bottom: 2px;
+            background: white;
+            border-radius: 50%;
+            transition: .3s;
+        }
+        .hozio-state-fmt-toggle input:checked + .hozio-toggle-slider {
+            background: var(--hozio-blue);
+        }
+        .hozio-state-fmt-toggle input:checked + .hozio-toggle-slider:before {
+            transform: translateX(14px);
+        }
+        .hozio-state-fmt-text {
+            font-size: 11px;
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        /* Custom State Dropdown — replaces native datalist */
+        .hozio-state-combo-wrap {
+            position: relative;
+        }
+        .hozio-state-combo-input {
+            cursor: pointer !important;
+            background: white !important;
+            padding-right: 36px !important;
+            user-select: none;
+        }
+        .hozio-state-combo-arrow {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            pointer-events: none;
+            transition: transform 0.2s, color 0.2s;
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+        }
+        .hozio-state-combo-wrap.open .hozio-state-combo-arrow {
+            transform: translateY(-50%) rotate(180deg);
+            color: var(--hozio-blue);
+        }
+        .hozio-state-combo-wrap.open .hozio-state-combo-input {
+            border-color: var(--hozio-blue);
+            box-shadow: 0 0 0 3px rgba(0,160,227,0.1);
+        }
+        .hozio-state-dropdown {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            overflow: hidden;
+            max-height: 340px;
+            display: flex;
+            flex-direction: column;
+            animation: hozioDropFade 0.15s ease-out;
+        }
+        @keyframes hozioDropFade {
+            from { opacity: 0; transform: translateY(-4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .hozio-state-dropdown[hidden] { display: none; }
+        .hozio-state-dropdown-search {
+            padding: 8px;
+            border-bottom: 1px solid #f1f5f9;
+            background: #fafbfc;
+            flex-shrink: 0;
+        }
+        .hozio-state-search-input {
+            width: 100%;
+            padding: 7px 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 13px;
+            box-sizing: border-box;
+            background: white;
+        }
+        .hozio-state-search-input:focus {
+            outline: none;
+            border-color: var(--hozio-blue);
+            box-shadow: 0 0 0 2px rgba(0,160,227,0.1);
+        }
+        .hozio-state-options {
+            overflow-y: auto;
+            max-height: 260px;
+            flex: 1;
+        }
+        .hozio-state-options::-webkit-scrollbar { width: 8px; }
+        .hozio-state-options::-webkit-scrollbar-track { background: #f9fafb; }
+        .hozio-state-options::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+        .hozio-state-options::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        .hozio-state-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: background 0.1s;
+            border-bottom: 1px solid #f9fafb;
+        }
+        .hozio-state-option[hidden] { display: none !important; }
+        .hozio-state-option:last-child { border-bottom: none; }
+        .hozio-state-option:hover,
+        .hozio-state-option.hozio-state-option-active {
+            background: #f0f9ff;
+        }
+        .hozio-state-option.hozio-state-option-selected {
+            background: #eff6ff;
+        }
+        .hozio-state-option.hozio-state-option-selected .hozio-state-option-abbr {
+            color: var(--hozio-blue);
+        }
+        .hozio-state-option-abbr {
+            font-weight: 700;
+            font-size: 13px;
+            color: #1f2937;
+            min-width: 28px;
+            flex-shrink: 0;
+        }
+        .hozio-state-option-name {
+            font-size: 13px;
+            color: #6b7280;
+        }
+        .hozio-state-option-check {
+            margin-left: auto;
+            color: var(--hozio-blue);
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+            display: none;
+        }
+        .hozio-state-option-selected .hozio-state-option-check {
+            display: inline-block;
+        }
+        .hozio-state-option-none {
+            padding: 16px 12px;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 13px;
+            font-style: italic;
+        }
+
+        /* Street address autocomplete (Photon) */
+        .hozio-addr-autocomplete {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            z-index: 999;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            max-height: 280px;
+            overflow-y: auto;
+            animation: hozioDropFade 0.15s ease-out;
+        }
+        .hozio-addr-autocomplete[hidden] { display: none; }
+        .hozio-addr-suggestion {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f9fafb;
+            transition: background 0.1s;
+        }
+        .hozio-addr-suggestion:last-child { border-bottom: none; }
+        .hozio-addr-suggestion:hover,
+        .hozio-addr-suggestion.hozio-addr-active {
+            background: #f0f9ff;
+        }
+        .hozio-addr-suggestion-line1 {
+            font-weight: 600;
+            font-size: 13px;
+            color: #1f2937;
+        }
+        .hozio-addr-suggestion-line2 {
+            font-size: 11px;
+            color: #6b7280;
+            margin-top: 2px;
+        }
+        .hozio-addr-loading,
+        .hozio-addr-empty {
+            padding: 12px;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 12px;
+            font-style: italic;
+        }
+        .hozio-addr-loading .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+            vertical-align: middle;
+            animation: hozioSpin 1s linear infinite;
+        }
+        @keyframes hozioSpin {
+            to { transform: rotate(360deg); }
+        }
+        .hozio-addr-credit {
+            padding: 6px 10px;
+            font-size: 10px;
+            color: #cbd5e1;
+            text-align: right;
+            border-top: 1px solid #f1f5f9;
+            background: #fafbfc;
+        }
+
+        @media (max-width: 1100px) and (min-width: 783px) {
+            .hozio-address-grid { grid-template-columns: 1fr 1fr; }
+            .hozio-biz-bottom  { grid-template-columns: 1fr 1fr; }
+            .hozio-biz-bottom > .hozio-biz-card:first-child { grid-column: 1 / -1; }
+        }
+
         @media (max-width: 782px) {
             .hozio-grid,
             .hozio-grid-3 {
+                grid-template-columns: 1fr;
+            }
+            .hozio-address-grid,
+            .hozio-biz-bottom {
                 grid-template-columns: 1fr;
             }
             .hozio-header {
@@ -523,7 +1840,14 @@ function hozio_dynamic_tags_register_settings() {
         'hozio_sms_phone',
         'hozio_company_email',
         'hozio_company_address',
+        'hozio_address_street',
+        'hozio_address_town',
+        'hozio_address_state',
+        'hozio_address_state_format',
+        'hozio_address_zip',
         'hozio_business_hours',
+        'hozio_business_hours_mode',
+        'hozio_business_hours_classic',
         'hozio_yelp_url',
         'hozio_youtube_url',
         'hozio_angies_list_url',
@@ -563,6 +1887,10 @@ function hozio_get_shortcode_tag_slug( $field_id ) {
         'hozio_company_email'          => 'company-email',
         'hozio_to_email_contact_form'  => 'to-email-contact-form',
         'hozio_company_address'        => 'company-address',
+        'hozio_address_street'         => 'company-address-street',
+        'hozio_address_town'           => 'company-address-town',
+        'hozio_address_state'          => 'company-address-state',
+        'hozio_address_zip'            => 'company-address-zip',
         'hozio_business_hours'         => 'business-hours',
         'hozio_start_year'             => 'years-of-experience',
         'hozio_gmb_link'               => 'gmb-link',
@@ -796,21 +2124,309 @@ function hozio_dynamic_tags_settings_page() {
                         <span class="dashicons dashicons-building"></span>
                         <h2>Business Details</h2>
                     </div>
-                    <div class="hozio-grid">
+
+                    <!-- Address subsection -->
+                    <div class="hozio-address-subsection">
+                        <p class="hozio-address-subsection-title">
+                            <span class="dashicons dashicons-location"></span>
+                            Address Fields
+                            <button type="button" id="hozio-addr-clear" class="hozio-addr-clear-btn">
+                                <span class="dashicons dashicons-dismiss"></span> Clear All
+                            </button>
+                        </p>
+
+                        <!-- Structured inputs: Street / Town / State / ZIP -->
+                        <div class="hozio-address-grid">
+                            <?php
+                            $addr_inputs = [
+                                'hozio_address_street' => ['label' => 'Street Name', 'placeholder' => '123 Main St'],
+                                'hozio_address_town'   => ['label' => 'Town / City', 'placeholder' => 'Springfield'],
+                                'hozio_address_state'  => ['label' => 'State',        'placeholder' => ''],
+                                'hozio_address_zip'    => ['label' => 'ZIP Code',     'placeholder' => '01844'],
+                            ];
+                            $us_states = [
+                                'AL'=>'Alabama','AK'=>'Alaska','AZ'=>'Arizona','AR'=>'Arkansas',
+                                'CA'=>'California','CO'=>'Colorado','CT'=>'Connecticut','DE'=>'Delaware',
+                                'FL'=>'Florida','GA'=>'Georgia','HI'=>'Hawaii','ID'=>'Idaho',
+                                'IL'=>'Illinois','IN'=>'Indiana','IA'=>'Iowa','KS'=>'Kansas',
+                                'KY'=>'Kentucky','LA'=>'Louisiana','ME'=>'Maine','MD'=>'Maryland',
+                                'MA'=>'Massachusetts','MI'=>'Michigan','MN'=>'Minnesota','MS'=>'Mississippi',
+                                'MO'=>'Missouri','MT'=>'Montana','NE'=>'Nebraska','NV'=>'Nevada',
+                                'NH'=>'New Hampshire','NJ'=>'New Jersey','NM'=>'New Mexico','NY'=>'New York',
+                                'NC'=>'North Carolina','ND'=>'North Dakota','OH'=>'Ohio','OK'=>'Oklahoma',
+                                'OR'=>'Oregon','PA'=>'Pennsylvania','RI'=>'Rhode Island','SC'=>'South Carolina',
+                                'SD'=>'South Dakota','TN'=>'Tennessee','TX'=>'Texas','UT'=>'Utah',
+                                'VT'=>'Vermont','VA'=>'Virginia','WA'=>'Washington','WV'=>'West Virginia',
+                                'WI'=>'Wisconsin','WY'=>'Wyoming',
+                            ];
+                            foreach ( $addr_inputs as $opt_key => $meta ) :
+                                $val      = get_option( $opt_key, '' );
+                                $tag_slug = hozio_get_shortcode_tag_slug( $opt_key );
+                                if ( $opt_key === 'hozio_address_state' ) :
+                                    $state_format  = get_option( 'hozio_address_state_format', 'abbr' );
+                                    $selected_abbr = '';
+                                    foreach ( $us_states as $abbr => $name ) {
+                                        if ( $val === $abbr || $val === $name ) { $selected_abbr = $abbr; break; }
+                                    }
+                            ?>
+                            <div class="hozio-field hozio-state-field">
+                                <label><?php echo esc_html( $meta['label'] ); ?></label>
+                                <div class="hozio-state-combo-wrap" id="hozio-state-combo-wrap">
+                                    <input type="text" id="hozio-state-display" class="hozio-input hozio-state-combo-input"
+                                           placeholder="Select a state..." autocomplete="off" readonly>
+                                    <span class="hozio-state-combo-arrow dashicons dashicons-arrow-down-alt2"></span>
+                                    <div class="hozio-state-dropdown" id="hozio-state-dropdown" hidden>
+                                        <div class="hozio-state-dropdown-search">
+                                            <input type="text" id="hozio-state-search-input" class="hozio-state-search-input"
+                                                   placeholder="Search by abbreviation or name..." autocomplete="off">
+                                        </div>
+                                        <div class="hozio-state-options" id="hozio-state-options">
+                                            <?php foreach ( $us_states as $abbr => $name ) : ?>
+                                            <div class="hozio-state-option<?php echo ( $selected_abbr === $abbr ) ? ' hozio-state-option-selected' : ''; ?>"
+                                                 data-abbr="<?php echo esc_attr( $abbr ); ?>"
+                                                 data-name="<?php echo esc_attr( $name ); ?>">
+                                                <span class="hozio-state-option-abbr"><?php echo esc_html( $abbr ); ?></span>
+                                                <span class="hozio-state-option-name"><?php echo esc_html( $name ); ?></span>
+                                                <span class="hozio-state-option-check dashicons dashicons-yes"></span>
+                                            </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="hozio_address_state" id="hozio-state-hidden"
+                                       value="<?php echo esc_attr( $val ); ?>">
+                                <input type="hidden" name="hozio_address_state_format" id="hozio-state-fmt-hidden"
+                                       value="<?php echo esc_attr( $state_format ); ?>">
+                                <div class="hozio-state-fmt-row">
+                                    <label class="hozio-state-fmt-toggle">
+                                        <input type="checkbox" id="hozio-state-fmt-chk"
+                                               <?php echo ( $state_format === 'full' ) ? 'checked' : ''; ?>>
+                                        <span class="hozio-toggle-slider"></span>
+                                    </label>
+                                    <span class="hozio-state-fmt-text">Full name</span>
+                                </div>
+                                <button type="button" class="hozio-copy-shortcode"
+                                        data-shortcode="<?php echo esc_attr( '[hozio tag="' . $tag_slug . '"]' ); ?>"
+                                        title="Copy shortcode">
+                                    <code><?php echo esc_html( $tag_slug ); ?></code>
+                                    <svg class="hozio-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M11 2H5.5A1.5 1.5 0 004 3.5v9A1.5 1.5 0 005.5 14h5a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0011 2z"/><path d="M4.5 0A1.5 1.5 0 003 1.5V11a.5.5 0 001 0V1.5a.5.5 0 01.5-.5H9a.5.5 0 000-1H4.5z"/></svg>
+                                    <svg class="hozio-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+                                </button>
+                            </div>
+                            <?php else : ?>
+                            <div class="hozio-field">
+                                <label><?php echo esc_html( $meta['label'] ); ?></label>
+                                <div class="hozio-input-group">
+                                    <span class="hozio-input-icon"><span class="dashicons dashicons-location"></span></span>
+                                    <input type="text" name="<?php echo esc_attr( $opt_key ); ?>"
+                                           value="<?php echo esc_attr( $val ); ?>"
+                                           class="hozio-input"
+                                           placeholder="<?php echo esc_attr( $meta['placeholder'] ); ?>">
+                                </div>
+                                <button type="button" class="hozio-copy-shortcode"
+                                        data-shortcode="<?php echo esc_attr( '[hozio tag="' . $tag_slug . '"]' ); ?>"
+                                        title="Copy shortcode">
+                                    <code><?php echo esc_html( $tag_slug ); ?></code>
+                                    <svg class="hozio-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M11 2H5.5A1.5 1.5 0 004 3.5v9A1.5 1.5 0 005.5 14h5a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0011 2z"/><path d="M4.5 0A1.5 1.5 0 003 1.5V11a.5.5 0 001 0V1.5a.5.5 0 01.5-.5H9a.5.5 0 000-1H4.5z"/></svg>
+                                    <svg class="hozio-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+                                </button>
+                            </div>
+                            <?php endif; endforeach; ?>
+                        </div>
+
+                        <!-- Company Address: JS toggles readonly when structured fields are filled -->
+                        <?php $addr_current = get_option( 'hozio_company_address', '' ); ?>
+                        <div class="hozio-field" style="margin-top:16px;">
+                            <label>
+                                Company Address
+                                <span class="hozio-address-readonly-badge" id="hozio-addr-badge" style="display:none;">
+                                    <span class="dashicons dashicons-lock" style="font-size:12px;width:12px;height:12px;"></span>
+                                    auto-built
+                                </span>
+                            </label>
+                            <textarea name="hozio_company_address" id="hozio-addr-output"
+                                      class="hozio-textarea" rows="3"
+                                      placeholder="e.g. 123 Main St&lt;br&gt;Springfield, MA 01844"><?php echo esc_textarea( $addr_current ); ?></textarea>
+                            <p class="hozio-field-description" id="hozio-addr-desc">HTML tags allowed. Fill Street / Town / State / ZIP above to auto-build this field.</p>
+                            <button type="button" class="hozio-copy-shortcode"
+                                    data-shortcode="[hozio tag=&quot;company-address&quot;]"
+                                    title="Copy shortcode">
+                                <code>company-address</code>
+                                <svg class="hozio-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M11 2H5.5A1.5 1.5 0 004 3.5v9A1.5 1.5 0 005.5 14h5a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0011 2z"/><path d="M4.5 0A1.5 1.5 0 003 1.5V11a.5.5 0 001 0V1.5a.5.5 0 01.5-.5H9a.5.5 0 000-1H4.5z"/></svg>
+                                <svg class="hozio-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+                            </button>
+                        </div>
+                    </div><!-- /.hozio-address-subsection -->
+
+                    <!-- Business Hours / Start Year / Nav Color — Redesigned Cards -->
+                    <div class="hozio-biz-bottom">
+                        <!-- Business Hours card (full width) -->
                         <?php
-                        $business_fields = [
-                            'hozio_company_address' => 'Company Address',
-                            'hozio_business_hours' => 'Business Hours',
-                            'hozio_start_year' => 'Start Year',
-                            'hozio_nav_text_color' => 'Navigation Text Color',
-                        ];
-                        
-                        foreach ($business_fields as $key => $label) {
-                            echo '<div class="hozio-field"><label>' . esc_html($label) . '</label>';
-                            hozio_dynamic_tags_render_input(['label_for' => $key]);
-                            echo '</div>';
+                        $bh_mode    = get_option( 'hozio_business_hours_mode', 'html' );
+                        $bh_classic = get_option( 'hozio_business_hours_classic', null );
+                        if ( ! is_array( $bh_classic ) || ! isset( $bh_classic['days'] ) ) {
+                            $bh_classic = function_exists( 'hozio_default_business_hours_classic' )
+                                ? hozio_default_business_hours_classic()
+                                : array(
+                                    'always_open' => false,
+                                    'days' => array(
+                                        'monday'    => array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' ),
+                                        'tuesday'   => array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' ),
+                                        'wednesday' => array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' ),
+                                        'thursday'  => array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' ),
+                                        'friday'    => array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' ),
+                                        'saturday'  => array( 'status' => 'closed', 'open' => '09:00', 'close' => '17:00' ),
+                                        'sunday'    => array( 'status' => 'closed', 'open' => '09:00', 'close' => '17:00' ),
+                                    ),
+                                );
                         }
+                        // Build 15-minute time options (00:00 → 23:45)
+                        $bh_time_options = array();
+                        for ( $h = 0; $h < 24; $h++ ) {
+                            foreach ( array( '00', '15', '30', '45' ) as $m ) {
+                                $val = sprintf( '%02d:%s', $h, $m );
+                                $h12 = ( $h % 12 === 0 ) ? 12 : ( $h % 12 );
+                                $period = ( $h >= 12 ) ? 'PM' : 'AM';
+                                $bh_time_options[ $val ] = $h12 . ':' . $m . ' ' . $period;
+                            }
+                        }
+                        $bh_day_labels = array(
+                            'monday' => 'Mon', 'tuesday' => 'Tue', 'wednesday' => 'Wed',
+                            'thursday' => 'Thu', 'friday' => 'Fri', 'saturday' => 'Sat',
+                            'sunday' => 'Sun',
+                        );
                         ?>
+                        <div class="hozio-biz-card">
+                            <div class="hozio-biz-card-header">
+                                <span class="dashicons dashicons-clock"></span>
+                                <h3>Business Hours</h3>
+                                <div class="hozio-bh-mode-toggle" role="tablist">
+                                    <button type="button" class="hozio-bh-mode-btn <?php echo $bh_mode === 'html' ? 'hozio-bh-mode-active' : ''; ?>" data-mode="html">HTML</button>
+                                    <button type="button" class="hozio-bh-mode-btn <?php echo $bh_mode === 'classic' ? 'hozio-bh-mode-active' : ''; ?>" data-mode="classic">Classic</button>
+                                </div>
+                                <input type="hidden" name="hozio_business_hours_mode" id="hozio-bh-mode-input"
+                                       value="<?php echo esc_attr( $bh_mode ); ?>">
+                            </div>
+
+                            <!-- HTML mode -->
+                            <div class="hozio-bh-html-view" <?php echo $bh_mode === 'html' ? '' : 'hidden'; ?>>
+                                <textarea name="hozio_business_hours" id="hozio_business_hours"
+                                          class="hozio-biz-input"
+                                          rows="5"
+                                          placeholder="Mon - Fri: 8am - 7pm&lt;br&gt;Sat: 8am - 4pm&lt;br&gt;Sun: Closed"><?php echo esc_textarea( get_option( 'hozio_business_hours', '' ) ); ?></textarea>
+                            </div>
+
+                            <!-- Classic mode -->
+                            <div class="hozio-bh-classic-view <?php echo ! empty( $bh_classic['always_open'] ) ? 'is-247' : ''; ?>"
+                                 <?php echo $bh_mode === 'classic' ? '' : 'hidden'; ?>>
+                                <label class="hozio-bh-247-row">
+                                    <span class="hozio-bh-247-switch">
+                                        <input type="checkbox" name="hozio_business_hours_classic[always_open]" id="hozio-bh-247-chk" value="1"
+                                               <?php checked( ! empty( $bh_classic['always_open'] ) ); ?>>
+                                        <span class="hozio-bh-247-slider"></span>
+                                    </span>
+                                    <strong>Open 24/7</strong>
+                                    <span class="hozio-bh-247-help">Overrides per-day settings</span>
+                                </label>
+
+                                <div class="hozio-bh-days">
+                                    <?php foreach ( $bh_day_labels as $day_key => $day_label ) :
+                                        $day = isset( $bh_classic['days'][ $day_key ] ) ? $bh_classic['days'][ $day_key ] : array();
+                                        $status = ( $day['status'] ?? 'open' ) === 'closed' ? 'closed' : 'open';
+                                        $open_v  = $day['open']  ?? '09:00';
+                                        $close_v = $day['close'] ?? '17:00';
+                                    ?>
+                                    <div class="hozio-bh-day <?php echo $status === 'closed' ? 'is-closed' : ''; ?>" data-day="<?php echo esc_attr( $day_key ); ?>">
+                                        <div class="hozio-bh-day-label"><?php echo esc_html( $day_label ); ?></div>
+                                        <div class="hozio-bh-status-pills">
+                                            <button type="button" class="hozio-bh-status-btn <?php echo $status === 'open' ? 'is-active' : ''; ?>" data-status="open">Open</button>
+                                            <button type="button" class="hozio-bh-status-btn <?php echo $status === 'closed' ? 'is-active' : ''; ?>" data-status="closed">Closed</button>
+                                        </div>
+                                        <div class="hozio-bh-day-times">
+                                            <input type="hidden" name="hozio_business_hours_classic[days][<?php echo esc_attr( $day_key ); ?>][status]"
+                                                   value="<?php echo esc_attr( $status ); ?>" class="hozio-bh-day-status-input">
+                                            <select name="hozio_business_hours_classic[days][<?php echo esc_attr( $day_key ); ?>][open]" class="hozio-bh-time-select">
+                                                <?php foreach ( $bh_time_options as $tv => $tl ) : ?>
+                                                <option value="<?php echo esc_attr( $tv ); ?>" <?php selected( $open_v, $tv ); ?>><?php echo esc_html( $tl ); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <span class="hozio-bh-time-sep">to</span>
+                                            <select name="hozio_business_hours_classic[days][<?php echo esc_attr( $day_key ); ?>][close]" class="hozio-bh-time-select">
+                                                <?php foreach ( $bh_time_options as $tv => $tl ) : ?>
+                                                <option value="<?php echo esc_attr( $tv ); ?>" <?php selected( $close_v, $tv ); ?>><?php echo esc_html( $tl ); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
+
+                                <div class="hozio-bh-actions">
+                                    <button type="button" class="hozio-bh-apply-weekdays" id="hozio-bh-apply-weekdays">
+                                        <span class="dashicons dashicons-controls-repeat"></span>
+                                        Apply Mon to Tue–Fri
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="hozio-biz-card-footer">
+                                <span class="hozio-biz-card-help">Toggle between freeform HTML and structured per-day editor</span>
+                                <button type="button" class="hozio-copy-shortcode"
+                                        data-shortcode="[hozio tag=&quot;business-hours&quot;]"
+                                        title="Copy shortcode">
+                                    <code>business-hours</code>
+                                    <svg class="hozio-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M11 2H5.5A1.5 1.5 0 004 3.5v9A1.5 1.5 0 005.5 14h5a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0011 2z"/><path d="M4.5 0A1.5 1.5 0 003 1.5V11a.5.5 0 001 0V1.5a.5.5 0 01.5-.5H9a.5.5 0 000-1H4.5z"/></svg>
+                                    <svg class="hozio-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Start Year card -->
+                        <?php
+                        $stored_start_year   = get_option( 'hozio_start_year', '' );
+                        $current_year        = (int) date( 'Y' );
+                        $years_of_experience = ( $stored_start_year ) ? $current_year - (int) $stored_start_year : 0;
+                        ?>
+                        <div class="hozio-biz-card">
+                            <div class="hozio-biz-card-header">
+                                <span class="dashicons dashicons-calendar-alt"></span>
+                                <h3>Start Year</h3>
+                            </div>
+                            <input type="number" name="hozio_start_year" id="hozio_start_year"
+                                   class="hozio-biz-input"
+                                   value="<?php echo esc_attr( $stored_start_year ); ?>"
+                                   min="1900" max="<?php echo esc_attr( $current_year ); ?>"
+                                   placeholder="e.g. 2010">
+                            <div class="hozio-biz-year-badge">
+                                <span class="dashicons dashicons-awards"></span>
+                                <span>Years: <span class="hozio-years-num"><?php echo esc_html( $years_of_experience ); ?></span></span>
+                            </div>
+                            <div class="hozio-biz-card-footer">
+                                <span class="hozio-biz-card-help">&nbsp;</span>
+                                <button type="button" class="hozio-copy-shortcode"
+                                        data-shortcode="[hozio tag=&quot;years-of-experience&quot;]"
+                                        title="Copy shortcode">
+                                    <code>years-of-experience</code>
+                                    <svg class="hozio-copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M11 2H5.5A1.5 1.5 0 004 3.5v9A1.5 1.5 0 005.5 14h5a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0011 2z"/><path d="M4.5 0A1.5 1.5 0 003 1.5V11a.5.5 0 001 0V1.5a.5.5 0 01.5-.5H9a.5.5 0 000-1H4.5z"/></svg>
+                                    <svg class="hozio-check-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Nav Text Color card -->
+                        <div class="hozio-biz-card hozio-nav-color-card">
+                            <div class="hozio-biz-card-header">
+                                <span class="dashicons dashicons-art"></span>
+                                <h3>Navigation Text Color</h3>
+                            </div>
+                            <input type="text" name="hozio_nav_text_color" id="hozio_nav_text_color"
+                                   class="hozio-color-picker"
+                                   value="<?php echo esc_attr( get_option( 'hozio_nav_text_color', '' ) ); ?>" />
+                            <div class="hozio-biz-card-footer">
+                                <span class="hozio-biz-card-help">Color for navigation menu text</span>
+                                <span></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -944,13 +2560,70 @@ function hozio_dynamic_tags_save_settings() {
         wp_die('Nonce verification failed');
     }
 
+    // Save structured address fields; auto-build company_address when any are filled.
+    $addr_street = isset( $_POST['hozio_address_street'] ) ? sanitize_text_field( $_POST['hozio_address_street'] ) : '';
+    $addr_town   = isset( $_POST['hozio_address_town'] )   ? sanitize_text_field( $_POST['hozio_address_town'] )   : '';
+    $addr_state  = isset( $_POST['hozio_address_state'] )  ? sanitize_text_field( $_POST['hozio_address_state'] )  : '';
+    $addr_zip    = isset( $_POST['hozio_address_zip'] )    ? sanitize_text_field( $_POST['hozio_address_zip'] )    : '';
+    update_option( 'hozio_address_street', $addr_street );
+    update_option( 'hozio_address_town',   $addr_town );
+    $addr_state_fmt = isset( $_POST['hozio_address_state_format'] ) ? sanitize_text_field( $_POST['hozio_address_state_format'] ) : 'abbr';
+    update_option( 'hozio_address_state',        $addr_state );
+    update_option( 'hozio_address_state_format', $addr_state_fmt );
+    update_option( 'hozio_address_zip',          $addr_zip );
+    if ( $addr_street || $addr_town || $addr_state || $addr_zip ) {
+        $line2 = trim( $addr_town . ( $addr_state ? ', ' . $addr_state : '' ) . ( $addr_zip ? ' ' . $addr_zip : '' ) );
+        update_option( 'hozio_company_address', $addr_street . ( $line2 ? '<br>' . $line2 : '' ) );
+    } elseif ( isset( $_POST['hozio_company_address'] ) ) {
+        update_option( 'hozio_company_address', wp_kses_post( wp_unslash( $_POST['hozio_company_address'] ) ) );
+    }
+
+    // --- Business Hours mode + classic structure ---
+    $bh_mode_in = isset( $_POST['hozio_business_hours_mode'] ) ? $_POST['hozio_business_hours_mode'] : 'html';
+    update_option( 'hozio_business_hours_mode', $bh_mode_in === 'classic' ? 'classic' : 'html' );
+
+    $bh_classic_default = function_exists( 'hozio_default_business_hours_classic' )
+        ? hozio_default_business_hours_classic()
+        : array(
+            'always_open' => false,
+            'days' => array(
+                'monday'    => array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' ),
+                'tuesday'   => array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' ),
+                'wednesday' => array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' ),
+                'thursday'  => array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' ),
+                'friday'    => array( 'status' => 'open',   'open' => '09:00', 'close' => '17:00' ),
+                'saturday'  => array( 'status' => 'closed', 'open' => '09:00', 'close' => '17:00' ),
+                'sunday'    => array( 'status' => 'closed', 'open' => '09:00', 'close' => '17:00' ),
+            ),
+        );
+    $bh_classic_in = isset( $_POST['hozio_business_hours_classic'] ) && is_array( $_POST['hozio_business_hours_classic'] )
+        ? wp_unslash( $_POST['hozio_business_hours_classic'] )
+        : array();
+    $bh_save = $bh_classic_default;
+    $bh_save['always_open'] = ! empty( $bh_classic_in['always_open'] );
+    if ( isset( $bh_classic_in['days'] ) && is_array( $bh_classic_in['days'] ) ) {
+        foreach ( $bh_classic_default['days'] as $day_key => $day_default ) {
+            if ( isset( $bh_classic_in['days'][ $day_key ] ) && is_array( $bh_classic_in['days'][ $day_key ] ) ) {
+                $d      = $bh_classic_in['days'][ $day_key ];
+                $status = ( isset( $d['status'] ) && $d['status'] === 'closed' ) ? 'closed' : 'open';
+                $open_v  = isset( $d['open'] )  ? sanitize_text_field( $d['open'] )  : $day_default['open'];
+                $close_v = isset( $d['close'] ) ? sanitize_text_field( $d['close'] ) : $day_default['close'];
+                if ( ! preg_match( '/^\d{2}:\d{2}$/', $open_v ) )  { $open_v  = $day_default['open']; }
+                if ( ! preg_match( '/^\d{2}:\d{2}$/', $close_v ) ) { $close_v = $day_default['close']; }
+                $bh_save['days'][ $day_key ] = array(
+                    'status' => $status, 'open' => $open_v, 'close' => $close_v,
+                );
+            }
+        }
+    }
+    update_option( 'hozio_business_hours_classic', $bh_save );
+
     $fields = [
         'hozio_company_phone_1',
         'hozio_company_phone_2',
         'hozio_google_ads_phone',
         'hozio_sms_phone',
         'hozio_company_email',
-        'hozio_company_address',
         'hozio_business_hours',
         'hozio_yelp_url',
         'hozio_youtube_url',

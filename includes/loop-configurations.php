@@ -572,7 +572,8 @@ function hozio_loop_configs_render_page() {
             ),
         );
     }
-    
+
+    ob_start();
     ?>
     <div class="wrap hozio-loop-configs-wrap">
         <div class="hozio-header">
@@ -639,9 +640,7 @@ function hozio_loop_configs_render_page() {
             </div>
         </form>
     </div>
-    
-
-
+    <?php $__html = ob_get_clean(); ?>
     <style>
         .hozio-loop-configs-wrap {
             max-width: 1200px;
@@ -1244,7 +1243,7 @@ function hozio_loop_configs_render_page() {
             }
         }
     </style>
-    
+    <?php echo $__html; ?>
     <script>
     jQuery(document).ready(function($) {
         var configIndex = <?php echo count($configs); ?>;
