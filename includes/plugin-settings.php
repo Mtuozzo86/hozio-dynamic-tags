@@ -1081,6 +1081,173 @@ function hozio_plugin_settings_page() {
                 </div><!-- /.hozio-accordion-body -->
             </div><!-- /.hozio-rollback-card -->
 
+            <!-- Rollback Diagnostic Card (v4.12.1+) -->
+            <?php
+            $debug_log     = get_option('hozio_rollback_debug_log', array());
+            if (!is_array($debug_log)) { $debug_log = array(); }
+            $debug_nonce   = wp_create_nonce('hozio_rollback_nonce');
+            $file_version  = '?';
+            $plugin_php    = plugin_dir_path(dirname(__FILE__)) . 'hozio-dynamic-tags.php';
+            if (file_exists($plugin_php)) {
+                $head = file_get_contents($plugin_php, false, null, 0, 4096);
+                if (preg_match('/^\s*\*\s*Version:\s*([0-9.]+)/mi', $head, $m)) {
+                    $file_version = $m[1];
+                }
+            }
+            $constant_version = defined('HOZIO_VERSION') ? HOZIO_VERSION : 'undefined';
+            $hub_connected    = class_exists('Hozio_Hub_Client') && Hozio_Hub_Client::is_connected();
+            ?>
+            <div class="hozio-sidebar-card hozio-diagnostic-card">
+                <button type="button" class="hozio-accordion-trigger" aria-expanded="true">
+                    <div class="hozio-accordion-title">
+                        <span class="dashicons dashicons-search"></span>
+                        <span>Rollback Diagnostic</span>
+                    </div>
+                    <div class="hozio-accordion-meta">
+                        <span class="hozio-version-pill" style="background:#fef3c7;color:#92400e;"><?php echo (int) count($debug_log); ?> events</span>
+                        <span class="dashicons dashicons-arrow-up-alt2 hozio-accordion-chevron"></span>
+                    </div>
+                </button>
+                <div class="hozio-accordion-body">
+                    <!-- Version mismatch check -->
+                    <div class="hozio-diag-row">
+                        <div class="hozio-diag-label">File header version</div>
+                        <div class="hozio-diag-value"><code>v<?php echo esc_html($file_version); ?></code></div>
+                    </div>
+                    <div class="hozio-diag-row">
+                        <div class="hozio-diag-label">HOZIO_VERSION constant</div>
+                        <div class="hozio-diag-value"><code>v<?php echo esc_html($constant_version); ?></code></div>
+                    </div>
+                    <div class="hozio-diag-row">
+                        <div class="hozio-diag-label">Hub connected</div>
+                        <div class="hozio-diag-value"><code><?php echo $hub_connected ? 'yes' : 'no'; ?></code></div>
+                    </div>
+                    <?php if ($file_version !== '?' && $constant_version !== 'undefined' && $file_version !== $constant_version): ?>
+                    <p style="margin:8px 0;padding:8px 10px;background:#fee2e2;border-left:3px solid #dc2626;font-size:12px;color:#991b1b;border-radius:4px;">
+                        <strong>Mismatch:</strong> file header and HOZIO_VERSION constant don't match. Plugin files may have been corrupted by a partial update or rollback.
+                    </p>
+                    <?php endif; ?>
+
+                    <!-- Force-clear button -->
+                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid #f1f5f9;">
+                        <button type="button" id="hozio-force-clear-rollback" class="button"
+                                data-nonce="<?php echo esc_attr($debug_nonce); ?>"
+                                style="background:#fee2e2;border-color:#dc2626;color:#991b1b;font-weight:600;">
+                            <span class="dashicons dashicons-trash" style="vertical-align:middle;"></span>
+                            Force Clear Rollback Data
+                        </button>
+                        <p style="margin:6px 0 0;font-size:11px;color:#6b7280;font-style:italic;">
+                            Clears version history, pre-upgrade marker, all update caches, and the auto-update pause flag. Use this if the plugin is stuck rolling back to an old version.
+                        </p>
+                    </div>
+
+                    <!-- Debug log viewer -->
+                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid #f1f5f9;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                            <strong style="font-size:12px;color:#374151;text-transform:uppercase;letter-spacing:0.5px;">Recent Events</strong>
+                            <?php if (!empty($debug_log)): ?>
+                            <button type="button" id="hozio-clear-debug-log" class="button-link"
+                                    data-nonce="<?php echo esc_attr($debug_nonce); ?>"
+                                    style="font-size:11px;color:#9ca3af;text-decoration:underline;cursor:pointer;border:none;background:transparent;padding:0;">
+                                Clear log
+                            </button>
+                            <?php endif; ?>
+                        </div>
+                        <?php if (empty($debug_log)): ?>
+                        <p style="margin:0;padding:10px;background:#f9fafb;border-radius:6px;font-size:12px;color:#9ca3af;font-style:italic;text-align:center;">
+                            No events logged yet. Rollback attempts and Hub commands will appear here.
+                        </p>
+                        <?php else: ?>
+                        <ul class="hozio-debug-log-list">
+                            <?php foreach (array_slice($debug_log, 0, 30) as $entry):
+                                $when = date_i18n('M j, g:i:s a', $entry['time']);
+                                $msg  = (string) $entry['message'];
+                            ?>
+                            <li class="hozio-debug-log-item">
+                                <span class="hozio-debug-log-time"><?php echo esc_html($when); ?></span>
+                                <span class="hozio-debug-log-msg"><?php echo esc_html($msg); ?></span>
+                            </li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- Result area -->
+                    <div id="hozio-diag-result" style="display:none;margin-top:10px;padding:10px;border-radius:6px;font-size:12px;"></div>
+                </div>
+            </div>
+            <style>
+                .hozio-diagnostic-card .hozio-diag-row {
+                    display: flex; justify-content: space-between; align-items: center;
+                    padding: 6px 0;
+                }
+                .hozio-diagnostic-card .hozio-diag-label {
+                    font-size: 12px; color: #6b7280; font-weight: 500;
+                }
+                .hozio-diagnostic-card .hozio-diag-value code {
+                    background: #f3f4f6; padding: 2px 8px; border-radius: 4px;
+                    font-size: 11px; color: #1f2937;
+                }
+                .hozio-debug-log-list {
+                    list-style: none; margin: 0; padding: 0;
+                    max-height: 280px; overflow-y: auto;
+                    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;
+                }
+                .hozio-debug-log-item {
+                    padding: 8px 10px; border-bottom: 1px solid #f3f4f6;
+                    font-size: 11px; line-height: 1.5;
+                }
+                .hozio-debug-log-item:last-child { border-bottom: none; }
+                .hozio-debug-log-time {
+                    display: block; color: #9ca3af; font-weight: 600; font-size: 10px;
+                    text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px;
+                }
+                .hozio-debug-log-msg {
+                    display: block; color: #374151; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                    word-break: break-word;
+                }
+            </style>
+            <script>
+                jQuery(function($) {
+                    function showResult(success, msg) {
+                        var $r = $('#hozio-diag-result');
+                        $r.css({
+                            background: success ? '#d1fae5' : '#fee2e2',
+                            color:      success ? '#065f46' : '#991b1b',
+                            border:     '1px solid ' + (success ? '#34d399' : '#dc2626')
+                        }).text(msg).show();
+                    }
+                    $('#hozio-force-clear-rollback').on('click', function() {
+                        var $btn = $(this);
+                        if (!confirm('Clear all rollback data? This will:\n\n• Wipe install history\n• Clear all update caches\n• Remove pre-upgrade markers\n• Cancel any auto-update pause\n\nThe plugin files are NOT touched.')) return;
+                        $btn.prop('disabled', true).text('Clearing…');
+                        $.post(ajaxurl, {
+                            action: 'hozio_clear_rollback_data',
+                            nonce:  $btn.data('nonce')
+                        }).done(function(r) {
+                            if (r && r.success) {
+                                showResult(true, 'Cleared: ' + (r.data.cleared || []).join(', ') + '. Reload page to see updated state.');
+                            } else {
+                                showResult(false, 'Failed: ' + ((r && r.data && r.data.message) || 'unknown error'));
+                            }
+                        }).fail(function() {
+                            showResult(false, 'Request failed (network or server error).');
+                        }).always(function() {
+                            $btn.prop('disabled', false).html('<span class="dashicons dashicons-trash" style="vertical-align:middle;"></span> Force Clear Rollback Data');
+                        });
+                    });
+                    $('#hozio-clear-debug-log').on('click', function() {
+                        var $btn = $(this);
+                        $.post(ajaxurl, {
+                            action: 'hozio_clear_rollback_debug_log',
+                            nonce:  $btn.data('nonce')
+                        }).done(function(r) {
+                            if (r && r.success) location.reload();
+                        });
+                    });
+                });
+            </script>
+
             <!-- System Info Card -->
             <div class="hozio-sidebar-card hozio-sysinfo-card">
                 <button type="button" class="hozio-accordion-trigger" aria-expanded="true">

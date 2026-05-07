@@ -2,6 +2,29 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.1 (May 2026) ==
+
+= Diagnostics =
+
+* NEW: "Rollback Diagnostic" card in Plugin Settings sidebar — shows file header
+  version, HOZIO_VERSION constant, Hub connection status, and a recent-events
+  log capturing every rollback attempt with caller backtrace
+* NEW: One-click "Force Clear Rollback Data" button — clears version history,
+  pre-upgrade marker, all update caches, auto-update pause flag (no PHP
+  snippet or SQL needed)
+* NEW: Debug logging for hozio_perform_rollback() — records target version,
+  Hub vs. local trigger, caller chain, request URI, and user ID on every call
+* NEW: Hub command logger — logs incoming "rollback_plugin" commands with
+  full payload to the diagnostic log
+* NEW: upgrader_process_complete now logs the from→to version transition
+
+= Why =
+
+* v4.12.0 worked correctly on clean installs but sites with stuck rollback
+  state from older versions (notably v4.03's broken after_install) needed
+  visibility into what was triggering unwanted rollbacks. The diagnostic
+  card surfaces all of that in one place.
+
 == Version 4.12.0 (May 2026) ==
 
 = New Features =

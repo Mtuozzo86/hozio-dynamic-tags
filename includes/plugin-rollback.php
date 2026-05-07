@@ -6,6 +6,87 @@
 
 if (!defined('ABSPATH')) exit;
 
+// ─── Rollback Debug Log (v4.12.1+) ────────────────────────────────────────────
+
+/**
+ * Append a one-line entry to the rollback debug log (capped at 100 entries).
+ * Use this any time something rollback-related happens — call sites, Hub
+ * commands, install/uninstall events — so we can trace unwanted rollbacks.
+ */
+function hozio_rollback_debug_log($message) {
+    $log = get_option('hozio_rollback_debug_log', array());
+    if (!is_array($log)) { $log = array(); }
+    array_unshift($log, array(
+        'time'    => time(),
+        'message' => (string) $message,
+    ));
+    update_option('hozio_rollback_debug_log', array_slice($log, 0, 100), false);
+}
+
+/**
+ * Build a one-line "function@file:line → function@file:line" trace string for
+ * the current call stack, skipping the immediate frame (the logger itself).
+ */
+function hozio_rollback_caller_chain($depth = 6) {
+    if (!function_exists('debug_backtrace')) return 'unknown';
+    $frames = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, $depth + 2);
+    $out = array();
+    foreach (array_slice($frames, 2, $depth) as $f) {
+        $where = isset($f['file']) ? basename($f['file']) . ':' . ($f['line'] ?? '?') : '[internal]';
+        $what  = (isset($f['class']) ? $f['class'] . ($f['type'] ?? '::') : '') . ($f['function'] ?? '?');
+        $out[] = $what . '@' . $where;
+    }
+    return $out ? implode(' → ', $out) : 'top-level';
+}
+
+/**
+ * AJAX: clear all rollback-related options/transients.
+ * Usage: POST /wp-admin/admin-ajax.php  action=hozio_clear_rollback_data + nonce
+ */
+add_action('wp_ajax_hozio_clear_rollback_data', function() {
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Insufficient permissions.'], 403);
+    }
+    check_ajax_referer('hozio_rollback_nonce', 'nonce');
+
+    $cleared = array();
+    foreach (array(
+        'hozio_version_history',
+        'hozio_pre_upgrade_version',
+        'hozio_auto_updates_paused_until',
+    ) as $opt) {
+        if (get_option($opt, '__missing__') !== '__missing__') {
+            delete_option($opt);
+            $cleared[] = $opt;
+        }
+    }
+    foreach (array(
+        'hozio_plugin_update_cache',
+        'hozio_all_releases_cache',
+    ) as $tr) {
+        delete_transient($tr);
+        $cleared[] = $tr . ' (transient)';
+    }
+    delete_site_transient('update_plugins');
+    $cleared[] = 'update_plugins (site transient)';
+
+    hozio_rollback_debug_log('Force-clear executed by user_id=' . get_current_user_id() . '; cleared: ' . implode(', ', $cleared));
+
+    wp_send_json_success(['cleared' => $cleared]);
+});
+
+/**
+ * AJAX: clear the rollback debug log.
+ */
+add_action('wp_ajax_hozio_clear_rollback_debug_log', function() {
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Insufficient permissions.'], 403);
+    }
+    check_ajax_referer('hozio_rollback_nonce', 'nonce');
+    delete_option('hozio_rollback_debug_log');
+    wp_send_json_success();
+});
+
 // ─── License Gate ─────────────────────────────────────────────────────────────
 
 /**
@@ -84,7 +165,9 @@ add_action('upgrader_process_complete', function($upgrader, $hook_extra) {
     if (!in_array($plugin_file, (array)($hook_extra['plugins'] ?? []), true)) return;
 
     $previous = get_option('hozio_pre_upgrade_version', '');
-    hozio_record_version_snapshot(hozio_get_plugin_version(), 'auto_update', $previous);
+    $current  = hozio_get_plugin_version();
+    hozio_rollback_debug_log("upgrader_process_complete: plugin updated from v{$previous} to v{$current}");
+    hozio_record_version_snapshot($current, 'auto_update', $previous);
     delete_option('hozio_pre_upgrade_version');
 }, 10, 2);
 
@@ -170,6 +253,16 @@ function hozio_get_release_by_version($version) {
  */
 function hozio_perform_rollback($target_version, $from_hub = false) {
     $target_version = ltrim(sanitize_text_field($target_version), 'vV');
+
+    // Debug log — capture WHO called this and WHY (helps diagnose unwanted rollbacks)
+    hozio_rollback_debug_log(sprintf(
+        'hozio_perform_rollback() called: target=v%s from_hub=%s | caller=%s | request_uri=%s | user=%d',
+        $target_version,
+        $from_hub ? 'yes' : 'no',
+        hozio_rollback_caller_chain(),
+        isset($_SERVER['REQUEST_URI']) ? sanitize_text_field($_SERVER['REQUEST_URI']) : 'cli',
+        get_current_user_id()
+    ));
 
     if (empty($target_version)) {
         return ['success' => false, 'message' => 'Target version is required.'];
