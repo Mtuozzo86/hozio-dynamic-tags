@@ -442,9 +442,6 @@ class Hozio_Command_Executor {
         }
 
         hozio_audit_log("Hub-triggered rollback to v{$version}", 'Rollback');
-        if (function_exists('hozio_rollback_debug_log')) {
-            hozio_rollback_debug_log("Hub command 'rollback_plugin' received: target=v{$version} payload=" . wp_json_encode($payload));
-        }
 
         $result = hozio_perform_rollback($version, true);
 
