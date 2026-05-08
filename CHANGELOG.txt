@@ -2,6 +2,34 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.3 (May 2026) ==
+
+= New Features =
+
+* NEW: Search-replace protection for all Hozio Pro settings — every editable
+  field on the Dynamic Tags Settings page is stored base64-encoded in
+  wp_options ("b64:" prefix for strings, "b64arr:" for arrays). Site-wide
+  search/replace tools (Better Search Replace, WP-CLI search-replace, host
+  migration tools, etc.) can no longer match the values and accidentally
+  mangle them. Reads are decoded transparently — Elementor dynamic tags,
+  shortcodes, admin display, and any get_option() consumer always see plain
+  text. Protected fields: phones, emails, address parts, business hours
+  (HTML and Classic structures), URLs, colors, and custom dynamic tags.
+  One-time auto-migration encodes existing plain-text values on first
+  admin page load.
+
+* NEW: Email validation on Contact Form Email(s) — rejects malformed
+  addresses on save with a prominent red banner pointing at the bad
+  values. Comma-separated lists (e.g. "support@hozio.com, sales@hozio.com")
+  remain valid. Client-side check on submit blocks bad input instantly;
+  server-side check is a safety net.
+
+= Trade-off =
+
+* Domain migrations that update URLs via search/replace will NOT update
+  URLs stored in the protected fields. After such a migration, re-save the
+  Dynamic Tags Settings page once.
+
 == Version 4.12.2 (May 2026) ==
 
 = Improvements =

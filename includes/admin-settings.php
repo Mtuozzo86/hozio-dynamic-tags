@@ -1,4 +1,164 @@
 <?php
+
+// ─── Search-replace protection for ALL Hozio Pro settings ────────────────────
+// Every user-editable setting on the Hozio Pro page is stored base64-encoded
+// in wp_options (with a "b64:" prefix for strings or "b64arr:" prefix for
+// arrays) so that site-wide search/replace operations (Better Search Replace,
+// WP-CLI search-replace, Velvet Blues, hosting-panel migrate tools, etc.)
+// can't match against the values and accidentally mangle them.
+//
+// Reads are decoded transparently via the matching option_* filter — every
+// shortcode, Elementor dynamic tag, admin field display, and any other
+// get_option() consumer sees plain text. The encoding is only visible to
+// raw SQL or table dumps.
+//
+// IMPORTANT: A domain migration that updates URLs via search/replace will
+// NOT update any URL stored in these fields. After such a migration,
+// re-save the Hozio Pro Dynamic Tags Settings page once.
+
+/** Plain-string options to protect. */
+function hozio_protected_string_options() {
+    return array(
+        // Contact info
+        'hozio_company_phone_1',
+        'hozio_company_phone_2',
+        'hozio_google_ads_phone',
+        'hozio_sms_phone',
+        'hozio_company_email',
+        'hozio_to_email_contact_form',
+        // Address
+        'hozio_company_address',
+        'hozio_address_street',
+        'hozio_address_town',
+        'hozio_address_state',
+        'hozio_address_zip',
+        // Business details
+        'hozio_business_hours',
+        'hozio_start_year',
+        // Social / review URLs
+        'hozio_yelp_url',
+        'hozio_youtube_url',
+        'hozio_angies_list_url',
+        'hozio_home_advisor_url',
+        'hozio_bbb_url',
+        'hozio_facebook_url',
+        'hozio_instagram_url',
+        'hozio_twitter_url',
+        'hozio_tiktok_url',
+        'hozio_linkedin_url',
+        'hozio_gmb_link',
+        // Colors
+        'hozio_nav_text_color',
+        'hozio_sitemap_link_color',
+        'hozio_sitemap_link_hover_color',
+    );
+}
+
+/** Array-typed options to protect (stored serialized + encoded). */
+function hozio_protected_array_options() {
+    return array(
+        'hozio_business_hours_classic',
+        'hozio_custom_tags',
+    );
+}
+
+/** Encode a string for storage. Idempotent — returns already-encoded values unchanged. */
+function hozio_encode_string_for_storage( $value ) {
+    if ( ! is_string( $value ) || $value === '' ) return $value;
+    if ( strpos( $value, 'b64:' ) === 0 )         return $value;
+    return 'b64:' . base64_encode( $value );
+}
+
+/** Decode a stored string back to plain text. Returns non-encoded values unchanged. */
+function hozio_decode_string_for_display( $value ) {
+    if ( is_string( $value ) && strpos( $value, 'b64:' ) === 0 ) {
+        $decoded = base64_decode( substr( $value, 4 ), true );
+        return $decoded === false ? $value : $decoded;
+    }
+    return $value;
+}
+
+/** Encode an array for storage (serialize + base64 + prefix). */
+function hozio_encode_array_for_storage( $value ) {
+    if ( ! is_array( $value ) || empty( $value ) ) return $value;
+    return 'b64arr:' . base64_encode( serialize( $value ) );
+}
+
+/** Decode a stored array back to its original structure. */
+function hozio_decode_array_for_display( $value ) {
+    if ( is_string( $value ) && strpos( $value, 'b64arr:' ) === 0 ) {
+        $payload = base64_decode( substr( $value, 7 ), true );
+        if ( $payload === false ) return $value;
+        $arr = @unserialize( $payload );
+        return is_array( $arr ) ? $arr : $value;
+    }
+    return $value;
+}
+
+// Register encode/decode filters for every protected string option.
+foreach ( hozio_protected_string_options() as $hozio_protected_opt ) {
+    add_filter( "pre_update_option_{$hozio_protected_opt}", 'hozio_encode_string_for_storage' );
+    add_filter( "option_{$hozio_protected_opt}",            'hozio_decode_string_for_display' );
+    add_filter( "default_option_{$hozio_protected_opt}",    'hozio_decode_string_for_display' );
+}
+
+// Register encode/decode filters for every protected array option.
+foreach ( hozio_protected_array_options() as $hozio_protected_opt ) {
+    add_filter( "pre_update_option_{$hozio_protected_opt}", 'hozio_encode_array_for_storage' );
+    add_filter( "option_{$hozio_protected_opt}",            'hozio_decode_array_for_display' );
+    add_filter( "default_option_{$hozio_protected_opt}",    'hozio_decode_array_for_display' );
+}
+
+// Custom tags are user-defined at runtime, so register their option filters
+// dynamically based on the current custom-tag list.
+add_action( 'plugins_loaded', function() {
+    $tags = get_option( 'hozio_custom_tags', array() );
+    if ( ! is_array( $tags ) ) return;
+    foreach ( $tags as $tag ) {
+        if ( empty( $tag['value'] ) ) continue;
+        $opt = 'hozio_' . sanitize_key( $tag['value'] );
+        add_filter( "pre_update_option_{$opt}", 'hozio_encode_string_for_storage' );
+        add_filter( "option_{$opt}",            'hozio_decode_string_for_display' );
+        add_filter( "default_option_{$opt}",    'hozio_decode_string_for_display' );
+    }
+}, 1 );
+
+// One-time migration: encode existing plain-text values across every protected
+// option. Runs once per site (idempotent, safe to re-run).
+add_action( 'admin_init', function() {
+    if ( get_option( '_hozio_settings_encoded_v2', '0' ) === '1' ) {
+        return;
+    }
+
+    foreach ( hozio_protected_string_options() as $opt ) {
+        $current = get_option( $opt, '' );
+        if ( is_string( $current ) && $current !== '' ) {
+            update_option( $opt, $current );
+        }
+    }
+
+    foreach ( hozio_protected_array_options() as $opt ) {
+        $current = get_option( $opt, null );
+        if ( is_array( $current ) && ! empty( $current ) ) {
+            update_option( $opt, $current );
+        }
+    }
+
+    $custom_tags_for_migration = get_option( 'hozio_custom_tags', array() );
+    if ( is_array( $custom_tags_for_migration ) ) {
+        foreach ( $custom_tags_for_migration as $tag ) {
+            if ( empty( $tag['value'] ) ) continue;
+            $opt = 'hozio_' . sanitize_key( $tag['value'] );
+            $current = get_option( $opt, '' );
+            if ( is_string( $current ) && $current !== '' ) {
+                update_option( $opt, $current );
+            }
+        }
+    }
+
+    update_option( '_hozio_settings_encoded_v2', '1' );
+}, 5 );
+
 // Enqueue custom admin styles and scripts with INLINE styles as backup
 function hozio_dynamic_tags_admin_assets($hook) {
     // Check if we're on the right page
@@ -579,6 +739,58 @@ function hozio_color_picker_init() {
             recalc();
         })();
 
+        // Contact Form Email(s) — validate format before submit, block save if invalid
+        (function() {
+            var $emailField = $('[name="hozio_to_email_contact_form"]');
+            if ($emailField.length === 0) return;
+            var emailRegex = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/;
+
+            function clearError() {
+                $emailField.removeClass('hozio-input-invalid');
+                $('.hozio-email-inline-error').remove();
+            }
+
+            function validate() {
+                var raw = ($emailField.val() || '').trim();
+                if (raw === '') return { ok: true, invalid: [] };
+                var parts = raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                var bad = [];
+                parts.forEach(function(em) {
+                    if (!emailRegex.test(em)) bad.push(em);
+                });
+                return { ok: bad.length === 0, invalid: bad };
+            }
+
+            // Block submit if invalid
+            $emailField.closest('form').on('submit', function(e) {
+                var result = validate();
+                if (result.ok) { clearError(); return; }
+                e.preventDefault();
+                clearError();
+                $emailField.addClass('hozio-input-invalid');
+                var chips = result.invalid.map(function(s) {
+                    return '<code>' + $('<div>').text(s).html() + '</code>';
+                }).join(', ');
+                var $err = $(
+                    '<div class="hozio-email-inline-error" role="alert">' +
+                        '<span class="dashicons dashicons-warning"></span> ' +
+                        '<strong>Invalid email format:</strong> ' + chips + '. ' +
+                        'Use commas to separate multiple addresses (e.g. <code>support@hozio.com, sales@hozio.com</code>).' +
+                    '</div>'
+                );
+                // Insert below the input group
+                var $anchor = $emailField.closest('.hozio-input-group').length
+                    ? $emailField.closest('.hozio-input-group')
+                    : $emailField;
+                $anchor.after($err);
+                $('html, body').animate({ scrollTop: $emailField.offset().top - 100 }, 250);
+                $emailField.trigger('focus');
+            });
+
+            // Clear error state as user types/edits
+            $emailField.on('input', clearError);
+        })();
+
         // Copy shortcode to clipboard
         $(document).on('click', '.hozio-copy-shortcode', function(e) {
             e.preventDefault();
@@ -621,7 +833,101 @@ function hozio_dynamic_tags_inline_styles() {
             margin: 20px 20px 20px 0;
             border-radius: 8px;
         }
-        
+
+        /* Email validation error banner */
+        .hozio-email-error-banner {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            margin: 16px 0 0;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, #fee2e2, #fecaca);
+            border: 2px solid #dc2626;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.15);
+        }
+        .hozio-email-error-icon {
+            flex-shrink: 0;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #dc2626;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .hozio-email-error-icon .dashicons {
+            color: white;
+            font-size: 24px;
+            width: 24px;
+            height: 24px;
+        }
+        .hozio-email-error-content {
+            flex: 1;
+            min-width: 0;
+        }
+        .hozio-email-error-content strong {
+            display: block;
+            font-size: 15px;
+            color: #7f1d1d;
+            margin-bottom: 4px;
+        }
+        .hozio-email-error-content p {
+            margin: 4px 0 0;
+            color: #991b1b;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .hozio-email-error-content code {
+            display: inline-block;
+            background: white;
+            color: #dc2626;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 0 2px;
+            border: 1px solid #fecaca;
+        }
+        .hozio-email-error-hint {
+            font-size: 12px !important;
+            color: #b91c1c !important;
+            font-style: italic;
+        }
+
+        /* Invalid input field state — used by inline JS validation */
+        .hozio-input.hozio-input-invalid,
+        .hozio-input.hozio-input-invalid:focus {
+            border-color: #dc2626 !important;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18) !important;
+        }
+        .hozio-email-inline-error {
+            margin-top: 6px;
+            padding: 8px 12px;
+            background: #fee2e2;
+            border-left: 3px solid #dc2626;
+            border-radius: 4px;
+            color: #991b1b;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .hozio-email-inline-error .dashicons {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+            vertical-align: middle;
+            margin-right: 2px;
+        }
+        .hozio-email-inline-error code {
+            background: white;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+
         .hozio-header {
             background: linear-gradient(135deg, var(--hozio-blue) 0%, var(--hozio-green) 50%, var(--hozio-orange) 100%);
             color: white;
@@ -2067,6 +2373,12 @@ function hozio_get_field_placeholder($field_id) {
 
 // Display the enhanced settings page
 function hozio_dynamic_tags_settings_page() {
+    // Pull and immediately consume any email-error transient set by the save handler
+    $hozio_email_error = null;
+    if ( isset( $_GET['email-error'] ) && $_GET['email-error'] === '1' ) {
+        $hozio_email_error = get_transient( 'hozio_settings_email_error' );
+        delete_transient( 'hozio_settings_email_error' );
+    }
     ?>
     <div class="hozio-settings-wrapper">
         <div class="hozio-header">
@@ -2078,6 +2390,25 @@ function hozio_dynamic_tags_settings_page() {
                 <p class="hozio-subtitle">Configure your dynamic tags and contact information</p>
             </div>
         </div>
+
+        <?php if ( $hozio_email_error && ! empty( $hozio_email_error['invalid'] ) ) : ?>
+        <div class="hozio-email-error-banner">
+            <div class="hozio-email-error-icon"><span class="dashicons dashicons-warning"></span></div>
+            <div class="hozio-email-error-content">
+                <strong>Settings not fully saved — invalid email format detected</strong>
+                <p>
+                    The <em>Contact Form Email(s)</em> field contains <?php echo count( $hozio_email_error['invalid'] ) === 1 ? 'an invalid address' : 'invalid addresses'; ?>:
+                    <?php foreach ( $hozio_email_error['invalid'] as $bad ) : ?>
+                        <code><?php echo esc_html( $bad ); ?></code>
+                    <?php endforeach; ?>
+                </p>
+                <p class="hozio-email-error-hint">
+                    All other settings were saved. Use commas (with no quotes) to separate multiple emails — for example:
+                    <code>support@hozio.com, sales@hozio.com</code>. Then click Save again.
+                </p>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <div class="hozio-content">
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="hozio-form">
@@ -2560,6 +2891,35 @@ function hozio_dynamic_tags_save_settings() {
         wp_die('Nonce verification failed');
     }
 
+    // ─── Validate Contact Form Email(s) ──────────────────────────────────────
+    // Allow comma-separated list. If anything is invalid, skip saving this
+    // field, store the bad input + invalid items in a transient so the page
+    // can show a clear error on redirect.
+    $contact_email_raw = isset( $_POST['hozio_to_email_contact_form'] )
+        ? trim( wp_unslash( (string) $_POST['hozio_to_email_contact_form'] ) )
+        : '';
+    $contact_email_invalid_list = array();
+    if ( $contact_email_raw !== '' ) {
+        $emails = array_filter( array_map( 'trim', explode( ',', $contact_email_raw ) ) );
+        foreach ( $emails as $em ) {
+            if ( ! is_email( $em ) ) {
+                $contact_email_invalid_list[] = $em;
+            }
+        }
+    }
+    $contact_email_has_error = ! empty( $contact_email_invalid_list );
+    if ( $contact_email_has_error ) {
+        set_transient( 'hozio_settings_email_error', array(
+            'invalid' => $contact_email_invalid_list,
+            'value'   => $contact_email_raw,
+        ), 5 * MINUTE_IN_SECONDS );
+        // Skip saving the field — the existing value in the DB remains intact
+        unset( $_POST['hozio_to_email_contact_form'] );
+    } else {
+        // Clear any stale error transient from a previous failed save
+        delete_transient( 'hozio_settings_email_error' );
+    }
+
     // Save structured address fields; auto-build company_address when any are filled.
     $addr_street = isset( $_POST['hozio_address_street'] ) ? sanitize_text_field( $_POST['hozio_address_street'] ) : '';
     $addr_town   = isset( $_POST['hozio_address_town'] )   ? sanitize_text_field( $_POST['hozio_address_town'] )   : '';
@@ -2682,7 +3042,11 @@ function hozio_dynamic_tags_save_settings() {
 		}
 	}
 
-    wp_redirect(add_query_arg('settings-updated', 'true', admin_url('admin.php?page=hozio_dynamic_tags')));
+    $redirect_args = array( 'settings-updated' => 'true' );
+    if ( $contact_email_has_error ) {
+        $redirect_args['email-error'] = '1';
+    }
+    wp_redirect( add_query_arg( $redirect_args, admin_url( 'admin.php?page=hozio_dynamic_tags' ) ) );
     exit;
 }
 add_action('admin_post_hozio_save_settings', 'hozio_dynamic_tags_save_settings');
