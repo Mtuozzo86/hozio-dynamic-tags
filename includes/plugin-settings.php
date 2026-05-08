@@ -434,6 +434,112 @@ function hozio_service_menu_sync_enabled() {
 }
 
 /**
+ * Classify an ACF field type into one of our shortcode badge buckets.
+ * Returns: ['badge' => 'hozio-badge-...', 'label' => '...', 'sc_template' => '[acf|acf_img|acf_raw field="%s"]']
+ */
+function hozio_sc_classify_acf_field_type( $type ) {
+    $img_types  = array( 'image', 'gallery', 'file' );
+    $raw_types  = array( 'wysiwyg', 'html', 'code_editor', 'oembed' );
+    $misc_types = array(
+        'select', 'checkbox', 'radio', 'true_false', 'button_group',
+        'date_picker', 'date_time_picker', 'time_picker', 'color_picker',
+        'taxonomy', 'user', 'page_link', 'post_object', 'relationship', 'link',
+        'range', 'number', 'email', 'url', 'password',
+    );
+    if ( in_array( $type, $img_types, true ) ) {
+        return array( 'badge' => 'hozio-badge-img',  'label' => 'image', 'sc' => 'acf_img' );
+    }
+    if ( in_array( $type, $raw_types, true ) ) {
+        return array( 'badge' => 'hozio-badge-raw',  'label' => 'raw',   'sc' => 'acf_raw' );
+    }
+    if ( in_array( $type, $misc_types, true ) ) {
+        return array( 'badge' => 'hozio-badge-misc', 'label' => 'misc',  'sc' => 'acf' );
+    }
+    return array(    'badge' => 'hozio-badge-text', 'label' => 'text',  'sc' => 'acf' );
+}
+
+/**
+ * Build the best shortcode string for a given ACF field. If a dedicated
+ * shortcode tag exists for this field name (registered in acf-shortcodes.php),
+ * use [field_name]; otherwise fall back to the generic [acf|acf_img|acf_raw field="..."].
+ */
+function hozio_sc_build_shortcode( $field_name, $sc_handler ) {
+    if ( shortcode_exists( $field_name ) ) {
+        return '[' . $field_name . ']';
+    }
+    return '[' . $sc_handler . ' field="' . $field_name . '"]';
+}
+
+/**
+ * Recursively render ACF fields as shortcode chips inside an accordion section.
+ * Sub-fields of repeater/group/flexible_content get a prefixed name (parent_child).
+ */
+function hozio_sc_render_acf_fields( $fields, $prefix = '' ) {
+    if ( empty( $fields ) || ! is_array( $fields ) ) return;
+
+    $complex_types = array( 'repeater', 'group', 'flexible_content', 'clone' );
+    $buckets = array(
+        'text' => array(), 'image' => array(), 'raw' => array(), 'misc' => array(),
+    );
+    $complex_fields = array();
+
+    foreach ( $fields as $field ) {
+        if ( ! is_array( $field ) || empty( $field['name'] ) ) continue;
+        if ( in_array( $field['type'], $complex_types, true ) ) {
+            $complex_fields[] = $field;
+            continue;
+        }
+        $cls  = hozio_sc_classify_acf_field_type( $field['type'] );
+        $name = $prefix . $field['name'];
+        $sc   = hozio_sc_build_shortcode( $name, $cls['sc'] );
+        $buckets[ $cls['label'] ][] = array(
+            'sc'    => $sc,
+            'label' => $field['label'] ?? $name,
+            'type'  => $field['type'],
+        );
+    }
+
+    foreach ( $buckets as $label => $items ) {
+        if ( empty( $items ) ) continue;
+        $cls = hozio_sc_classify_acf_field_type(
+            $label === 'image' ? 'image' : ( $label === 'raw' ? 'wysiwyg' : ( $label === 'misc' ? 'select' : 'text' ) )
+        );
+        echo '<div class="hozio-sc-sub">';
+        echo '<span class="hozio-sc-type-badge ' . esc_attr( $cls['badge'] ) . '">' . esc_html( $label ) . '</span>';
+        echo '<div class="hozio-sc-grid">';
+        foreach ( $items as $it ) {
+            echo '<code class="hozio-sc-chip" title="' . esc_attr( $it['label'] . ' (' . $it['type'] . ')' ) . '">' . esc_html( $it['sc'] ) . '</code>';
+        }
+        echo '</div></div>';
+    }
+
+    // Render complex fields (repeater, group, etc.) with their sub-fields recursively
+    foreach ( $complex_fields as $field ) {
+        $name        = $prefix . $field['name'];
+        $type_label  = $field['type'];
+        $field_label = $field['label'] ?? $name;
+
+        echo '<div class="hozio-sc-sub" style="margin-top:10px;padding:10px 12px;background:#fafbfc;border:1px solid #e5e7eb;border-radius:6px;">';
+        echo '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px;">';
+        echo esc_html( $field_label );
+        echo ' <span style="font-weight:400;color:#9ca3af;font-size:11px;">(' . esc_html( $type_label ) . ')</span>';
+        echo '</div>';
+
+        if ( ! empty( $field['sub_fields'] ) ) {
+            hozio_sc_render_acf_fields( $field['sub_fields'], $name . '_' );
+        } elseif ( ! empty( $field['layouts'] ) ) {
+            foreach ( $field['layouts'] as $layout ) {
+                echo '<div style="margin-top:6px;font-size:11px;color:#6b7280;font-style:italic;">Layout: <strong>' . esc_html( $layout['name'] ?? '' ) . '</strong></div>';
+                if ( ! empty( $layout['sub_fields'] ) ) {
+                    hozio_sc_render_acf_fields( $layout['sub_fields'], $name . '_' );
+                }
+            }
+        }
+        echo '</div>';
+    }
+}
+
+/**
  * Render the plugin settings page
  */
 function hozio_plugin_settings_page() {
@@ -1118,6 +1224,7 @@ function hozio_plugin_settings_page() {
             <div class="hozio-sc-subnav">
                 <button type="button" class="hozio-sc-subbtn hozio-sc-subbtn-active" data-panel="hozio-sc-town">Town / HOG Page</button>
                 <button type="button" class="hozio-sc-subbtn" data-panel="hozio-sc-service">Service Page</button>
+                <button type="button" class="hozio-sc-subbtn" data-panel="hozio-sc-all">All ACF Groups</button>
                 <button type="button" class="hozio-sc-subbtn" data-panel="hozio-sc-generic">Generic</button>
             </div>
 
@@ -1221,6 +1328,53 @@ function hozio_plugin_settings_page() {
                     <div class="hozio-sc-sub"><span class="hozio-sc-type-badge hozio-badge-img">image</span><div class="hozio-sc-grid"><code class="hozio-sc-chip" title="Click to copy">[service_loop_item_background]</code></div></div>
                 </details>
             </div><!-- /#hozio-sc-service -->
+
+            <!-- ══ PANEL: All ACF Groups (dynamic) ═══════════════════════════ -->
+            <div id="hozio-sc-all" class="hozio-sc-panel" style="display:none;">
+                <div class="hozio-sc-panel-header">
+                    <span style="font-size:13px;color:#6b7280;">All ACF field groups detected on this site. Click any shortcode to copy.</span>
+                    <button type="button" class="hozio-copy-all-btn button button-secondary" data-scope="#hozio-sc-all">
+                        <span class="dashicons dashicons-clipboard"></span> Copy All
+                    </button>
+                </div>
+                <?php
+                if ( ! function_exists( 'acf_get_field_groups' ) ) {
+                    echo '<p style="padding:16px;color:#6b7280;font-style:italic;">Advanced Custom Fields (ACF) is not active on this site, so there are no field groups to list.</p>';
+                } else {
+                    $hozio_all_acf_groups = acf_get_field_groups();
+                    if ( empty( $hozio_all_acf_groups ) ) {
+                        echo '<p style="padding:16px;color:#6b7280;font-style:italic;">No ACF field groups have been registered on this site yet.</p>';
+                    } else {
+                        // Sort by title for predictable ordering
+                        usort( $hozio_all_acf_groups, function( $a, $b ) {
+                            return strcasecmp( $a['title'] ?? '', $b['title'] ?? '' );
+                        } );
+                        foreach ( $hozio_all_acf_groups as $hozio_group ) {
+                            $hozio_group_fields = function_exists( 'acf_get_fields' ) ? acf_get_fields( $hozio_group['key'] ) : array();
+                            if ( empty( $hozio_group_fields ) ) continue;
+                            $hozio_field_count  = count( $hozio_group_fields );
+                            $hozio_group_status = ! empty( $hozio_group['active'] ) ? '' : ' <span style="font-size:10px;color:#dc2626;font-weight:600;">(inactive)</span>';
+                            $hozio_group_dom_id = 'hozio-acf-acc-' . sanitize_html_class( $hozio_group['key'] ?? uniqid() );
+                            ?>
+                            <details class="hozio-sc-accordion" id="<?php echo esc_attr( $hozio_group_dom_id ); ?>">
+                                <summary>
+                                    <?php echo esc_html( $hozio_group['title'] ?? 'Untitled Group' ); ?>
+                                    <span style="font-size:11px;color:#9ca3af;font-weight:400;margin-left:8px;">(<?php echo (int) $hozio_field_count; ?> field<?php echo $hozio_field_count === 1 ? '' : 's'; ?>)</span>
+                                    <?php echo $hozio_group_status; ?>
+                                </summary>
+                                <div class="hozio-sc-group-toolbar">
+                                    <button type="button" class="hozio-copy-all-btn button button-small" data-scope="#<?php echo esc_attr( $hozio_group_dom_id ); ?>">
+                                        <span class="dashicons dashicons-clipboard"></span> Copy All in <?php echo esc_html( $hozio_group['title'] ?? 'Group' ); ?>
+                                    </button>
+                                </div>
+                                <?php hozio_sc_render_acf_fields( $hozio_group_fields ); ?>
+                            </details>
+                            <?php
+                        }
+                    }
+                }
+                ?>
+            </div><!-- /#hozio-sc-all -->
 
             <!-- ══ PANEL: Generic ════════════════════════════════════════════ -->
             <div id="hozio-sc-generic" class="hozio-sc-panel" style="display:none;">
@@ -2282,6 +2436,24 @@ function hozio_plugin_settings_page() {
         border-radius: 8px;
         margin-bottom: 8px;
         overflow: hidden;
+    }
+    .hozio-sc-group-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        padding: 10px 14px 6px;
+        margin-bottom: -4px;
+    }
+    .hozio-sc-group-toolbar .hozio-copy-all-btn {
+        font-size: 11px;
+        height: auto;
+        line-height: 1.5;
+        padding: 4px 10px;
+    }
+    .hozio-sc-group-toolbar .hozio-copy-all-btn .dashicons {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+        margin-top: 1px;
     }
     .hozio-sc-accordion summary {
         padding: 10px 14px;

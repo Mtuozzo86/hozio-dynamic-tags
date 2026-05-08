@@ -2,6 +2,22 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.2 (May 2026) ==
+
+= Improvements =
+
+* Shortcode Reference: new "All ACF Groups" sub-tab dynamically lists every
+  ACF field group on the site (not just the curated Town/HOG and Service Page
+  references). Each group is rendered as an accordion with its fields grouped
+  by type (text / image / raw / misc), and shortcodes auto-fall back to
+  [acf field="..."], [acf_img field="..."], or [acf_raw field="..."] when
+  no dedicated shortcode is registered.
+* Shortcode Reference: per-accordion "Copy All" button on each ACF group in
+  the new tab — copies just that group's shortcodes instead of the entire
+  panel. Top-of-panel Copy All still copies everything.
+* Shortcode Reference: repeater, group, and flexible_content fields render
+  their sub-fields recursively with the parent name as a prefix.
+
 == Version 4.12.1 (May 2026) ==
 
 = Fixes =
