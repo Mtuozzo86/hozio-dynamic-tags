@@ -2,6 +2,18 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.4 (May 2026) ==
+
+= Fixes =
+
+* Fix: <?xml encoding="utf-8"?> prefix leaking into rendered page HTML on
+  HOG/town pages that use the "hide-if-empty-acf" or "hide-if-no-wiki"
+  widget classes. The prefix was injected before DOMDocument::loadHTML()
+  to force UTF-8 parsing, but PHP's saveHTML() doesn't reliably strip it
+  back out (especially with LIBXML_HTML_NOIMPLIED), causing browser
+  warnings, HTML validator errors, and rendering issues in strict modes.
+  Now explicitly stripped from the returned content.
+
 == Version 4.12.3 (May 2026) ==
 
 = New Features =

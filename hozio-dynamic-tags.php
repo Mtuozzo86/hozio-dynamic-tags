@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.12.3
+Version:         4.12.4
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,7 +13,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.12.3');
+define('HOZIO_VERSION', '4.12.4');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -767,7 +767,13 @@ add_filter( 'the_content', function( $content ) {
         }
     }
 
-    return $dom->saveHTML();
+    // Strip the XML processing instruction we injected before loadHTML.
+    // PHP's saveHTML() is supposed to drop it but doesn't reliably with the
+    // LIBXML_HTML_NOIMPLIED flag, and when it leaks into rendered HTML it
+    // causes browser warnings and validator errors. Regex tolerates spacing.
+    $output = $dom->saveHTML();
+    $output = preg_replace( '/^\s*<\?xml[^>]*\?>\s*/i', '', (string) $output );
+    return $output;
 }, 20 );
 
 
@@ -1047,4 +1053,3 @@ add_action( 'init', function() {
         }
     }
 } );
-
