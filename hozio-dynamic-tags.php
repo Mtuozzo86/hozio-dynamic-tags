@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.12.4
+Version:         4.12.5
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,7 +13,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.12.4');
+define('HOZIO_VERSION', '4.12.5');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -562,27 +562,114 @@ function hozio_remove_dynamic_tag() {
 // (loaded on line 31) — classes are defined inside the Elementor callback where the
 // parent class is guaranteed to exist.
 
-// Fix duplicate id="cta-text-color" caused by Elementor Loop widgets rendering
-// the same template multiple times. Rewrites the HTML output before it reaches
-// the browser: keeps the first occurrence as an ID, converts all subsequent
-// ones to class="cta-text-color". Fixes the static HTML so validators, crawlers,
-// and accessibility tools see no duplicate IDs — no template changes required.
-add_action( 'template_redirect', function() {
-    if ( is_admin() || wp_doing_ajax() || is_feed() ) return;
-    ob_start( function( $html ) {
-        // Fast path: skip pages where the ID doesn't appear more than once
-        if ( substr_count( $html, 'id="cta-text-color"' ) <= 1 ) return $html;
+// Universal HTML output fixer — single ob_start pass that handles:
+//   • Duplicate id="cta-text-color" (Elementor Loop widget renders same template N times)
+//   • Inline <script> CDATA wrapping (validators flag bare & / < / > in JS blocks)
+//   • Nav menu <ul>/<li> line normalisation (validators lose nesting on single-line output)
+//   • Elementor lightbox attribute entity cleanup (&quot; etc. in data attrs)
+// Priority 0 so this outer buffer wraps everything; skipped on admin/AJAX/REST/feed.
+add_action( 'template_redirect', 'hozio_html_fix_start_buffer', 0 );
+
+function hozio_html_fix_start_buffer() {
+    if (
+        is_admin()
+        || wp_doing_ajax()
+        || ( defined( 'REST_REQUEST' ) && REST_REQUEST )
+        || ( defined( 'WP_CLI' ) && WP_CLI )
+        || is_feed()
+    ) {
+        return;
+    }
+    ob_start( 'hozio_html_fix_process' );
+}
+
+function hozio_html_fix_process( $html ) {
+    if ( empty( $html ) || stripos( $html, '<html' ) === false ) {
+        return $html;
+    }
+
+    // ── Fix A: deduplicate id="cta-text-color" ──────────────────────────────
+    if ( substr_count( $html, 'id="cta-text-color"' ) > 1 ) {
         $found = 0;
-        return preg_replace_callback(
+        $html  = preg_replace_callback(
             '/\bid="cta-text-color"/',
-            function( $m ) use ( &$found ) {
+            function ( $m ) use ( &$found ) {
                 $found++;
                 return $found === 1 ? $m[0] : 'class="cta-text-color"';
             },
             $html
         );
-    } );
-} );
+    }
+
+    // ── Fix B: wrap inline <script> content with CDATA markers ──────────────
+    // Validators flag bare & / < / > inside script blocks. CDATA markers are
+    // JS line-comments, so browsers ignore them entirely.
+    // IMPORTANT: excludes application/ld+json and other non-JS types — wrapping
+    // those with // comments breaks JSON syntax and corrupts structured data.
+    if ( strpos( $html, '<script' ) !== false ) {
+        $html = preg_replace_callback(
+            '/<script(\b[^>]*)>([\s\S]*?)<\/script>/i',
+            function ( $m ) {
+                $attrs   = $m[1];
+                $content = $m[2];
+
+                // Skip: external (src=), non-JS types, empty, already wrapped
+                if (
+                    preg_match( '/\bsrc\s*=/i', $attrs )
+                    || preg_match( '/\btype\s*=\s*["\']?\s*application\//i', $attrs )
+                    || preg_match( '/\btype\s*=\s*["\']?\s*text\/(?!javascript)[a-z]/i', $attrs )
+                    || trim( $content ) === ''
+                    || strpos( $content, '//<![CDATA[' ) !== false
+                    || strpos( $content, '<![CDATA[' )   !== false
+                ) {
+                    return $m[0];
+                }
+
+                if ( ! preg_match( '/[&<>]/', $content ) ) {
+                    return $m[0];
+                }
+
+                return '<script' . $attrs . '>' . "\n//<![CDATA[\n" . $content . "\n//]]>\n" . '</script>';
+            },
+            $html
+        );
+    }
+
+    // ── Fix C: normalise nav menu <ul>/<li> line structure ──────────────────
+    // Elementor sometimes concatenates list items onto one line; validators
+    // lose the parent <ul> context and report errors. Newlines restore nesting.
+    if ( strpos( $html, 'elementor-nav-menu' ) !== false ) {
+        $html = preg_replace_callback(
+            '/<ul([^>]*class="[^"]*elementor-nav-menu[^"]*"[^>]*)>([\s\S]*?)<\/ul>/i',
+            function ( $m ) {
+                $content = preg_replace( '/(<\/?li[\s>])/i', "\n$1", $m[2] );
+                $content = preg_replace( '/(<\/?ul[\s>])/i', "\n$1", $content );
+                return '<ul' . $m[1] . '>' . $content . "\n</ul>";
+            },
+            $html
+        );
+    }
+
+    // ── Fix D: clean HTML entities from Elementor lightbox attributes ────────
+    // Captions with special chars get double-encoded (&quot; etc.) inside
+    // data-elementor-lightbox-title / -description. Decode then re-encode cleanly.
+    if ( strpos( $html, 'data-elementor-lightbox-' ) !== false ) {
+        $html = preg_replace_callback(
+            '/\b(data-elementor-lightbox-(?:title|description))="([^"]*)"/i',
+            function ( $m ) {
+                if ( strpos( $m[2], '&' ) === false ) {
+                    return $m[0];
+                }
+                $decoded = html_entity_decode( $m[2], ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+                $clean   = htmlspecialchars( $decoded, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+                return $m[1] . '="' . $clean . '"';
+            },
+            $html
+        );
+    }
+
+    return $html;
+}
 
 add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_styles');
 function hozio_dynamic_nav_menu_inline_styles() {

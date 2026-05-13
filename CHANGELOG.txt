@@ -2,6 +2,31 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.5 (May 2026) ==
+
+= Improvements =
+
+* Improvement: Consolidated all HTML output fixes into a single unified output
+  buffer (ob_start at priority 0). Previously the cta-text-color deduplication
+  ran in its own buffer at priority 10; it now shares one pass with the new
+  universal fixer, reducing overhead on every front-end page load.
+
+* New: Universal HTML Validation Fixer — four server-side fixes applied to
+  front-end HTML before delivery:
+    A. Duplicate id="cta-text-color" deduplication (existing, now merged in)
+    B. Inline <script> CDATA wrapping — validators that check XHTML rules flag
+       bare & / < / > in JS blocks; wrapping with //<![CDATA[ ... //]]> silences
+       this. JSON-LD (application/ld+json) and non-JS script types are explicitly
+       excluded to protect structured data.
+    C. Nav menu <ul>/<li> line normalisation — Elementor concatenates list items
+       onto one line; validators lose the parent <ul> context. Newlines restore
+       correct nesting visibility.
+    D. Elementor lightbox attribute entity cleanup — captions with special
+       characters get double-encoded (&quot; etc.) inside data-elementor-lightbox-
+       title / -description attributes. Decoded and re-encoded cleanly.
+  All fixes are gated on fast strpos() checks so pages without the pattern are
+  untouched. Skipped on admin, AJAX, REST, WP-CLI, and feed requests.
+
 == Version 4.12.4 (May 2026) ==
 
 = Fixes =
