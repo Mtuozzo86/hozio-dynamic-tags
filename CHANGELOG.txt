@@ -6,7 +6,15 @@ HOZIO PRO - CHANGELOG
 
 = Fixes =
 
-* Fix: <?xml encoding="utf-8"?> prefix leaking into rendered page HTML on
+* Fix: Duplicate id="cta-text-color" HTML validation errors on pages that use
+  Elementor Loop widgets. Each Loop iteration rendered the same template,
+  producing multiple elements with the same ID. Fixed via server-side output
+  buffering (ob_start on template_redirect): the first occurrence is kept as
+  an ID, all subsequent ones are rewritten to class="cta-text-color". CSS and
+  JS updated to target both selectors so the visual behavior is unchanged.
+  No template edits required — fix applies to all existing sites automatically.
+
+* Fix: XML processing instruction prefix leaking into rendered page HTML on
   HOG/town pages that use the "hide-if-empty-acf" or "hide-if-no-wiki"
   widget classes. The prefix was injected before DOMDocument::loadHTML()
   to force UTF-8 parsing, but PHP's saveHTML() doesn't reliably strip it

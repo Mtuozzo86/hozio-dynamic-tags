@@ -562,6 +562,28 @@ function hozio_remove_dynamic_tag() {
 // (loaded on line 31) — classes are defined inside the Elementor callback where the
 // parent class is guaranteed to exist.
 
+// Fix duplicate id="cta-text-color" caused by Elementor Loop widgets rendering
+// the same template multiple times. Rewrites the HTML output before it reaches
+// the browser: keeps the first occurrence as an ID, converts all subsequent
+// ones to class="cta-text-color". Fixes the static HTML so validators, crawlers,
+// and accessibility tools see no duplicate IDs — no template changes required.
+add_action( 'template_redirect', function() {
+    if ( is_admin() || wp_doing_ajax() || is_feed() ) return;
+    ob_start( function( $html ) {
+        // Fast path: skip pages where the ID doesn't appear more than once
+        if ( substr_count( $html, 'id="cta-text-color"' ) <= 1 ) return $html;
+        $found = 0;
+        return preg_replace_callback(
+            '/\bid="cta-text-color"/',
+            function( $m ) use ( &$found ) {
+                $found++;
+                return $found === 1 ? $m[0] : 'class="cta-text-color"';
+            },
+            $html
+        );
+    } );
+} );
+
 add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_styles');
 function hozio_dynamic_nav_menu_inline_styles() {
     // Skip on admin pages and AJAX requests - these styles are only needed on frontend
@@ -589,34 +611,53 @@ function hozio_dynamic_nav_menu_inline_styles() {
     </style>
 
     <style type="text/css">
-        /* Apply the dynamic text color to the default state */
+        /* Supports both #cta-text-color (CSS ID, single element) and
+           .cta-text-color (CSS class, safe to use inside Loop widgets) */
         #cta-text-color .elementor-cta__button,
-        #cta-text-color .elementor-ribbon-inner {
-            color: <?php echo $text_color; ?> !important; /* Apply dynamic color to the default state */
+        .cta-text-color .elementor-cta__button,
+        #cta-text-color .elementor-ribbon-inner,
+        .cta-text-color .elementor-ribbon-inner {
+            color: <?php echo $text_color; ?> !important;
         }
 
-        /* Completely avoid overriding hover styles */
         #cta-text-color .elementor-cta__button:hover,
-        #cta-text-color .elementor-ribbon-inner:hover {
-            color: auto !important; /* Allow Elementor's hover settings to take full effect */
+        .cta-text-color .elementor-cta__button:hover,
+        #cta-text-color .elementor-ribbon-inner:hover,
+        .cta-text-color .elementor-ribbon-inner:hover {
+            color: auto !important;
         }
     </style>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const textColor = '<?php echo esc_js($text_color); ?>';
-            const elements = document.querySelectorAll('#cta-text-color .elementor-cta__button, #cta-text-color .elementor-ribbon-inner');
+            var textColor = '<?php echo esc_js($text_color); ?>';
+
+            // Elementor Loop widgets render the same template multiple times, which
+            // duplicates any CSS ID set in the template (e.g. id="cta-text-color").
+            // Deduplicate here: keep the first as an ID, convert the rest to a class
+            // so the browser DOM has no duplicate IDs while still applying the color.
+            var allById = document.querySelectorAll('[id="cta-text-color"]');
+            allById.forEach(function (el, idx) {
+                if (idx > 0) {
+                    el.removeAttribute('id');
+                    el.classList.add('cta-text-color');
+                }
+            });
+
+            // Now target both the original ID (single element) and the class (loop copies)
+            var elements = document.querySelectorAll(
+                '#cta-text-color .elementor-cta__button, .cta-text-color .elementor-cta__button, ' +
+                '#cta-text-color .elementor-ribbon-inner, .cta-text-color .elementor-ribbon-inner'
+            );
 
             elements.forEach(function (element) {
-                // Set default color dynamically
                 element.style.color = textColor;
 
-                // Let Elementor handle hover styles completely
                 element.addEventListener('mouseenter', function () {
-                    element.style.color = ''; // Clear dynamic styles on hover
+                    element.style.color = '';
                 });
 
                 element.addEventListener('mouseleave', function () {
-                    element.style.color = textColor; // Reapply dynamic color after hover
+                    element.style.color = textColor;
                 });
             });
         });
