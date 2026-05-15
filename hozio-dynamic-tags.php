@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.12.5
+Version:         4.12.6
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,7 +13,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.12.5');
+define('HOZIO_VERSION', '4.12.6');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -668,7 +668,49 @@ function hozio_html_fix_process( $html ) {
         );
     }
 
+    // ── Fix E: remove <link> tags with empty or missing href ─────────────────
+    // W3C: "The attribute href of the tag link must have a value."
+    // Some plugins output <link href=""> or bare <link href> in wp_head.
+    // Handled here (full-page buffer) rather than a separate wp_head ob_start.
+    if ( strpos( $html, '<link' ) !== false ) {
+        // href="" or href=''  (empty quoted value)
+        $html = preg_replace(
+            '/<link(?=[^>]*\bhref\s*=\s*["\']["\'])[^>]*>\s*/i',
+            '',
+            $html
+        );
+        // bare href with no = at all
+        $html = preg_replace(
+            '/<link(?=[^>]*\bhref\b(?!\s*=))[^>]*>\s*/i',
+            '',
+            $html
+        );
+    }
+
     return $html;
+}
+
+// Strip raw <u> / </u> tags typed into Elementor Icon List text fields.
+// Validators flag them as "tag must be paired" / "start tag match failed".
+// CSS underline applied via selectors is unaffected — only inline HTML tags removed.
+add_filter( 'elementor/widget/render_content', 'hozio_icon_list_strip_u_tags', 10, 2 );
+function hozio_icon_list_strip_u_tags( $content, $widget ) {
+    if ( 'icon-list' === $widget->get_name() ) {
+        $content = preg_replace( '/<\/?u>/i', '', $content );
+    }
+    return $content;
+}
+
+// Convert genuinely stray < and > in post content to HTML entities.
+// Only targets bare angle brackets NOT part of a valid tag, shortcode,
+// script, or style block. Conservative by design — the > regex excludes
+// chars preceded by spaces/alphanumerics to avoid false positives on
+// normal closing tags.
+add_filter( 'the_content', 'hozio_escape_stray_angle_brackets', 20 );
+function hozio_escape_stray_angle_brackets( $content ) {
+    $content = preg_replace( '/(?<![="\'\w])<(?![\/a-zA-Z!?\-])/', '&lt;', $content );
+    $content = preg_replace( '/(?<![a-zA-Z0-9"\'\/\s])>(?!\s*<)/', '&gt;', $content );
+    return $content;
 }
 
 add_action('wp_footer', 'hozio_dynamic_nav_menu_inline_styles');

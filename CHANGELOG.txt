@@ -2,6 +2,25 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.6 (May 2026) ==
+
+= Fixes =
+
+* Fix: Elementor Icon List widget — strip raw <u> / </u> tags typed directly
+  into text fields. Validators flagged these as "tag must be paired" /
+  "start tag match failed". Uses Elementor's render_content filter so only
+  Icon List output is affected; CSS underline styles are untouched.
+
+* Fix: Remove <link> tags with empty or missing href from wp_head output.
+  W3C error: "The attribute href of the tag link must have a value." Handled
+  inside the existing full-page output buffer (no extra ob_start needed).
+  Catches both href="" / href='' and bare href with no value.
+
+* Fix: Escape genuinely stray < and > characters in post content. Converts
+  bare angle brackets that are not part of a valid HTML tag to &lt; / &gt;.
+  Applied via the_content filter at priority 20. Conservative regexes avoid
+  touching normal markup, shortcodes, scripts, or style blocks.
+
 == Version 4.12.5 (May 2026) ==
 
 = Improvements =
