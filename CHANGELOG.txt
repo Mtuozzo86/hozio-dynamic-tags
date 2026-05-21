@@ -2,6 +2,31 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.7 (May 2026) ==
+
+= Features =
+
+* Lead Webhook endpoint can now be fully disabled from Hozio Pro Settings →
+  Feature Toggles → "Lead Webhook Endpoint". When off, /wp-json/hozio/v1/lead
+  returns 404 and is invisible to bots. Standard form integrations (Elementor,
+  WPForms, Gravity Forms, CF7) are unaffected. Default is now OFF — enable
+  explicitly only when using an external service.
+
+* Webhook Settings page now shows a prominent yellow banner when the endpoint
+  is disabled, with an "Enable Webhook Now" button that activates it instantly
+  without leaving the page.
+
+* Support & Help page: added Lead Webhook section covering endpoint overview,
+  enable/disable instructions, secret key management, integration examples
+  (Elementor, Zapier, cURL), accepted fields, and full security model.
+
+= Improvements =
+
+* Lead Submissions page: improved hover state on the "Webhook Settings & Secret"
+  button — lift animation, drop shadow, and smoother transition.
+
+--------------------------------------------------------------------------------
+
 == Version 4.12.6 (May 2026) ==
 
 = Fixes =
