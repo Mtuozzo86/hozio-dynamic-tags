@@ -173,7 +173,7 @@ add_action( 'admin_init', function() {
     $pagenow = $GLOBALS['pagenow'] ?? '';
     if ( in_array( $pagenow, [ 'wp-login.php', 'wp-signup.php' ], true ) ) return;
 
-    $allowed_pages   = [ 'hozio-leads', 'hozio-lead-view', 'hozio-leads-settings' ];
+    $allowed_pages   = [ 'hozio-leads', 'hozio-lead-view' ];
     $allowed_scripts = [ 'profile.php', 'admin-ajax.php', 'wp-login.php', 'admin-post.php' ];
 
     $current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : '';

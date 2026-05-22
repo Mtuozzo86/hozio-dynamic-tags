@@ -2,6 +2,23 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.8 (May 2026) ==
+
+= Features =
+
+* County Pages query now respects a "Visible Counties" ACF Relationship field on
+  service pages. Select specific county pages to restrict which counties appear
+  in the dynamic_county_pages_query loop. Leave the field empty (default) to
+  show all matching counties — fully backward-compatible with existing pages.
+
+= Fixes =
+
+* Lead viewer role: remove Display Settings page (hozio-leads-settings) from
+  the non-admin allowed-pages whitelist. Direct URL access now redirects to
+  Lead Submissions instead of showing a wp_die error page.
+
+--------------------------------------------------------------------------------
+
 == Version 4.12.7 (May 2026) ==
 
 = Features =

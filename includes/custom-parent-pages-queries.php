@@ -406,6 +406,19 @@ add_action('elementor/query/dynamic_county_pages_query', function($query) {
         }
     }
 
+    // If specific counties are selected on this service page, restrict results to those IDs.
+    // Leave the field empty (default) to show all matching counties — fully backward-compatible.
+    if ( function_exists( 'get_field' ) ) {
+        $visible_counties = get_field( 'visible_counties', $current_page_id );
+        if ( ! empty( $visible_counties ) ) {
+            $allowed_ids = array_map( function( $p ) {
+                return is_object( $p ) ? (int) $p->ID : (int) $p;
+            }, (array) $visible_counties );
+            $query->set( 'post__in', $allowed_ids );
+            $debug_info['visible_counties_filter'] = $allowed_ids;
+        }
+    }
+
     // Log debug info using HOZIO_DEBUG (no frontend output unless explicitly enabled)
     hozio_log($debug_info, 'CountyQuery');
     hozio_console_log($debug_info, 'County Query Debug');
