@@ -2,6 +2,35 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.9 (May 2026) ==
+
+= Features =
+
+* [hozio_service_towns] shortcode: renders county accordion sections with town
+  links on service pages. ACF Taxonomy field (county_groups) on each service page
+  selects which county terms become accordion headers. Towns must have both their
+  service term and county term assigned in Page Taxonomies to appear under the
+  correct county. Empty county_groups field falls back to a single "All Cities"
+  accordion listing every service town.
+
+* Service towns display text uses the ACF location field (same as [hog_location])
+  with post title as fallback.
+
+* Live search bar filters across all counties simultaneously. In search mode,
+  county headers remain visible as non-interactive labels so results show which
+  county each city belongs to.
+
+* Support & Help: new "Service Towns Shortcode" documentation card under the
+  ACF Shortcodes tab covering full setup, ACF field configuration, county term
+  assignment, and the hog_areas placement approach.
+
+= Fixes =
+
+* Service page excluded from its own town list (post__not_in applied to both
+  the county accordion query and the flat fallback query).
+
+--------------------------------------------------------------------------------
+
 == Version 4.12.8 (May 2026) ==
 
 = Features =

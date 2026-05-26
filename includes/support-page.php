@@ -269,6 +269,12 @@ function hozio_support_page() {
                     <p class="hozio-card-desc">Named shortcodes for every service page ACF field</p>
                 </div>
 
+                <div class="hozio-card" data-section="service-towns" data-category="acf-shortcodes" data-description="County accordion shortcode that displays town links grouped by county on service pages — setup, ACF field config, county groups">
+                    <span class="dashicons dashicons-location hozio-card-icon"></span>
+                    <h3 class="hozio-card-title">Service Towns Shortcode</h3>
+                    <p class="hozio-card-desc">County accordion with town links for service pages</p>
+                </div>
+
             </div><!-- .hozio-card-grid -->
 
             <!-- Expanded Detail Panel -->
@@ -1340,6 +1346,102 @@ X-Hozio-Secret: &lt;your-secret&gt;
                             <li>If you need the image as a URL only (for CSS backgrounds), use the generic <code>[acf_img_url field="..."]</code> shortcode instead.</li>
                             <li>The AJAX endpoint <code>action=cb_get_acf_images</code> is available for JavaScript-driven carousels that need to batch-fetch ACF image URLs for multiple page IDs at once.</li>
                         </ul>
+                    </div>
+                </div>
+
+                <div data-content="service-towns">
+                    <div class="hozio-support-what">
+                        <h3>What it does</h3>
+                        <p>The <code>[hozio_service_towns]</code> shortcode renders a county accordion on any service page. Each county appears as a collapsible section containing the town/city links that belong to it. A live search bar filters across all counties simultaneously. If no counties are configured for a page, a single "All Cities" accordion with every service town shows instead.</p>
+                    </div>
+
+                    <div class="hozio-support-steps">
+                        <h3>Shortcode</h3>
+                        <p>Place this shortcode in an HTML widget on any service page:</p>
+                        <pre><code>[hozio_service_towns]</code></pre>
+                        <p>No attributes required — it reads the current page automatically.</p>
+                    </div>
+
+                    <div class="hozio-support-steps">
+                        <h3>How town pages get matched</h3>
+                        <p>The shortcode finds towns using the <strong>Page Taxonomies</strong> (<code>parent_pages</code>) taxonomy. A town page must have <em>both</em> of the following terms assigned to appear under the correct county:</p>
+                        <ul>
+                            <li><strong>Service term</strong> — the slug of the service page (e.g. <code>at-home-pet-euthanasia</code>). This is what connects the town to this specific service.</li>
+                            <li><strong>County term</strong> — the county taxonomy term (e.g. <code>harris-county</code>). This is what places the town inside a county accordion.</li>
+                        </ul>
+                        <p>If a town page only has the service term but no county term, it will appear in the flat "All Cities" fallback accordion only.</p>
+                    </div>
+
+                    <div class="hozio-support-steps">
+                        <h3>Step 1 — Create county terms in Page Taxonomies</h3>
+                        <ol>
+                            <li>Go to <strong>Pages → Page Taxonomies</strong> in the WordPress admin sidebar.</li>
+                            <li>Add a term for each county (e.g. "Harris County", "Fort Bend County").</li>
+                            <li>The term slug (auto-generated from the name) is what the shortcode uses internally — keep slugs clean, e.g. <code>harris-county</code>.</li>
+                        </ol>
+                    </div>
+
+                    <div class="hozio-support-steps">
+                        <h3>Step 2 — Assign county terms to town pages</h3>
+                        <ol>
+                            <li>Edit each town page.</li>
+                            <li>In the <strong>Page Taxonomies</strong> metabox (right sidebar), check the county term that town belongs to.</li>
+                            <li>Make sure the service term is also checked for the service this town should appear under.</li>
+                            <li>Save the page.</li>
+                        </ol>
+                        <p>You can do this quickly via <strong>Pages → Quick Edit</strong> for each town page — the Page Taxonomies checkboxes are visible there without opening the full editor.</p>
+                    </div>
+
+                    <div class="hozio-support-steps">
+                        <h3>Step 3 — Create the ACF "County Groups" field on service pages</h3>
+                        <p>Each service page needs an ACF field that lets you choose which counties to show as accordion sections. Without this field, the shortcode falls back to "All Cities" mode.</p>
+                        <ol>
+                            <li>Go to <strong>Custom Fields → Field Groups</strong> and edit the field group assigned to your service pages.</li>
+                            <li>Add a new field with these exact settings:
+                                <ul>
+                                    <li><strong>Field Label:</strong> County Groups</li>
+                                    <li><strong>Field Name:</strong> <code>county_groups</code> (must match exactly — lowercase, underscore)</li>
+                                    <li><strong>Field Type:</strong> Taxonomy</li>
+                                    <li><strong>Taxonomy:</strong> Page Taxonomies</li>
+                                    <li><strong>Appearance:</strong> Checkbox</li>
+                                    <li><strong>Return Value:</strong> Term Object</li>
+                                    <li><strong>Save Terms:</strong> <strong>OFF</strong> — this is critical. If left ON, ACF will write the selected counties back to the service page's own taxonomy, which breaks the town matching query.</li>
+                                </ul>
+                            </li>
+                            <li>Save the field group.</li>
+                        </ol>
+                    </div>
+
+                    <div class="hozio-support-steps">
+                        <h3>Step 4 — Select counties on each service page</h3>
+                        <ol>
+                            <li>Edit a service page.</li>
+                            <li>Find the <strong>County Groups</strong> field (added in Step 3).</li>
+                            <li>Check each county that should appear as an accordion section on that service page.</li>
+                            <li>Click <strong>Update</strong> to save.</li>
+                        </ol>
+                        <p>Only counties that have at least one matching town page will render — empty counties are silently skipped.</p>
+                    </div>
+
+                    <div class="hozio-support-steps">
+                        <h3>Town display text</h3>
+                        <p>Each town link displays the value of the <code>location</code> ACF field on the town page (the same field used by <code>[hog_location]</code>). If that field is empty, the page title is used as a fallback.</p>
+                    </div>
+
+                    <div class="hozio-support-steps">
+                        <h3>Fallback — no counties configured</h3>
+                        <p>If the <code>county_groups</code> ACF field is empty or the field does not exist on a service page, the shortcode automatically shows a single accordion labelled "All Cities" containing every published town page that has the service term assigned — no county grouping. This ensures the shortcode always outputs something useful even on pages not yet configured with county groups.</p>
+                    </div>
+
+                    <div class="hozio-support-steps">
+                        <h3>Controlling which service pages show the city list</h3>
+                        <p>Use the existing <strong>HOG Areas</strong> ACF field (<code>hog_areas</code>) to control whether the city accordion appears on each service page. This field is already wired into the Elementor template — whatever shortcode you place in it gets rendered automatically.</p>
+                        <ol>
+                            <li>Edit the service page that needs a city list.</li>
+                            <li>Find the <strong>HOG Areas</strong> field and type <code>[hozio_service_towns]</code> into it.</li>
+                            <li>Save the page — the county accordion will now appear in that section.</li>
+                        </ol>
+                        <p>On service pages that don't need a city list, leave the <strong>HOG Areas</strong> field empty and nothing will render. No template changes required.</p>
                     </div>
                 </div>
 
