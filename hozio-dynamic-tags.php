@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.12.8
+Version:         4.12.9
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,7 +13,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.12.8');
+define('HOZIO_VERSION', '4.12.9');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -500,62 +500,68 @@ function hozio_add_remove_tags_page() {
 // Handle the add tag form submission
 add_action('admin_post_hozio_add_tag', 'hozio_add_dynamic_tag');
 function hozio_add_dynamic_tag() {
-    if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['_wpnonce'], 'hozio_add_tag_nonce')) {
+    if ( ! current_user_can('manage_options') || ! check_admin_referer('hozio_add_tag_nonce') ) {
         wp_die('Unauthorized request');
     }
 
-    $tag_title = sanitize_text_field($_POST['tag_title']);
-    $tag_type = sanitize_text_field($_POST['tag_type']);
-    $tag_value = sanitize_title($tag_title); // Ensure the tag's value is sanitized for use as a key
+    $tag_title = sanitize_text_field( wp_unslash( $_POST['tag_title'] ?? '' ) );
+    $tag_type  = sanitize_text_field( wp_unslash( $_POST['tag_type']  ?? '' ) );
+    $tag_value = sanitize_title( $tag_title );
 
-    // Fetch the existing tags from the options table
-    $custom_tags = get_option('hozio_custom_tags', []);
-    
-    // Check if tag already exists to prevent duplicates
-    foreach ($custom_tags as $tag) {
-        if ($tag['value'] === $tag_value) {
-            wp_die('This tag already exists.');
+    if ( empty( $tag_title ) || empty( $tag_type ) ) {
+        wp_redirect( add_query_arg( 'tag-error', 'missing', admin_url('admin.php?page=hozio-add-remove-tags') ) );
+        exit;
+    }
+
+    $custom_tags = get_option( 'hozio_custom_tags', [] );
+    if ( ! is_array( $custom_tags ) ) $custom_tags = [];
+
+    foreach ( $custom_tags as $tag ) {
+        if ( $tag['value'] === $tag_value ) {
+            wp_redirect( add_query_arg( 'tag-error', 'duplicate', admin_url('admin.php?page=hozio-add-remove-tags') ) );
+            exit;
         }
     }
 
-    // Add the new tag to the array
-    $custom_tags[] = [
-        'title' => $tag_title,
-        'value' => $tag_value,
-        'type' => $tag_type
-    ];
+    $custom_tags[] = [ 'title' => $tag_title, 'value' => $tag_value, 'type' => $tag_type ];
+    update_option( 'hozio_custom_tags', $custom_tags );
 
-    // Update the tags in the options table
-    update_option('hozio_custom_tags', $custom_tags);
+    // Bust object cache so the updated list is visible immediately
+    wp_cache_delete( 'hozio_custom_tags', 'options' );
+    wp_cache_delete( 'alloptions', 'options' );
 
-    // Redirect back to the add/remove tags page
-    wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
+    wp_redirect( add_query_arg( 'tag-added', '1', admin_url('admin.php?page=hozio-add-remove-tags') ) );
     exit;
 }
 
-// Handle tag removal
+// Handle tag removal — POST form to avoid GET-nonce issues
 add_action('admin_post_hozio_remove_tag', 'hozio_remove_dynamic_tag');
 function hozio_remove_dynamic_tag() {
-    $tag_value = isset($_GET['tag']) ? sanitize_text_field($_GET['tag']) : '';
+    // Accept both POST (form) and GET (legacy link) submissions
+    $tag_value = sanitize_text_field( wp_unslash( $_POST['tag'] ?? $_GET['tag'] ?? '' ) );
+    $nonce     = wp_unslash( $_POST['_wpnonce'] ?? $_GET['_wpnonce'] ?? '' );
 
-    if (!current_user_can('manage_options') || !wp_verify_nonce($_GET['_wpnonce'] ?? '', 'hozio_remove_tag_' . $tag_value)) {
+    if ( ! current_user_can('manage_options') || ! wp_verify_nonce( $nonce, 'hozio_remove_tag_' . $tag_value ) ) {
         wp_die('Unauthorized request');
     }
-    $custom_tags = get_option('hozio_custom_tags', []);
 
-    // Loop through tags and remove the one that matches
-    foreach ($custom_tags as $key => $tag) {
-        if ($tag['value'] === $tag_value) {
-            unset($custom_tags[$key]);
+    $custom_tags = get_option( 'hozio_custom_tags', [] );
+    if ( ! is_array( $custom_tags ) ) $custom_tags = [];
+
+    foreach ( $custom_tags as $key => $tag ) {
+        if ( $tag['value'] === $tag_value ) {
+            unset( $custom_tags[$key] );
             break;
         }
     }
 
-    // Update the tags in the options table after removal
-    update_option('hozio_custom_tags', array_values($custom_tags));
+    update_option( 'hozio_custom_tags', array_values( $custom_tags ) );
 
-    // Redirect back to the add/remove tags page
-    wp_redirect(admin_url('admin.php?page=hozio-add-remove-tags'));
+    // Bust object cache so the updated list is visible immediately
+    wp_cache_delete( 'hozio_custom_tags', 'options' );
+    wp_cache_delete( 'alloptions', 'options' );
+
+    wp_redirect( add_query_arg( 'tag-removed', '1', admin_url('admin.php?page=hozio-add-remove-tags') ) );
     exit;
 }
 

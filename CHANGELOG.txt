@@ -2,6 +2,26 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.9 (May 2026) ==
+
+= Features =
+
+* Service Towns Shortcode Colors: 11 color pickers in a compact 2-column grouped
+  layout (Accordion Card / Search Bar / Town Links). Each row shows a live color
+  swatch and an individual ↺ Default reset button. A "Reset all to defaults" button
+  restores all fields at once. Colors are dynamically injected into the shortcode
+  CSS at render time via get_option() calls with hardcoded fallback defaults.
+
+= Fixes =
+
+* Custom Tags add/remove: Remove button converted from fragile GET link to POST
+  form, eliminating nonce failures caused by caching plugins and security plugins
+  that mangle GET parameters. Both add and remove now bust the WordPress object
+  cache (wp_cache_delete) after saving so persistent caches (Redis, Memcached)
+  serve fresh data immediately. Success and error notices displayed after each
+  action. Add handler now redirects with error codes on duplicate/missing input
+  instead of wp_die().
+
 == Version 4.12.8 (May 2026) ==
 
 = Features =

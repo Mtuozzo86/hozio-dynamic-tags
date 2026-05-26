@@ -209,7 +209,40 @@ function hozio_color_picker_init() {
             // Initial paint based on saved value
             paintNavSwatch($navColor.val());
         }
-        $('.hozio-color-picker').not('#hozio_nav_text_color').wpColorPicker();
+        // Init all color pickers except nav (handled above) and hst-cp (handled below)
+        $('.hozio-color-picker').not('#hozio_nav_text_color').not('.hst-cp').wpColorPicker();
+
+        // Init service-towns color pickers with live swatch updates
+        $('.hst-cp').each(function() {
+            var $inp = $(this);
+            $inp.wpColorPicker({
+                change: function(e, ui) {
+                    $inp.closest('.hst-color-row').find('.hst-swatch').css('background', ui.color.toString());
+                },
+                clear: function() {
+                    var def = $inp.data('default-color') || '';
+                    $inp.closest('.hst-color-row').find('.hst-swatch').css('background', def);
+                }
+            });
+        });
+
+        // Per-field reset button
+        $(document).on('click', '.hst-reset-btn', function() {
+            var id  = $(this).data('target');
+            var def = $(this).data('default');
+            $('#' + id).wpColorPicker('color', def);
+            $('#' + id).closest('.hst-color-row').find('.hst-swatch').css('background', def);
+        });
+
+        // Reset-all button for the Service Towns section
+        $(document).on('click', '.hst-reset-all-btn', function() {
+            $(this).closest('.hozio-section').find('.hst-reset-btn').each(function() {
+                var id  = $(this).data('target');
+                var def = $(this).data('default');
+                $('#' + id).wpColorPicker('color', def);
+                $('#' + id).closest('.hst-color-row').find('.hst-swatch').css('background', def);
+            });
+        });
 
         // Live address builder — updates Company Address textarea as user types
         (function() {
@@ -2168,6 +2201,17 @@ function hozio_dynamic_tags_register_settings() {
         'hozio_to_email_contact_form',
         'hozio_nav_text_color',
         'hozio_start_year',
+        'hozio_hst_bg',
+        'hozio_hst_border',
+        'hozio_hst_header_text',
+        'hozio_hst_header_hover',
+        'hozio_hst_divider',
+        'hozio_hst_search_border',
+        'hozio_hst_search_bg',
+        'hozio_hst_search_text',
+        'hozio_hst_link',
+        'hozio_hst_link_hover',
+        'hozio_hst_heading',
     ];
 
     foreach ($fields as $field) {
@@ -2852,6 +2896,8 @@ function hozio_dynamic_tags_settings_page() {
                 </div>
                 <!-- Custom Tags Section -->
                 <?php
+                wp_cache_delete( 'hozio_custom_tags', 'options' );
+                wp_cache_delete( 'alloptions', 'options' );
                 $custom_tags = get_option('hozio_custom_tags', []);
                 if (!empty($custom_tags) && is_array($custom_tags)) :
                 ?>
@@ -2871,6 +2917,127 @@ function hozio_dynamic_tags_settings_page() {
                     </div>
                 </div>
                 <?php endif; ?>
+
+                <!-- Service Towns Colors Section -->
+                <div class="hozio-section">
+                    <div class="hozio-section-header">
+                        <span class="dashicons dashicons-location"></span>
+                        <h2>Service Towns Shortcode Colors</h2>
+                    </div>
+                    <p style="margin:0 0 20px;color:#6b7280;font-size:13px;">
+                        Controls the <code>[hozio_service_towns]</code> accordion colors. Click <strong>↺</strong> next to any field to restore its default.
+                    </p>
+
+                    <style>
+                    .hst-color-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 40px; }
+                    .hst-color-group-title { font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#9ca3af; padding-bottom:8px; margin:0 0 2px; border-bottom:2px solid #f3f4f6; }
+                    .hst-color-group-spacer { height:18px; }
+                    .hst-color-row { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid #f5f5f5; }
+                    .hst-color-label { flex:1; font-size:13px; color:#374151; font-weight:500; cursor:pointer; }
+                    .hst-swatch { width:24px; height:24px; border-radius:5px; border:1px solid rgba(0,0,0,.13); flex-shrink:0; display:inline-block; }
+                    .hst-reset-btn { background:none; border:1px solid #e2e8f0; color:#94a3b8; padding:3px 8px; border-radius:5px; cursor:pointer; font-size:11px; white-space:nowrap; flex-shrink:0; line-height:1.6; }
+                    .hst-reset-btn:hover { border-color:#fca5a5; color:#ef4444; background:#fef2f2; }
+                    .hst-reset-all-wrap { margin-top:18px; padding-top:14px; border-top:1px solid #f3f4f6; }
+                    .hst-reset-all-btn { background:none; border:1px solid #e2e8f0; color:#6b7280; padding:7px 16px; border-radius:7px; cursor:pointer; font-size:13px; }
+                    .hst-reset-all-btn:hover { border-color:#fca5a5; color:#ef4444; background:#fef2f2; }
+                    /* wp-color-picker: hide the big Select Color button, show only the swatch button */
+                    .hst-color-row .wp-picker-container { display:inline-flex !important; align-items:center; flex-shrink:0; }
+                    .hst-color-row .wp-color-result.button { width:60px !important; height:28px !important; min-height:0 !important; padding:0 !important; border-radius:6px !important; box-shadow:none !important; border:1px solid #d1d5db !important; font-size:0 !important; }
+                    .hst-color-row .wp-color-result-text { font-size:0 !important; width:0; overflow:hidden; display:block; }
+                    </style>
+
+                    <div class="hst-color-grid">
+
+                        <!-- Left: Accordion Card -->
+                        <div>
+                            <div class="hst-color-group-title">Accordion Card</div>
+                            <?php
+                            $hst_group1 = [
+                                'hozio_hst_heading'      => [ 'Heading Text',       '#111827' ],
+                                'hozio_hst_bg'           => [ 'Card Background',     '#ffffff' ],
+                                'hozio_hst_border'       => [ 'Card Border',         '#e5e7eb' ],
+                                'hozio_hst_header_text'  => [ 'County Header',       '#111827' ],
+                                'hozio_hst_header_hover' => [ 'Header Hover BG',     '#f3f4f6' ],
+                                'hozio_hst_divider'      => [ 'Divider Line',        '#e5e7eb' ],
+                            ];
+                            foreach ( $hst_group1 as $opt => [ $label, $default ] ) :
+                                $val = get_option( $opt, '' );
+                                $swatch_bg = $val ?: $default;
+                            ?>
+                            <div class="hst-color-row">
+                                <label class="hst-color-label" for="<?php echo esc_attr( $opt ); ?>"><?php echo esc_html( $label ); ?></label>
+                                <span class="hst-swatch" style="background:<?php echo esc_attr( $swatch_bg ); ?>"></span>
+                                <input type="text" name="<?php echo esc_attr( $opt ); ?>"
+                                       id="<?php echo esc_attr( $opt ); ?>"
+                                       class="hozio-color-picker hst-cp"
+                                       value="<?php echo esc_attr( $val ); ?>"
+                                       data-default-color="<?php echo esc_attr( $default ); ?>">
+                                <button type="button" class="hst-reset-btn"
+                                        data-default="<?php echo esc_attr( $default ); ?>"
+                                        data-target="<?php echo esc_attr( $opt ); ?>">↺ Default</button>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <!-- Right: Search Bar + Town Links -->
+                        <div>
+                            <div class="hst-color-group-title">Search Bar</div>
+                            <?php
+                            $hst_group2 = [
+                                'hozio_hst_search_bg'     => [ 'Background', '#ffffff' ],
+                                'hozio_hst_search_border' => [ 'Border',     '#d1d5db' ],
+                                'hozio_hst_search_text'   => [ 'Text',       '#111827' ],
+                            ];
+                            foreach ( $hst_group2 as $opt => [ $label, $default ] ) :
+                                $val = get_option( $opt, '' );
+                                $swatch_bg = $val ?: $default;
+                            ?>
+                            <div class="hst-color-row">
+                                <label class="hst-color-label" for="<?php echo esc_attr( $opt ); ?>"><?php echo esc_html( $label ); ?></label>
+                                <span class="hst-swatch" style="background:<?php echo esc_attr( $swatch_bg ); ?>"></span>
+                                <input type="text" name="<?php echo esc_attr( $opt ); ?>"
+                                       id="<?php echo esc_attr( $opt ); ?>"
+                                       class="hozio-color-picker hst-cp"
+                                       value="<?php echo esc_attr( $val ); ?>"
+                                       data-default-color="<?php echo esc_attr( $default ); ?>">
+                                <button type="button" class="hst-reset-btn"
+                                        data-default="<?php echo esc_attr( $default ); ?>"
+                                        data-target="<?php echo esc_attr( $opt ); ?>">↺ Default</button>
+                            </div>
+                            <?php endforeach; ?>
+
+                            <div class="hst-color-group-spacer"></div>
+                            <div class="hst-color-group-title">Town Links</div>
+                            <?php
+                            $hst_group3 = [
+                                'hozio_hst_link'       => [ 'Link Color',  '#2563eb' ],
+                                'hozio_hst_link_hover' => [ 'Link Hover',  '#1d4ed8' ],
+                            ];
+                            foreach ( $hst_group3 as $opt => [ $label, $default ] ) :
+                                $val = get_option( $opt, '' );
+                                $swatch_bg = $val ?: $default;
+                            ?>
+                            <div class="hst-color-row">
+                                <label class="hst-color-label" for="<?php echo esc_attr( $opt ); ?>"><?php echo esc_html( $label ); ?></label>
+                                <span class="hst-swatch" style="background:<?php echo esc_attr( $swatch_bg ); ?>"></span>
+                                <input type="text" name="<?php echo esc_attr( $opt ); ?>"
+                                       id="<?php echo esc_attr( $opt ); ?>"
+                                       class="hozio-color-picker hst-cp"
+                                       value="<?php echo esc_attr( $val ); ?>"
+                                       data-default-color="<?php echo esc_attr( $default ); ?>">
+                                <button type="button" class="hst-reset-btn"
+                                        data-default="<?php echo esc_attr( $default ); ?>"
+                                        data-target="<?php echo esc_attr( $opt ); ?>">↺ Default</button>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+
+                    </div>
+
+                    <div class="hst-reset-all-wrap">
+                        <button type="button" class="hst-reset-all-btn">↺ Reset all to defaults</button>
+                    </div>
+                </div>
 
                 <div class="hozio-submit-wrapper">
                     <?php submit_button(__('Save All Settings', 'hozio-dynamic-tags'), 'primary hozio-submit-btn', 'submit', false); ?>
@@ -2999,6 +3166,17 @@ function hozio_dynamic_tags_save_settings() {
         'hozio_to_email_contact_form',
         'hozio_nav_text_color',
         'hozio_start_year',
+        'hozio_hst_bg',
+        'hozio_hst_border',
+        'hozio_hst_header_text',
+        'hozio_hst_header_hover',
+        'hozio_hst_divider',
+        'hozio_hst_search_border',
+        'hozio_hst_search_bg',
+        'hozio_hst_search_text',
+        'hozio_hst_link',
+        'hozio_hst_link_hover',
+        'hozio_hst_heading',
     ];
 
     foreach ($fields as $field) {

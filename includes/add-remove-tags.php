@@ -458,10 +458,24 @@
                 <span class="dashicons dashicons-list-view"></span>
                 <h2>Existing Custom Tags</h2>
             </div>
-            
+
             <?php
+            // Success / error notices
+            if ( isset( $_GET['tag-added'] ) ) {
+                echo '<div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;padding:10px 14px;margin-bottom:16px;color:#065f46;font-size:13px;"><strong>Tag added successfully.</strong> It is now available in the Hozio Pro settings page.</div>';
+            } elseif ( isset( $_GET['tag-removed'] ) ) {
+                echo '<div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;padding:10px 14px;margin-bottom:16px;color:#065f46;font-size:13px;"><strong>Tag removed successfully.</strong></div>';
+            } elseif ( isset( $_GET['tag-error'] ) ) {
+                $msg = $_GET['tag-error'] === 'duplicate' ? 'A tag with that name already exists.' : 'Please fill in all required fields.';
+                echo '<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;padding:10px 14px;margin-bottom:16px;color:#991b1b;font-size:13px;"><strong>Error:</strong> ' . esc_html( $msg ) . '</div>';
+            }
+
+            // Force a fresh read bypassing any object cache
+            wp_cache_delete( 'hozio_custom_tags', 'options' );
+            wp_cache_delete( 'alloptions', 'options' );
             $custom_tags = get_option('hozio_custom_tags', []);
-            
+            if ( ! is_array( $custom_tags ) ) $custom_tags = [];
+
             if (!empty($custom_tags)) {
                 echo '<ul class="hozio-tags-list">';
                 foreach ($custom_tags as $tag) {
@@ -480,12 +494,17 @@
                                 </span>
                             </div>
                         </div>
-                        <a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=hozio_remove_tag&tag=' . urlencode($tag['value'])), 'hozio_remove_tag_' . $tag['value'])); ?>"
-                           class="button hozio-remove-btn"
-                           onclick="return confirm('Are you sure you want to remove the tag \"<?php echo esc_js($tag['title']); ?>\"? This action cannot be undone.');">
-                            <span class="dashicons dashicons-trash"></span>
-                            Remove
-                        </a>
+                        <form method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>"
+                              onsubmit="return confirm('Remove the tag &quot;<?php echo esc_js($tag['title']); ?>&quot;? This cannot be undone.');"
+                              style="margin:0;">
+                            <input type="hidden" name="action" value="hozio_remove_tag">
+                            <input type="hidden" name="tag"    value="<?php echo esc_attr($tag['value']); ?>">
+                            <?php wp_nonce_field( 'hozio_remove_tag_' . $tag['value'] ); ?>
+                            <button type="submit" class="button hozio-remove-btn">
+                                <span class="dashicons dashicons-trash"></span>
+                                Remove
+                            </button>
+                        </form>
                     </li>
                     <?php
                 }
