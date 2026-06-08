@@ -694,6 +694,33 @@ function hozio_html_fix_process( $html ) {
         );
     }
 
+    // ── Fix F: add data-calltrk-noswap to every <a href="sms:..."> link ────────
+    // The Elementor URL-type dynamic tag outputs a bare URL string into the href,
+    // so there is no hook to add the attribute from within the tag itself.
+    // Stamping it server-side in the full-page buffer ensures CallRail sees the
+    // attribute before its JS swap runs, protecting both href and link text.
+    if ( get_option( 'hozio_sms_calltrk_noswap', '0' ) === '1'
+         && strpos( $html, 'href=' ) !== false
+         && stripos( $html, 'sms:' ) !== false ) {
+        $html = preg_replace_callback(
+            '/<a(\s[^>]*?)>/i',
+            function ( $m ) {
+                $tag = $m[0];
+                // Only target anchors whose href begins with sms:
+                if ( ! preg_match( '/\bhref\s*=\s*["\']sms:/i', $tag ) ) {
+                    return $tag;
+                }
+                // Skip if already marked
+                if ( stripos( $tag, 'data-calltrk-noswap' ) !== false ) {
+                    return $tag;
+                }
+                // Insert attribute before the closing >
+                return '<a' . $m[1] . ' data-calltrk-noswap>';
+            },
+            $html
+        );
+    }
+
     return $html;
 }
 

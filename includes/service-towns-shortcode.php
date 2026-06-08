@@ -47,7 +47,7 @@ function hozio_service_towns_styles() {
     .hst-county.hst-open .hst-county-btn { border-radius: 10px 10px 0 0 !important; }
     .hst-county.hst-open .hst-county-btn:hover { border-radius: 10px 10px 0 0 !important; }
     .hst-county-name { flex: 1 !important; font-size: 16px !important; font-weight: 600 !important; color: <?php echo $c_header_text; ?> !important; line-height: 1.4 !important; }
-    .hst-county-count { font-size: 12px !important; color: <?php echo $c_secondary; ?> !important; font-weight: 400 !important; }
+    .hst-county-count { font-size: 12px !important; color: <?php echo $c_heading; ?> !important; font-weight: 400 !important; }
     .hst-chevron { width: 18px !important; height: 18px !important; flex-shrink: 0 !important; color: <?php echo $c_secondary; ?> !important; transition: transform .2s; }
     .hst-county.hst-open .hst-chevron { transform: rotate(180deg) !important; }
     .hst-county-body { padding: 20px 26px 26px !important; border-top: 1.5px solid <?php echo $c_divider; ?> !important; }
@@ -57,7 +57,7 @@ function hozio_service_towns_styles() {
     .hst-town-link:hover { color: <?php echo $c_link_hover; ?> !important; text-decoration: underline !important; }
     .hst-town-link.hst-hide { display: none !important; }
 
-    .hst-no-results { text-align: center !important; padding: 32px !important; color: <?php echo $c_secondary; ?> !important; font-size: 14px !important; margin: 0 !important; }
+    .hst-no-results { text-align: center !important; padding: 32px !important; color: <?php echo $c_heading; ?> !important; font-size: 14px !important; margin: 0 !important; }
 
     /* Search mode — keep county label visible, strip interactive chrome */
     .hst-searching .hst-county { border: none !important; background: transparent !important; box-shadow: none !important; overflow: visible !important; }
