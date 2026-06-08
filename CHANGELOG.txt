@@ -2,6 +2,19 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.10 (May 2026) ==
+
+= Fixes =
+
+* CallRail noswap: output buffer now stamps data-calltrk-noswap on every
+  <a href="sms:..."> element server-side, protecting the link href as well
+  as the visible text. Previously the href was still being swapped by
+  CallRail's JS even when the noswap toggle was enabled.
+
+* Service towns shortcode: city count ("4 cities") and "No cities found"
+  message now follow the Heading Text color setting instead of the fixed
+  muted grey.
+
 == Version 4.12.9 (May 2026) ==
 
 = Features =
