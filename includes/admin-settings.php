@@ -2212,6 +2212,7 @@ function hozio_dynamic_tags_register_settings() {
         'hozio_hst_link',
         'hozio_hst_link_hover',
         'hozio_hst_heading',
+        'hozio_hst_county_order',
     ];
 
     foreach ($fields as $field) {
@@ -3037,6 +3038,25 @@ function hozio_dynamic_tags_settings_page() {
                     <div class="hst-reset-all-wrap">
                         <button type="button" class="hst-reset-all-btn">↺ Reset all to defaults</button>
                     </div>
+
+                    <div style="margin-top:22px;padding-top:18px;border-top:1px solid #f3f4f6;">
+                        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:8px;">County Display Order</label>
+                        <select name="hozio_hst_county_order" id="hozio_hst_county_order" style="min-width:220px;font-size:13px;">
+                            <?php
+                            $order_val = get_option( 'hozio_hst_county_order', 'count_desc' );
+                            $order_opts = [
+                                'count_desc' => 'Most cities first',
+                                'count_asc'  => 'Fewest cities first',
+                                'alpha'      => 'Alphabetical (A → Z)',
+                                'manual'     => 'Manual (ACF field order)',
+                            ];
+                            foreach ( $order_opts as $v => $lbl ) :
+                            ?>
+                            <option value="<?php echo esc_attr( $v ); ?>"<?php selected( $order_val, $v ); ?>><?php echo esc_html( $lbl ); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">Controls how county accordions are sorted on the front end.</p>
+                    </div>
                 </div>
 
                 <div class="hozio-submit-wrapper">
@@ -3177,6 +3197,7 @@ function hozio_dynamic_tags_save_settings() {
         'hozio_hst_link',
         'hozio_hst_link_hover',
         'hozio_hst_heading',
+        'hozio_hst_county_order',
     ];
 
     foreach ($fields as $field) {

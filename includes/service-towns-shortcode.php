@@ -226,6 +226,16 @@ function hozio_service_towns_shortcode() {
 
     if ( empty( $counties_data ) ) return '';
 
+    $county_order = get_option( 'hozio_hst_county_order', 'count_desc' );
+    if ( $county_order === 'count_desc' ) {
+        usort( $counties_data, fn( $a, $b ) => count( $b['towns'] ) - count( $a['towns'] ) );
+    } elseif ( $county_order === 'count_asc' ) {
+        usort( $counties_data, fn( $a, $b ) => count( $a['towns'] ) - count( $b['towns'] ) );
+    } elseif ( $county_order === 'alpha' ) {
+        usort( $counties_data, fn( $a, $b ) => strcmp( $a['name'], $b['name'] ) );
+    }
+    // 'manual' = preserve ACF field order, no sort needed
+
     hozio_service_towns_styles();
     $uid = 'hst-' . $page_id;
     ob_start();
