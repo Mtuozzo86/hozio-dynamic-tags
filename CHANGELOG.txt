@@ -2,6 +2,27 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.12 (June 2026) ==
+
+= Improvements =
+
+* Image sitemap: orphaned media library images (uploaded to a post's editor but
+  never inserted into content) are now excluded. Only images actually present in
+  published page/post content appear in image.xml — detected via wp-image-{id}
+  class in classic editor content, gallery shortcodes, featured images, Elementor
+  widget data, and Gutenberg blocks.
+
+* Video sitemap: video.xml is no longer listed in sitemap_index.xml when the site
+  has no videos referenced in published content, preventing Google from crawling
+  an empty file. The entry reappears automatically once a video is placed on a
+  published page.
+
+* Video sitemap: the video sitemap setting is now auto-enabled the first time any
+  video file is uploaded to the media library, so clients do not need to manually
+  toggle the setting.
+
+--------------------------------------------------------------------------------
+
 == Version 4.12.11 (June 2026) ==
 
 = New Features =

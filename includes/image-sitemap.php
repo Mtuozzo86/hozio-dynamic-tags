@@ -31,6 +31,7 @@ class Hozio_ImageVideoSitemap {
         add_filter('query_vars', [$this, 'ivxs_add_query_vars']);
         add_action('template_redirect', [$this, 'ivxs_generate_custom_sitemap']);
         add_filter('redirect_canonical', [$this, 'ivxs_disable_trailing_slash_redirect'], 10, 2);
+        add_action('add_attachment', [$this, 'ivxs_maybe_enable_video_sitemap']);
     }
 
     private function __clone() {}
@@ -212,7 +213,8 @@ class Hozio_ImageVideoSitemap {
             delete_option('ivxs_image_sitemap_filename');
         }
 
-        if(!empty($enable_video_sitemap) && !empty($video_sitemap_filename)){
+        if(!empty($enable_video_sitemap) && !empty($video_sitemap_filename)
+            && $this->ivxs_has_content_media('video') ){
             $sitemaps .= '
                 <sitemap>
                     <loc>' . esc_url( site_url( '/'.$video_sitemap_filename.'.xml' ) ) . '</loc>
@@ -309,6 +311,52 @@ class Hozio_ImageVideoSitemap {
     }
 
     /**
+     * Auto-enable the video sitemap the first time a video is uploaded to the media library.
+     * The content-based check in ivxs_add_index_sitemap() still controls whether video.xml
+     * actually appears in the sitemap index — it won't until the video is placed on a page.
+     */
+    public function ivxs_maybe_enable_video_sitemap( $attachment_id ) {
+        $mime = get_post_mime_type( $attachment_id );
+        if ( ! $mime || strpos( $mime, 'video/' ) !== 0 ) {
+            return;
+        }
+        if ( get_option( 'ivxs_enable_video_sitemap' ) !== '1' ) {
+            update_option( 'ivxs_enable_video_sitemap', '1' );
+        }
+        if ( ! get_option( 'ivxs_video_sitemap_filename' ) ) {
+            update_option( 'ivxs_video_sitemap_filename', 'video' );
+        }
+    }
+
+    /**
+     * Returns true if any attachment of the given type (image|video) is referenced
+     * in published post content. Used to gate sitemap index entries.
+     */
+    private function ivxs_has_content_media( $type ) {
+        global $wpdb;
+        $allowed_ids = $this->ivxs_collect_published_media_ids(); // already intval-cast
+        if ( empty( $allowed_ids ) ) {
+            return false;
+        }
+        $mime_types = $type === 'image'
+            ? [ 'image/jpeg', 'image/png', 'image/gif', 'image/webp' ]
+            : [ 'video/mp4', 'video/avi', 'video/mov', 'video/webm' ];
+        $id_placeholders   = implode( ',', array_fill( 0, count( $allowed_ids ), '%d' ) );
+        $mime_placeholders = implode( ',', array_fill( 0, count( $mime_types ), '%s' ) );
+        $count = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(*) FROM {$wpdb->posts}
+                 WHERE post_type = 'attachment'
+                 AND post_status = 'inherit'
+                 AND post_mime_type IN ($mime_placeholders)
+                 AND ID IN ($id_placeholders)",
+                array_merge( $mime_types, $allowed_ids )
+            )
+        );
+        return $count > 0;
+    }
+
+    /**
      * Check if an attachment is an Elementor screenshot
      */
     private function ivxs_is_elementor_screenshot( $attachment_id ) {
@@ -398,15 +446,26 @@ class Hozio_ImageVideoSitemap {
         global $wpdb;
         $ids = [];
 
-        // 1. Attachments whose post_parent is a published post
-        $rows = $wpdb->get_col(
-            "SELECT p.ID FROM {$wpdb->posts} p
-             INNER JOIN {$wpdb->posts} par ON p.post_parent = par.ID
-             WHERE p.post_type = 'attachment'
-             AND p.post_status = 'inherit'
-             AND par.post_status = 'publish'"
+        // 1. Classic editor inline images (wp-image-{id} class) and gallery shortcodes.
+        //    Intentionally NOT using post_parent — WordPress sets post_parent when an image is
+        //    uploaded via the post editor even if it was never inserted into the content, so
+        //    post_parent alone would include orphaned media library uploads.
+        $classic_rows = $wpdb->get_col(
+            "SELECT post_content FROM {$wpdb->posts}
+             WHERE post_status = 'publish'
+             AND post_type IN ('post','page')
+             AND (post_content LIKE '%wp-image-%' OR post_content LIKE '%[gallery%')"
         );
-        if ( $rows ) $ids = array_merge( $ids, $rows );
+        foreach ( $classic_rows as $content ) {
+            if ( preg_match_all( '/\bwp-image-(\d+)\b/', $content, $m ) ) {
+                $ids = array_merge( $ids, $m[1] );
+            }
+            if ( preg_match_all( '/\[gallery[^\]]*ids="([^"]+)"/', $content, $m ) ) {
+                foreach ( $m[1] as $csv ) {
+                    $ids = array_merge( $ids, array_map( 'trim', explode( ',', $csv ) ) );
+                }
+            }
+        }
 
         // 2. Featured images (_thumbnail_id) of published posts
         $rows = $wpdb->get_col(
