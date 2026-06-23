@@ -2,6 +2,19 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.13 (June 2026) ==
+
+= New Features =
+
+* Lead Submissions: Fluent Forms submissions are now captured automatically,
+  joining the existing Elementor, WPForms, Gravity Forms, Contact Form 7, and
+  Divi integrations. Name, email, and phone are auto-detected (by field name or
+  label), composite name/address fields are handled, and entries appear in the
+  Lead Submissions dashboard with the Fluent Forms badge and in the platform
+  filter dropdown.
+
+--------------------------------------------------------------------------------
+
 == Version 4.12.12 (June 2026) ==
 
 = Improvements =

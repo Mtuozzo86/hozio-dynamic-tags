@@ -2928,6 +2928,76 @@ add_action( 'gform_after_submission', function( $entry, $form ) {
 
 
 // ══════════════════════════════════════════════════════════
+// 4j. FLUENT FORMS — native integration
+//     Fires automatically on every Fluent Forms submission.
+//     Source string 'Fluent Forms' slugs to 'fluentforms', which
+//     already has a badge style (.hl-plat-fluentforms) and will
+//     auto-appear in the platform filter once the first lead lands.
+// ══════════════════════════════════════════════════════════
+add_action( 'fluentform/submission_inserted', function( $entry_id, $form_data, $form ) {
+    $name = ''; $email = ''; $phone = ''; $all_fields = [];
+
+    // Best-effort: build a field-name => human-label map from the form definition.
+    $labels = [];
+    if ( is_object( $form ) && ! empty( $form->form_fields ) ) {
+        $def = json_decode( $form->form_fields, true );
+        if ( ! empty( $def['fields'] ) && is_array( $def['fields'] ) ) {
+            $stack = $def['fields'];
+            while ( $stack ) {
+                $f = array_shift( $stack );
+                if ( ! is_array( $f ) ) continue;
+                // Walk container layouts (rows/columns) to reach nested fields.
+                if ( ! empty( $f['fields'] ) && is_array( $f['fields'] ) ) {
+                    foreach ( $f['fields'] as $child ) $stack[] = $child;
+                }
+                if ( ! empty( $f['columns'] ) && is_array( $f['columns'] ) ) {
+                    foreach ( $f['columns'] as $col ) {
+                        if ( ! empty( $col['fields'] ) && is_array( $col['fields'] ) ) {
+                            foreach ( $col['fields'] as $child ) $stack[] = $child;
+                        }
+                    }
+                }
+                $att = $f['attributes']['name'] ?? '';
+                $lbl = $f['settings']['label'] ?? '';
+                if ( $att !== '' && $lbl !== '' ) $labels[ $att ] = $lbl;
+            }
+        }
+    }
+
+    $skip = [ '__fluent_form_embded_post_id', '_wp_http_referer', 'g-recaptcha-response', 'h-captcha-response', '__stripe_payment_method' ];
+
+    foreach ( (array) $form_data as $key => $value ) {
+        if ( in_array( $key, $skip, true ) ) continue;
+        if ( strpos( $key, '_fluentform' ) === 0 || strpos( $key, '__fluent' ) === 0 ) continue;
+
+        // Composite fields (name / address) arrive as arrays.
+        if ( is_array( $value ) ) {
+            $sep   = ( $key === 'names' ) ? ' ' : ', ';   // name reads better with spaces, address with commas
+            $value = trim( implode( $sep, array_filter( array_map( 'sanitize_text_field', $value ) ) ) );
+        } else {
+            $value = sanitize_text_field( (string) $value );
+        }
+        if ( $value === '' ) continue;
+
+        $label = $labels[ $key ] ?? ucwords( str_replace( [ '-', '_' ], ' ', $key ) );
+        $all_fields[ $label ] = $value;
+
+        // Detect by field-name attribute OR by human label (covers generic names like input_email_1).
+        $lower = strtolower( $key . ' ' . $label );
+        if ( ! $name  && ( $key === 'names' || strpos( $lower, 'name' )  !== false ) ) $name  = $value;
+        if ( ! $email && strpos( $lower, 'email' ) !== false ) $email = $value;
+        if ( ! $phone && ( strpos( $lower, 'phone' ) !== false || strpos( $lower, 'tel' ) !== false || strpos( $lower, 'mobile' ) !== false ) ) $phone = $value;
+    }
+
+    hozio_insert_lead_record(
+        'Fluent Forms', $name, $email, $phone,
+        isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '',
+        $all_fields
+    );
+}, 10, 3 );
+
+
+// ══════════════════════════════════════════════════════════
 // 5. FRONT-END SHORTCODE
 // ══════════════════════════════════════════════════════════
 add_shortcode( 'leads_digest', function() {
