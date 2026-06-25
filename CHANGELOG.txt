@@ -2,6 +2,26 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.14 (June 2026) ==
+
+= Fixes =
+
+* Contact Form Email(s): valid addresses that include invisible characters
+  (zero-width or non-breaking spaces pasted in from Zapier, Gmail, etc.) are now
+  cleaned automatically instead of being rejected as an invalid email format.
+
+* Contact Form Email(s): a failed save no longer clears the field — the value you
+  typed is preserved so you can correct it without re-entering it.
+
+* Contact Form Email(s): added a "save exactly as entered" override that appears
+  on a validation error, so a valid-but-unusual address (e.g. a Zapier parser
+  inbox) can be force-saved.
+
+* Settings page: fixed the email-error banner overlapping the Contact Information
+  card.
+
+--------------------------------------------------------------------------------
+
 == Version 4.12.13 (June 2026) ==
 
 = New Features =

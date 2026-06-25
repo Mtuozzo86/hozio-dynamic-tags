@@ -784,7 +784,11 @@ function hozio_color_picker_init() {
             }
 
             function validate() {
-                var raw = ($emailField.val() || '').trim();
+                // Strip invisible chars (zero-width / BOM / non-breaking spaces) that
+                // ride along on pasted addresses and would falsely fail the check.
+                var cleaned = ($emailField.val() || '').replace(/[​-‍﻿ ]/g, '');
+                if (cleaned !== ($emailField.val() || '')) { $emailField.val(cleaned); }
+                var raw = cleaned.trim();
                 if (raw === '') return { ok: true, invalid: [] };
                 var parts = raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
                 var bad = [];
@@ -869,15 +873,23 @@ function hozio_dynamic_tags_inline_styles() {
 
         /* Email validation error banner */
         .hozio-email-error-banner {
+            position: relative;
+            z-index: 5;
             display: flex;
             align-items: flex-start;
             gap: 14px;
-            margin: 16px 0 0;
+            margin: 18px 40px;
             padding: 16px 20px;
             background: linear-gradient(135deg, #fee2e2, #fecaca);
             border: 2px solid #dc2626;
             border-radius: 10px;
             box-shadow: 0 4px 12px rgba(220, 38, 38, 0.15);
+        }
+        /* When the error banner is shown, stop the content card from tucking up
+           under the header (margin-top:-30px) so it can no longer overlap the banner.
+           Higher specificity than the base .hozio-content rule, so it always wins. */
+        .hozio-has-error .hozio-content {
+            margin-top: 0;
         }
         .hozio-email-error-icon {
             flex-shrink: 0;
@@ -2279,6 +2291,12 @@ function hozio_dynamic_tags_render_input($args) {
     $option = get_option($args['label_for'], '');
     $field_id = $args['label_for'];
 
+    // After a failed Contact Form Email(s) save, show what the user typed instead
+    // of the saved value so their input isn't lost (set in the page render above).
+    if ( $field_id === 'hozio_to_email_contact_form' && isset( $GLOBALS['hozio_email_error_value'] ) ) {
+        $option = $GLOBALS['hozio_email_error_value'];
+    }
+
     // Check if this is a custom tag
     $is_custom_tag = false;
     if (strpos($field_id, 'hozio_') === 0) {
@@ -2424,8 +2442,14 @@ function hozio_dynamic_tags_settings_page() {
         $hozio_email_error = get_transient( 'hozio_settings_email_error' );
         delete_transient( 'hozio_settings_email_error' );
     }
+    // On error, repopulate the Contact Form Email(s) field with what the user typed
+    // (so their input is never lost) and flag the wrapper so the banner can't overlap.
+    if ( $hozio_email_error && isset( $hozio_email_error['value'] ) ) {
+        $GLOBALS['hozio_email_error_value'] = $hozio_email_error['value'];
+    }
+    $hozio_wrapper_error_class = ( $hozio_email_error && ! empty( $hozio_email_error['invalid'] ) ) ? ' hozio-has-error' : '';
     ?>
-    <div class="hozio-settings-wrapper">
+    <div class="hozio-settings-wrapper<?php echo esc_attr( $hozio_wrapper_error_class ); ?>">
         <div class="hozio-header">
             <div class="hozio-header-content">
                 <h1>
@@ -2492,6 +2516,16 @@ function hozio_dynamic_tags_settings_page() {
                         </label>
                         <span style="font-size: 11px; color: #6b7280;">(Prevents CallRail from swapping this number)</span>
                     </div>
+                    <?php if ( $hozio_email_error && ! empty( $hozio_email_error['invalid'] ) ) : ?>
+                    <!-- Email validation override (only shown after a failed email save) -->
+                    <div style="margin-top: 12px; padding: 12px 16px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #7c2d12;">
+                            <input type="checkbox" name="hozio_to_email_skip_validation" value="1" style="margin: 0;">
+                            <span>Save the Contact Form Email(s) <strong>exactly as entered</strong> (skip the format check), then click Save.</span>
+                        </label>
+                        <span style="font-size: 11px; color: #9a3412;">For valid-but-unusual addresses (e.g. Zapier parser inboxes).</span>
+                    </div>
+                    <?php endif; ?>
                 </div>
 
                 <!-- Business Details Section -->
@@ -3083,28 +3117,43 @@ function hozio_dynamic_tags_save_settings() {
     // field, store the bad input + invalid items in a transient so the page
     // can show a clear error on redirect.
     $contact_email_raw = isset( $_POST['hozio_to_email_contact_form'] )
-        ? trim( wp_unslash( (string) $_POST['hozio_to_email_contact_form'] ) )
+        ? wp_unslash( (string) $_POST['hozio_to_email_contact_form'] )
         : '';
+    // Strip invisible chars that frequently ride along on pasted addresses
+    // (zero-width spaces U+200B–U+200D, BOM U+FEFF, non-breaking space U+00A0)
+    // and make is_email() reject an otherwise-valid address.
+    $contact_email_raw = trim( (string) preg_replace( '/[\x{200B}-\x{200D}\x{FEFF}\x{00A0}]/u', '', $contact_email_raw ) );
+
+    // Override: when the admin ticks "save as entered", skip the format check.
+    $contact_email_override     = ! empty( $_POST['hozio_to_email_skip_validation'] );
     $contact_email_invalid_list = array();
+    $contact_email_clean        = array();
     if ( $contact_email_raw !== '' ) {
         $emails = array_filter( array_map( 'trim', explode( ',', $contact_email_raw ) ) );
         foreach ( $emails as $em ) {
-            if ( ! is_email( $em ) ) {
+            $sane = sanitize_email( $em );
+            if ( $sane !== '' && is_email( $sane ) ) {
+                $contact_email_clean[] = $sane;                      // valid, normalized
+            } elseif ( $contact_email_override ) {
+                $contact_email_clean[] = sanitize_text_field( $em );  // forced save, as entered
+            } else {
                 $contact_email_invalid_list[] = $em;
             }
         }
     }
-    $contact_email_has_error = ! empty( $contact_email_invalid_list );
+    $contact_email_has_error = ! $contact_email_override && ! empty( $contact_email_invalid_list );
     if ( $contact_email_has_error ) {
         set_transient( 'hozio_settings_email_error', array(
             'invalid' => $contact_email_invalid_list,
             'value'   => $contact_email_raw,
         ), 5 * MINUTE_IN_SECONDS );
-        // Skip saving the field — the existing value in the DB remains intact
+        // Don't save the bad value (last good one stays live), but DON'T wipe the
+        // user's input — the field is repopulated from the transient on redirect.
         unset( $_POST['hozio_to_email_contact_form'] );
     } else {
-        // Clear any stale error transient from a previous failed save
+        // Valid or overridden: save the cleaned, comma-joined list and clear errors.
         delete_transient( 'hozio_settings_email_error' );
+        $_POST['hozio_to_email_contact_form'] = implode( ', ', $contact_email_clean );
     }
 
     // Save structured address fields; auto-build company_address when any are filled.
