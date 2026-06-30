@@ -56,7 +56,7 @@ function hozio_query_options_meta_box_callback($post) {
         <?php endif; ?>
 
         <p style="margin-top: 12px; padding: 10px; background: #d1ecf1; border-left: 3px solid #0c5460; font-size: 12px;">
-            <strong>Tip:</strong> Enable this on parent/service pages when multiple page hierarchies share the same slug (e.g., <code>/window/repair/</code> and <code>/skylight/repair/</code>). This prevents their town pages from mixing in query results.
+            <strong>Tip:</strong> Enable this on parent/service pages when multiple page hierarchies share the same slug (e.g., <code>/window/repair/</code> and <code>/skylight/repair/</code>). This prevents their town pages from mixing &mdash; both in dynamic query loops <em>and</em> in the <code>[hozio_service_towns]</code> accordion.
         </p>
     </div>
     <?php

@@ -2,6 +2,21 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.15 (June 2026) ==
+
+= Improvements =
+
+* Service Towns accordion ([hozio_service_towns]): now honors the "Filter by
+  parent page" option. When that option is enabled on a service page, the
+  accordion shows only that page's direct child town pages — so two service
+  pages that share the same Page Taxonomy slug under different parents (e.g.
+  /commercial/sprinkler-system-installation/ and /residential/sprinkler-system-
+  installation/) no longer show the same towns. Applies to both the county-
+  grouped view and the flat "All Cities" fallback; pages without the option set
+  are unchanged.
+
+--------------------------------------------------------------------------------
+
 == Version 4.12.14 (June 2026) ==
 
 = Fixes =

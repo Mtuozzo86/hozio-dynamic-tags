@@ -76,8 +76,8 @@ function hozio_service_towns_styles() {
 }
 
 // ── Flat fallback ────────────────────────────────────────────────────────────
-function hozio_service_towns_flat_fallback( $page_id, $page_title, $service_slug ) {
-    $towns = get_posts( [
+function hozio_service_towns_flat_fallback( $page_id, $page_title, $service_slug, $restrict_parent = 0 ) {
+    $flat_args = [
         'post_type'      => 'page',
         'posts_per_page' => -1,
         'orderby'        => 'title',
@@ -90,7 +90,13 @@ function hozio_service_towns_flat_fallback( $page_id, $page_title, $service_slug
             'terms'    => $service_slug,
             'operator' => 'IN',
         ] ],
-    ] );
+    ];
+    // When "Filter by parent page" is enabled, scope to this service page's direct
+    // child towns so same-slug services under different parents don't share towns.
+    if ( $restrict_parent ) {
+        $flat_args['post_parent'] = $restrict_parent;
+    }
+    $towns = get_posts( $flat_args );
 
     if ( empty( $towns ) ) return '';
 
@@ -176,9 +182,17 @@ function hozio_service_towns_shortcode() {
     $page_title   = get_the_title( $page_id );
     $service_slug = basename( untrailingslashit( get_permalink( $page_id ) ) );
 
+    // When "Filter by parent page" (hozio_filter_by_parent_page) is enabled on this
+    // service page, restrict towns to its direct child pages (post_parent). This
+    // disambiguates service pages that share the same parent_pages term slug but live
+    // under different hierarchies — e.g. /commercial/sprinkler-system-installation/
+    // vs /residential/sprinkler-system-installation/ — mirroring the same filter the
+    // dynamic parent/county Elementor queries already honor.
+    $restrict_parent = get_post_meta( $page_id, 'hozio_filter_by_parent_page', true ) ? $page_id : 0;
+
     $county_slugs = get_field( 'county_groups', $page_id );
     if ( empty( $county_slugs ) ) {
-        return hozio_service_towns_flat_fallback( $page_id, $page_title, $service_slug );
+        return hozio_service_towns_flat_fallback( $page_id, $page_title, $service_slug, $restrict_parent );
     }
 
     $counties_data = [];
@@ -192,7 +206,7 @@ function hozio_service_towns_shortcode() {
         }
         if ( ! $county_term || is_wp_error( $county_term ) ) continue;
 
-        $towns = get_posts( [
+        $town_args = [
             'post_type'      => 'page',
             'posts_per_page' => -1,
             'orderby'        => 'title',
@@ -214,7 +228,12 @@ function hozio_service_towns_shortcode() {
                     'operator' => 'IN',
                 ],
             ],
-        ] );
+        ];
+        // Same parent-page scoping as the flat fallback (see note above).
+        if ( $restrict_parent ) {
+            $town_args['post_parent'] = $restrict_parent;
+        }
+        $towns = get_posts( $town_args );
 
         if ( ! empty( $towns ) ) {
             $counties_data[] = [
