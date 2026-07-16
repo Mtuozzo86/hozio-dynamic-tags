@@ -2,6 +2,19 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.16 (June 2026) ==
+
+= New Features =
+
+* REST API: added GET /wp-json/hozio/v1/page-templates, which returns the page
+  and post templates available on the site (theme-defined templates plus any
+  registered via the theme_page_templates filter, including the plugin's own
+  "HTML Sitemap" template). Requires the edit_posts capability (authenticate with
+  an Application Password) — intended for third-party integrations that need to
+  read the site's available templates.
+
+--------------------------------------------------------------------------------
+
 == Version 4.12.15 (June 2026) ==
 
 = Improvements =

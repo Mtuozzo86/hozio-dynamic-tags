@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.12.15
+Version:         4.12.16
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -13,7 +13,7 @@ GitHub Branch:   main
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.12.15');
+define('HOZIO_VERSION', '4.12.16');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -1104,6 +1104,30 @@ function hozio_register_acf_fields_endpoint() {
     ));
 }
 add_action('rest_api_init', 'hozio_register_acf_fields_endpoint');
+
+/**
+ * REST: list the page/post templates available on this site.
+ *   GET /wp-json/hozio/v1/page-templates
+ *   → { "post": { "file.php": "Name", ... }, "page": { "elementor_canvas": "Elementor Canvas", ... } }
+ * Includes theme-defined templates plus any registered via the theme_page_templates
+ * filter (e.g. this plugin's own "HTML Sitemap" template). Auth: edit_posts — same as
+ * the ACF endpoints — so a third-party app authenticates with an Application Password.
+ */
+add_action( 'rest_api_init', function () {
+    register_rest_route( 'hozio/v1', '/page-templates', array(
+        'methods'             => 'GET',
+        'permission_callback' => function () {
+            return current_user_can( 'edit_posts' );
+        },
+        'callback'            => function () {
+            $theme = wp_get_theme();
+            return array(
+                'post' => $theme->get_page_templates( null, 'post' ),
+                'page' => $theme->get_page_templates( null, 'page' ),
+            );
+        },
+    ) );
+} );
 
 /**
  * Get all ACF field groups with their fields
