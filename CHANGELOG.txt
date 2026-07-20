@@ -2,6 +2,23 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.12.17 (July 2026) ==
+
+= Removed =
+
+* Lead webhook: the inbound lead webhook (POST /wp-json/hozio/v1/lead) has been
+  removed entirely, along with its secret key, the Webhook settings page, the
+  blocked-attempts log, the admin banners, and the Feature Toggle. The endpoint
+  now returns 404 unconditionally. A one-time cleanup deletes the stored secret
+  and related options from the database.
+
+* Lead capture is unaffected: the native form integrations (Elementor, Divi,
+  Contact Form 7, WPForms, Gravity Forms, Fluent Forms), the Lead Submissions
+  dashboard, spam scoring, CSV export, and the [leads_digest] shortcode all
+  continue to work as before.
+
+--------------------------------------------------------------------------------
+
 == Version 4.12.16 (June 2026) ==
 
 = New Features =

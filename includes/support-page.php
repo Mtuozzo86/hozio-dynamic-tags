@@ -225,12 +225,6 @@ function hozio_support_page() {
                     <p class="hozio-card-desc">View and manage form submissions</p>
                 </div>
 
-                <div class="hozio-card" data-section="lead-webhook" data-category="settings" data-description="Secure REST endpoint for capturing leads from external services — secret key, enable/disable toggle, blocked attempts log">
-                    <span class="dashicons dashicons-shield hozio-card-icon"></span>
-                    <h3 class="hozio-card-title">Lead Webhook</h3>
-                    <p class="hozio-card-desc">Secure endpoint for external lead capture</p>
-                </div>
-
                 <div class="hozio-card" data-section="plugin-settings" data-category="settings" data-description="Configure features &amp; debug logging">
                     <span class="dashicons dashicons-admin-generic hozio-card-icon"></span>
                     <h3 class="hozio-card-title">Plugin Settings &amp; Debug</h3>
@@ -833,100 +827,6 @@ function hozio_support_page() {
                                 Set these in Elementor under each form field's <strong>Advanced</strong> tab &rarr; <strong>ID</strong> field.
                             </li>
                             <li>You can also use the <code>[leads_digest]</code> shortcode to display leads on a frontend page.</li>
-                        </ul>
-                    </div>
-                </div>
-
-                <!-- Section: lead-webhook -->
-                <div data-content="lead-webhook">
-                    <div class="hozio-support-what">
-                        <h3>What it does</h3>
-                        <p>The Lead Webhook is a secure REST API endpoint at <code>/wp-json/hozio/v1/lead</code> that allows external services (Zapier, Make, custom scripts) to POST lead data directly into your Lead Submissions dashboard. It is protected by a per-site secret key — requests without the correct key are rejected and logged automatically.</p>
-                        <p><strong>Standard form integrations are not affected by this feature.</strong> Elementor Forms, WPForms, Gravity Forms, CF7, and Divi Forms all capture leads via WordPress hooks — they do not use this endpoint. The webhook is only relevant if you are sending leads from an external source (e.g., a third-party landing page, Zapier workflow, or API integration).</p>
-                    </div>
-
-                    <div class="hozio-support-steps">
-                        <h3>Enable / disable the webhook</h3>
-                        <ol>
-                            <li>Go to <strong>Hozio Pro &rarr; Hozio Pro Settings</strong>.</li>
-                            <li>In the <strong>Feature Toggles</strong> section, find <strong>Lead Webhook Endpoint</strong>.</li>
-                            <li>Toggle it <strong>on</strong> (default) to enable, or <strong>off</strong> to completely disable. When disabled, the endpoint returns 404 and is invisible to bots.</li>
-                            <li>Click <strong>Save Settings</strong>.</li>
-                        </ol>
-                        <p style="margin-top:10px;padding:10px 14px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:4px;font-size:13px;">
-                            <strong>Recommendation:</strong> If you are not sending leads from any external service, disable the webhook. There is no benefit to leaving an unused endpoint open, even though it is protected by the secret key.
-                        </p>
-                    </div>
-
-                    <div class="hozio-support-steps">
-                        <h3>Finding your webhook URL &amp; secret key</h3>
-                        <ol>
-                            <li>Go to <strong>Lead Submissions &rarr; Webhook Settings</strong> in the WordPress admin.</li>
-                            <li>Your <strong>Webhook URL</strong> and <strong>Secret Key</strong> are displayed at the top of the page.</li>
-                            <li>Click the <strong>copy icon</strong> next to each value to copy it to your clipboard.</li>
-                            <li>If you need to rotate the secret (e.g., if it was accidentally exposed), click <strong>Regenerate Secret</strong>. Update the new secret in all services that use it.</li>
-                        </ol>
-                        <p style="margin-top:10px;padding:10px 14px;background:#f0f9ff;border-left:3px solid #0ea5e9;border-radius:4px;font-size:13px;">
-                            <strong>Security note:</strong> The secret key is only shown inside your WordPress admin. It is never embedded in your site's HTML source. Even if a bot discovers the endpoint URL, every request without the correct key is automatically rejected and added to the blocked attempts log.
-                        </p>
-                    </div>
-
-                    <div class="hozio-support-steps">
-                        <h3>How to send leads to the webhook</h3>
-                        <p>Every request must include the <code>X-Hozio-Secret</code> header set to your secret key. The body must be JSON.</p>
-
-                        <h4 style="margin-top:16px;">Elementor Forms (via webhook action)</h4>
-                        <p>In the Elementor form widget &rarr; <strong>Actions After Submit</strong> &rarr; <strong>Webhook</strong>:</p>
-                        <ul>
-                            <li><strong>URL:</strong> your Webhook URL</li>
-                            <li><strong>Advanced Headers:</strong> <code>X-Hozio-Secret: &lt;your-secret&gt;</code></li>
-                        </ul>
-                        <p style="color:#6b7280;font-size:12px;margin-top:4px;">Note: Elementor also captures leads via the WordPress hook — this webhook action is only needed for external/remote capture scenarios. For on-site Elementor forms, leads are already captured automatically without any webhook configuration.</p>
-
-                        <h4 style="margin-top:16px;">WPForms (via Zapier or webhook addon)</h4>
-                        <p>In the Zapier action (HTTP POST):</p>
-                        <ul>
-                            <li><strong>URL:</strong> your Webhook URL</li>
-                            <li><strong>Headers:</strong> <code>Content-Type: application/json</code>, <code>X-Hozio-Secret: &lt;your-secret&gt;</code></li>
-                            <li><strong>Body (JSON):</strong> <code>{"fname":"...","lname":"...","email":"...","tel":"..."}</code></li>
-                        </ul>
-
-                        <h4 style="margin-top:16px;">Zapier / Make.com (generic HTTP action)</h4>
-                        <pre style="background:#f3f4f6;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;margin:8px 0;">POST https://yoursite.com/wp-json/hozio/v1/lead
-Content-Type: application/json
-X-Hozio-Secret: &lt;your-secret&gt;
-
-{
-  "fname": "Jane",
-  "lname": "Smith",
-  "email": "jane@example.com",
-  "tel": "555-867-5309",
-  "message": "I need a quote"
-}</pre>
-
-                        <h4 style="margin-top:16px;">cURL (for testing)</h4>
-                        <pre style="background:#f3f4f6;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;margin:8px 0;">curl -X POST https://yoursite.com/wp-json/hozio/v1/lead \
-  -H "Content-Type: application/json" \
-  -H "X-Hozio-Secret: &lt;your-secret&gt;" \
-  -d '{"fname":"Test","lname":"User","email":"test@example.com","tel":"5551234567"}'</pre>
-                    </div>
-
-                    <div class="hozio-support-notes">
-                        <h3>Required &amp; accepted fields</h3>
-                        <ul>
-                            <li><strong>Required:</strong> At least one of <code>email</code> or <code>tel</code> must be present and non-empty.</li>
-                            <li><strong>Accepted:</strong> <code>fname</code>, <code>lname</code>, <code>email</code>, <code>tel</code>, <code>message</code>, <code>source</code>, and any additional key/value pairs (stored in the lead's extended fields).</li>
-                            <li><strong>Do not send:</strong> <code>website_url</code> — this is a honeypot field. Any request that includes it will be silently rejected as a bot submission.</li>
-                        </ul>
-
-                        <h3 style="margin-top:16px;">Security model</h3>
-                        <ul>
-                            <li><strong>Secret key:</strong> 384-bit random secret (base64 encoded). Auto-generated on first plugin load — no manual setup required.</li>
-                            <li><strong>Timing-safe comparison:</strong> The key is verified with <code>hash_equals()</code> to prevent timing attacks.</li>
-                            <li><strong>Rate limiting:</strong> Max 10 requests per IP per 5 minutes. Excess requests return 429.</li>
-                            <li><strong>Honeypot:</strong> Requests that include the <code>website_url</code> field are silently rejected.</li>
-                            <li><strong>CleanTalk:</strong> If the CleanTalk plugin is active on the site, submissions are also checked against the CleanTalk spam database.</li>
-                            <li><strong>Blocked attempts log:</strong> All rejected requests (wrong key, rate limit) are stored for 72 hours and visible at <strong>Lead Submissions &rarr; Webhook Settings</strong>.</li>
                         </ul>
                     </div>
                 </div>

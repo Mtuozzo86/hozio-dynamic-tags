@@ -49,77 +49,18 @@ add_action( 'init', function() {
 } );
 
 // ══════════════════════════════════════════════════════════
-// 0b. WEBHOOK SECRET + AUTH HELPERS
+// 0b. WEBHOOK FEATURE REMOVED
+//     The inbound lead webhook (/wp-json/hozio/v1/lead) was removed —
+//     leads are captured only via the native form integrations below.
+//     One-time cleanup deletes the feature's orphaned options.
 // ══════════════════════════════════════════════════════════
-
-// Returns the per-site webhook secret, auto-generating on first call.
-// Stored in wp_options — never in HTML source, only visible in WP Admin.
-function hozio_get_lead_webhook_secret() {
-    $secret = get_option( 'hozio_lead_webhook_secret' );
-    if ( empty( $secret ) ) {
-        $secret = base64_encode( random_bytes( 48 ) );
-        update_option( 'hozio_lead_webhook_secret', $secret, false );
-    }
-    return $secret;
-}
-
-// Ensure secret exists for all existing sites on plugin update.
 add_action( 'init', function() {
-    if ( ! get_option( 'hozio_lead_webhook_secret' ) ) {
-        hozio_get_lead_webhook_secret();
+    if ( get_option( 'hozio_webhook_removed' ) !== '1' ) {
+        delete_option( 'hozio_lead_webhook_secret' );
+        delete_option( 'hozio_lead_blocked_log' );
+        delete_option( 'hozio_webhook_enabled' );
+        update_option( 'hozio_webhook_removed', '1' );
     }
-}, 1 );
-
-// Best-effort client IP — Cloudflare-aware, falls back to REMOTE_ADDR.
-function hozio_get_client_ip() {
-    foreach ( [ 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR' ] as $key ) {
-        if ( ! empty( $_SERVER[ $key ] ) ) {
-            $ip = trim( explode( ',', sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) ) )[0] );
-            if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
-                return $ip;
-            }
-        }
-    }
-    return 'unknown';
-}
-
-// Ring-buffer log for blocked webhook attempts (capped at 500 entries).
-function hozio_log_lead_blocked( $reason, $ip = '', $ua = '' ) {
-    $log = get_option( 'hozio_lead_blocked_log', [] );
-    if ( ! is_array( $log ) ) {
-        $log = [];
-    }
-    array_unshift( $log, [
-        't' => current_time( 'mysql', true ),
-        'i' => $ip ?: hozio_get_client_ip(),
-        'u' => substr( $ua, 0, 200 ),
-        'r' => $reason,
-    ] );
-    if ( count( $log ) > 500 ) {
-        $log = array_slice( $log, 0, 500 );
-    }
-    update_option( 'hozio_lead_blocked_log', $log, false );
-}
-
-// AJAX: regenerate webhook secret (admin-only, nonce-protected).
-add_action( 'wp_ajax_hozio_regenerate_webhook_secret', function() {
-    check_ajax_referer( 'hozio_regen_secret', 'nonce' );
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_send_json_error( 'Unauthorized', 403 );
-    }
-    $new_secret = base64_encode( random_bytes( 48 ) );
-    update_option( 'hozio_lead_webhook_secret', $new_secret, false );
-    wp_send_json_success( [ 'secret' => $new_secret ] );
-} );
-
-// AJAX: enable webhook from the Webhook Settings page (admin-only, nonce-protected).
-add_action( 'wp_ajax_hozio_enable_webhook', function() {
-    check_ajax_referer( 'hozio_enable_webhook', 'nonce' );
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_send_json_error( 'Unauthorized', 403 );
-    }
-    update_option( 'hozio_webhook_enabled', '1' );
-    wp_send_json_success();
 } );
 
 // ══════════════════════════════════════════════════════════
@@ -211,14 +152,6 @@ add_action( 'admin_menu', function() {
         'manage_options',
         'hozio-leads-settings',
         'hozio_leads_settings_page'
-    );
-    add_submenu_page(
-        'hozio-leads',
-        'Webhook Settings',
-        'Webhook',
-        'manage_options',
-        'hozio-leads-webhook',
-        'hozio_leads_webhook_page'
     );
 });
 
@@ -364,260 +297,8 @@ function hozio_leads_settings_page() {
     <?php
 }
 
-function hozio_leads_webhook_page() {
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( 'Unauthorized' );
-    }
 
-    $secret             = hozio_get_lead_webhook_secret();
-    $webhook_url        = rest_url( 'hozio/v1/lead' );
-    $nonce              = wp_create_nonce( 'hozio_regen_secret' );
-    $enable_nonce       = wp_create_nonce( 'hozio_enable_webhook' );
-    $webhook_is_enabled = get_option( 'hozio_webhook_enabled', '0' ) === '1';
 
-    $log     = get_option( 'hozio_lead_blocked_log', [] );
-    $cutoff  = gmdate( 'Y-m-d H:i:s', time() - 3 * DAY_IN_SECONDS );
-    $recent  = array_values( array_filter( is_array( $log ) ? $log : [], function( $e ) use ( $cutoff ) {
-        return isset( $e['t'] ) && $e['t'] >= $cutoff;
-    } ) );
-    $blocked_72h = count( $recent );
-    ?>
-    <div class="wrap" style="max-width:760px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-        <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">Webhook Settings</h1>
-        <p style="color:#64748b;margin-bottom:24px;">Use these credentials to send leads to this site from any external form plugin or system.</p>
-
-        <?php if ( ! $webhook_is_enabled ) : ?>
-        <div id="hozio-wh-disabled-banner" style="background:#fefce8;border:1px solid #fde047;border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:flex-start;gap:14px;">
-            <svg width="20" height="20" fill="none" stroke="#ca8a04" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <div style="flex:1;">
-                <div style="font-weight:700;color:#854d0e;font-size:14px;margin-bottom:4px;">Webhook endpoint is disabled</div>
-                <div style="font-size:13px;color:#713f12;margin-bottom:12px;">The <code style="background:#fef9c3;padding:1px 5px;border-radius:3px;">/wp-json/hozio/v1/lead</code> endpoint is currently off. Any service trying to POST leads here will receive a 404. Standard form integrations (Elementor, WPForms, etc.) are unaffected.</div>
-                <button type="button" id="hozio-wh-enable-btn"
-                    data-nonce="<?php echo esc_attr( $enable_nonce ); ?>"
-                    style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;transition:background 0.15s,transform 0.15s,box-shadow 0.15s;">
-                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-                    Enable Webhook Now
-                </button>
-            </div>
-        </div>
-        <?php endif; ?>
-
-        <?php if ( $blocked_72h > 0 ) : ?>
-        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;margin-bottom:20px;">
-            <strong style="color:#dc2626;"><?php echo esc_html( $blocked_72h ); ?> blocked attempt<?php echo $blocked_72h !== 1 ? 's' : ''; ?> in the last 72 hours.</strong>
-            See the table below for details.
-        </div>
-        <?php endif; ?>
-
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:16px;">
-            <div style="font-weight:600;font-size:14px;color:#1e293b;margin-bottom:8px;">Webhook URL</div>
-            <div style="display:flex;gap:8px;align-items:center;">
-                <code id="hozio-wh-url" style="flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:13px;color:#1e293b;word-break:break-all;"><?php echo esc_url( $webhook_url ); ?></code>
-                <button type="button" onclick="hozioClipboard('hozio-wh-url',this)" class="button button-secondary">Copy</button>
-            </div>
-        </div>
-
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:16px;">
-            <div style="font-weight:600;font-size:14px;color:#1e293b;margin-bottom:4px;">Webhook Secret</div>
-            <p style="font-size:12px;color:#94a3b8;margin:0 0 12px;">Include this as the <code>X-Hozio-Secret</code> header on every request. Keep it private — requests without it are rejected.</p>
-            <div style="display:flex;gap:8px;align-items:center;">
-                <code id="hozio-wh-secret" style="flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:13px;color:#1e293b;word-break:break-all;"><?php echo esc_html( $secret ); ?></code>
-                <button type="button" onclick="hozioClipboard('hozio-wh-secret',this)" class="button button-secondary">Copy</button>
-                <button type="button" id="hozio-regen-btn" class="button button-secondary" style="color:#dc2626;border-color:#fecaca;" data-nonce="<?php echo esc_attr( $nonce ); ?>">Regenerate</button>
-            </div>
-            <p style="font-size:11px;color:#ef4444;margin:10px 0 0;">Warning: Regenerating breaks all existing integrations until you update them with the new secret.</p>
-        </div>
-
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:16px;">
-            <div style="font-weight:600;font-size:14px;color:#1e293b;margin-bottom:16px;">Integration Examples</div>
-
-            <div style="margin-bottom:18px;">
-                <div style="font-weight:600;font-size:13px;color:#475569;margin-bottom:6px;">Elementor Forms — Webhook Action</div>
-                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;font-size:12px;font-family:monospace;line-height:1.8;color:#1e293b;">
-                    URL: <?php echo esc_url( $webhook_url ); ?><br>
-                    Method: POST<br>
-                    Headers &rarr; Add header:<br>
-                    &nbsp;&nbsp;Name: <strong>X-Hozio-Secret</strong><br>
-                    &nbsp;&nbsp;Value: <span id="el-secret-val" style="background:#fef9c3;padding:1px 4px;border-radius:3px;"><?php echo esc_html( $secret ); ?></span>
-                </div>
-            </div>
-
-            <div style="margin-bottom:18px;">
-                <div style="font-weight:600;font-size:13px;color:#475569;margin-bottom:6px;">WPForms / Gravity Forms via Zapier or Make</div>
-                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;font-size:12px;font-family:monospace;line-height:1.8;color:#1e293b;">
-                    URL: <?php echo esc_url( $webhook_url ); ?><br>
-                    Header: X-Hozio-Secret = <span style="background:#fef9c3;padding:1px 4px;border-radius:3px;"><?php echo esc_html( $secret ); ?></span>
-                </div>
-            </div>
-
-            <div>
-                <div style="font-weight:600;font-size:13px;color:#475569;margin-bottom:6px;">cURL — test from terminal</div>
-                <code id="hozio-curl-ex" style="display:block;background:#1e293b;color:#e2e8f0;border-radius:8px;padding:14px;font-size:12px;line-height:1.8;white-space:pre-wrap;">curl -X POST "<?php echo esc_url( $webhook_url ); ?>" \
-     -H "Content-Type: application/json" \
-     -H "X-Hozio-Secret: <?php echo esc_html( $secret ); ?>" \
-     -d '{"source":"Test","name":"Jane Smith","email":"jane@example.com","phone":"555-0100"}'</code>
-                <button type="button" onclick="hozioClipboard('hozio-curl-ex',this)" class="button button-secondary" style="margin-top:8px;">Copy</button>
-            </div>
-        </div>
-
-        <?php if ( ! empty( $recent ) ) : ?>
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-                <div style="font-weight:600;font-size:14px;color:#1e293b;">Blocked Attempts — Last 72 Hours</div>
-                <div style="font-size:12px;color:#94a3b8;" id="hozio-ba-count"></div>
-            </div>
-            <table style="width:100%;border-collapse:collapse;font-size:13px;">
-                <thead>
-                    <tr style="border-bottom:2px solid #e2e8f0;">
-                        <th style="text-align:left;padding:6px 10px;color:#94a3b8;font-weight:500;">Time (UTC)</th>
-                        <th style="text-align:left;padding:6px 10px;color:#94a3b8;font-weight:500;">IP</th>
-                        <th style="text-align:left;padding:6px 10px;color:#94a3b8;font-weight:500;">Reason</th>
-                        <th style="text-align:left;padding:6px 10px;color:#94a3b8;font-weight:500;">User Agent</th>
-                    </tr>
-                </thead>
-                <tbody id="hozio-ba-tbody">
-                <?php foreach ( $recent as $entry ) :
-                    $badge_style = $entry['r'] === 'rate_limit'
-                        ? 'background:#fef2f2;color:#dc2626'
-                        : 'background:#fef9c3;color:#92400e';
-                ?>
-                    <tr class="hozio-ba-row" style="border-bottom:1px solid #f1f5f9;">
-                        <td style="padding:8px 10px;color:#475569;"><?php echo esc_html( $entry['t'] ); ?></td>
-                        <td style="padding:8px 10px;font-family:monospace;color:#1e293b;"><?php echo esc_html( $entry['i'] ); ?></td>
-                        <td style="padding:8px 10px;">
-                            <span style="<?php echo esc_attr( $badge_style ); ?>;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">
-                                <?php echo esc_html( $entry['r'] ); ?>
-                            </span>
-                        </td>
-                        <td style="padding:8px 10px;color:#94a3b8;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?php echo esc_attr( $entry['u'] ); ?>"><?php echo esc_html( $entry['u'] ); ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-            <div id="hozio-ba-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;"></div>
-        </div>
-        <?php endif; ?>
-    </div>
-
-    <script>
-    function hozioClipboard( elId, btn ) {
-        var text = document.getElementById( elId ).innerText.trim();
-        navigator.clipboard.writeText( text ).then( function() {
-            var orig = btn.textContent;
-            btn.textContent = 'Copied!';
-            setTimeout( function() { btn.textContent = orig; }, 2000 );
-        } );
-    }
-
-    document.getElementById( 'hozio-regen-btn' ).addEventListener( 'click', function() {
-        if ( ! confirm( 'Regenerate the webhook secret? All existing integrations using the old secret will stop working until updated.' ) ) return;
-        var btn = this;
-        btn.disabled = true;
-        btn.textContent = 'Regenerating...';
-        fetch( ajaxurl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'action=hozio_regenerate_webhook_secret&nonce=' + encodeURIComponent( btn.dataset.nonce )
-        } )
-        .then( function( r ) { return r.json(); } )
-        .then( function( data ) {
-            if ( data.success ) {
-                var s = data.data.secret;
-                document.getElementById( 'hozio-wh-secret' ).textContent = s;
-                document.getElementById( 'el-secret-val' ).textContent   = s;
-                var curl = document.getElementById( 'hozio-curl-ex' );
-                curl.textContent = curl.textContent.replace( /X-Hozio-Secret: \S+/, 'X-Hozio-Secret: ' + s );
-            }
-            btn.disabled = false;
-            btn.textContent = 'Regenerate';
-        } );
-    } );
-
-    // Enable webhook from disabled banner
-    (function() {
-        var btn = document.getElementById( 'hozio-wh-enable-btn' );
-        if ( ! btn ) return;
-        btn.addEventListener( 'mouseover', function() {
-            this.style.background = '#15803d';
-            this.style.transform  = 'translateY(-1px)';
-            this.style.boxShadow  = '0 4px 10px rgba(21,128,61,0.35)';
-        } );
-        btn.addEventListener( 'mouseout', function() {
-            this.style.background = '#16a34a';
-            this.style.transform  = '';
-            this.style.boxShadow  = '';
-        } );
-        btn.addEventListener( 'click', function() {
-            btn.disabled = true;
-            btn.textContent = 'Enabling...';
-            fetch( ajaxurl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'action=hozio_enable_webhook&nonce=' + encodeURIComponent( btn.dataset.nonce )
-            } )
-            .then( function( r ) { return r.json(); } )
-            .then( function( data ) {
-                if ( data.success ) {
-                    var banner = document.getElementById( 'hozio-wh-disabled-banner' );
-                    if ( banner ) {
-                        banner.style.transition = 'opacity 0.3s';
-                        banner.style.opacity = '0';
-                        setTimeout( function() { banner.remove(); }, 320 );
-                    }
-                } else {
-                    btn.disabled = false;
-                    btn.textContent = 'Enable Webhook Now';
-                    alert( 'Could not enable — please try again.' );
-                }
-            } );
-        } );
-    })();
-
-    // Blocked attempts pagination
-    (function() {
-        var tbody = document.getElementById( 'hozio-ba-tbody' );
-        if ( ! tbody ) return;
-        var rows    = Array.from( tbody.querySelectorAll( '.hozio-ba-row' ) );
-        var total   = rows.length;
-        var perPage = 25;
-        var page    = 1;
-        var pages   = Math.ceil( total / perPage );
-        var countEl = document.getElementById( 'hozio-ba-count' );
-        var pagEl   = document.getElementById( 'hozio-ba-pagination' );
-
-        function makeBtn( label, disabled, onClick ) {
-            var btn = document.createElement( 'button' );
-            btn.textContent = label;
-            btn.style.cssText = 'padding:5px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;cursor:pointer;color:#1e293b;font-size:12px;' + ( disabled ? 'opacity:0.4;cursor:default;' : '' );
-            if ( ! disabled ) btn.addEventListener( 'click', onClick );
-            return btn;
-        }
-
-        function render() {
-            var start = ( page - 1 ) * perPage;
-            var end   = start + perPage;
-            rows.forEach( function( r, i ) {
-                r.style.display = ( i >= start && i < end ) ? '' : 'none';
-            } );
-            if ( countEl ) {
-                countEl.textContent = 'Showing ' + ( start + 1 ) + '–' + Math.min( end, total ) + ' of ' + total;
-            }
-            if ( pagEl ) {
-                while ( pagEl.firstChild ) pagEl.removeChild( pagEl.firstChild );
-                pagEl.appendChild( makeBtn( '← Previous', page <= 1, function() { page--; render(); } ) );
-                var info = document.createElement( 'span' );
-                info.textContent = 'Page ' + page + ' of ' + pages;
-                info.style.cssText = 'color:#64748b;font-size:12px;';
-                pagEl.appendChild( info );
-                pagEl.appendChild( makeBtn( 'Next →', page >= pages, function() { page++; render(); } ) );
-            }
-        }
-
-        if ( total > 0 ) render();
-    })();
-    </script>
-    <?php
-}
 
 
 // ══════════════════════════════════════════════════════════
@@ -1317,34 +998,6 @@ function hozio_leads_list_page() {
         </a>
       </div>
 
-      <?php if ( current_user_can( 'manage_options' ) ) :
-        $wh_log      = get_option( 'hozio_lead_blocked_log', [] );
-        $wh_cutoff   = gmdate( 'Y-m-d H:i:s', time() - 3 * DAY_IN_SECONDS );
-        $wh_blocked  = count( array_filter( is_array( $wh_log ) ? $wh_log : [], function( $e ) use ( $wh_cutoff ) {
-            return isset( $e['t'] ) && $e['t'] >= $wh_cutoff;
-        } ) );
-        $webhook_settings_url = admin_url( 'admin.php?page=hozio-leads-webhook' );
-      ?>
-      <!-- Webhook Security Banner -->
-      <div class="hl-webhook-banner" style="background:#f0fdf4;border-color:#bbf7d0;">
-        <div class="hl-webhook-info">
-          <svg width="16" height="16" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <span style="color:#15803d;"><strong>Webhook is protected.</strong> An <code>X-Hozio-Secret</code> header is required — unauthenticated requests are blocked automatically.</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
-          <a href="<?php echo esc_url( $webhook_settings_url ); ?>" class="hl-copy-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-            Webhook Settings &amp; Secret
-          </a>
-          <?php if ( $wh_blocked > 0 ) : ?>
-          <span style="font-size:12px;color:#dc2626;font-weight:600;">
-            <?php echo esc_html( $wh_blocked ); ?> blocked attempt<?php echo $wh_blocked !== 1 ? 's' : ''; ?> in the last 72h
-          </span>
-          <?php endif; ?>
-        </div>
-      </div>
-      <?php endif; ?>
-
       <!-- Stat Cards -->
       <div class="hl-stats">
         <div class="hl-stat-card">
@@ -1883,20 +1536,6 @@ function hozio_leads_list_page() {
         $('#hl-leads-table thead').toggle(visible > 0);
       }
 
-      // ── Copy webhook URL ──
-      $('#hl-copy-webhook').on('click', function(){
-        var url = $('#hl-webhook-url').text();
-        var $btn = $(this);
-        navigator.clipboard.writeText(url).then(function(){
-          $btn.text('Copied!');
-          setTimeout(function(){ $btn.html('<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy URL'); }, 2000);
-        }).catch(function(){
-          var ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-          $btn.text('Copied!');
-          setTimeout(function(){ $btn.html('<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy URL'); }, 2000);
-        });
-      });
-
       // ── Column sorting (col indices shifted +1 for checkbox column) ──
       var sortDir = {};
       $('.hl-sortable').on('click', function(){
@@ -2074,16 +1713,6 @@ function hozio_leads_list_page() {
       .hl-detail-grid { grid-template-columns:1fr !important; padding:12px 14px 4px; }
     }
     @media (max-width:480px) { .hl-stats { grid-template-columns:1fr; } }
-
-    /* Webhook banner */
-    .hl-webhook-banner { background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:14px 18px; margin-bottom:20px; }
-    .hl-webhook-info { display:flex; align-items:center; gap:8px; font-size:13px; color:#0c4a6e; margin-bottom:8px; }
-    .hl-webhook-url-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
-    .hl-webhook-url-row code { flex:1; background:#fff; border:1px solid #bae6fd; border-radius:6px; padding:7px 12px; font-size:12px; color:#0369a1; word-break:break-all; }
-    .hl-copy-btn { display:inline-flex; align-items:center; gap:5px; padding:7px 12px; background:#0ea5e9; color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; transition:background 0.15s, transform 0.15s, box-shadow 0.15s; }
-    .hl-copy-btn:hover { background:#0284c7; transform:translateY(-1px); box-shadow:0 4px 10px rgba(2,132,199,0.35); color:#fff; }
-    .hl-webhook-hint { font-size:11px; color:#64748b; margin:0; }
-    .hl-webhook-hint code { background:#e0f2fe; padding:1px 4px; border-radius:3px; font-size:11px; color:#0369a1; }
 
     /* Platform badges */
     .hl-platform-cell { display:flex; flex-direction:column; gap:2px; }
@@ -2623,123 +2252,12 @@ add_action( 'wp_ajax_hozio_export_leads', function() {
 
 
 // ══════════════════════════════════════════════════════════
-// 4e-cors. Allow X-Hozio-Secret in CORS preflight so browser-based
-//          integrations (and cross-origin testing) work alongside
-//          server-side webhooks. Server-to-server calls (Elementor,
-//          Zapier, etc.) are unaffected — CORS is browser-only.
+// 4e. (REMOVED) Inbound lead webhook — POST /wp-json/hozio/v1/lead
+//     The endpoint, its X-Hozio-Secret auth, and the CORS allowance
+//     were removed. Leads are captured only by the native form
+//     integrations below (Elementor, Divi, CF7, WPForms, Gravity,
+//     Fluent Forms).
 // ══════════════════════════════════════════════════════════
-add_filter( 'rest_allowed_cors_headers', function( $headers ) {
-    $headers[] = 'X-Hozio-Secret';
-    return $headers;
-} );
-
-// ══════════════════════════════════════════════════════════
-// 4e. REST API — Receive leads from any form platform
-//     POST /wp-json/hozio/v1/lead
-//     Requires X-Hozio-Secret header matching the per-site secret
-//     (Lead Submissions -> Webhook in WP Admin).
-//     Rate limited per IP. Honeypot + field validation + CleanTalk soft check.
-// ══════════════════════════════════════════════════════════
-add_action( 'rest_api_init', function() {
-    if ( get_option( 'hozio_webhook_enabled', '0' ) !== '1' ) {
-        return;
-    }
-    register_rest_route( 'hozio/v1', '/lead', [
-        'methods'             => WP_REST_Server::CREATABLE,
-        'callback'            => 'hozio_rest_receive_lead',
-        'permission_callback' => 'hozio_lead_webhook_auth',
-    ] );
-} );
-
-function hozio_lead_webhook_auth( WP_REST_Request $request ) {
-    $secret   = hozio_get_lead_webhook_secret();
-    $provided = (string) ( $request->get_header( 'x-hozio-secret' ) ?? '' );
-
-    if ( ! hash_equals( $secret, $provided ) ) {
-        $ip = hozio_get_client_ip();
-        $ua = substr( (string) ( $request->get_header( 'user-agent' ) ?? '' ), 0, 200 );
-        hozio_log_lead_blocked( 'auth_fail', $ip, $ua );
-        return new WP_Error( 'unauthorized', 'Invalid or missing webhook secret.', [ 'status' => 401 ] );
-    }
-
-    // Rate limit: max 10 authenticated POSTs per IP per 5 minutes.
-    $ip    = hozio_get_client_ip();
-    $key   = 'hozio_wh_rl_' . md5( $ip );
-    $count = (int) get_transient( $key );
-    if ( $count >= 10 ) {
-        hozio_log_lead_blocked( 'rate_limit', $ip, '' );
-        return new WP_Error( 'too_many_requests', 'Rate limit exceeded. Try again later.', [ 'status' => 429 ] );
-    }
-    set_transient( $key, $count + 1, 5 * MINUTE_IN_SECONDS );
-
-    return true;
-}
-
-function hozio_rest_receive_lead( WP_REST_Request $request ) {
-    global $wpdb;
-    $table = $wpdb->prefix . 'hozio_leads';
-
-    // Accept JSON or form-encoded body
-    $params = $request->get_json_params();
-    if ( empty( $params ) ) {
-        $params = $request->get_body_params();
-    }
-    if ( empty( $params ) ) {
-        return new WP_Error( 'no_data', 'No data received.', [ 'status' => 400 ] );
-    }
-
-    // Honeypot: silently discard if bot-bait field is populated
-    if ( ! empty( $params['website_url'] ) ) {
-        return rest_ensure_response( [ 'success' => true, 'id' => 0 ] );
-    }
-
-    $email = sanitize_email( $params['email'] ?? '' );
-    $phone = sanitize_text_field( $params['phone'] ?? $params['tel'] ?? $params['phone_number'] ?? '' );
-
-    // Require at least one contact method
-    if ( empty( $email ) && empty( $phone ) ) {
-        return new WP_Error( 'missing_contact', 'An email address or phone number is required.', [ 'status' => 400 ] );
-    }
-
-    // CleanTalk soft check — only runs if CleanTalk plugin is active
-    if ( function_exists( 'apbct_base_call' ) && ! empty( $email ) ) {
-        $ct = apbct_base_call( [ 'email' => $email, 'sender_ip' => hozio_get_client_ip() ], false );
-        if ( isset( $ct['allow'] ) && (int) $ct['allow'] === 0 ) {
-            hozio_log_lead_blocked( 'cleantalk', hozio_get_client_ip(), '' );
-            return new WP_Error( 'spam_detected', 'Submission flagged as spam.', [ 'status' => 403 ] );
-        }
-    }
-
-    // Resolve name from common field patterns
-    $name = sanitize_text_field(
-        $params['name'] ?? trim(
-            ( $params['first_name'] ?? $params['fname'] ?? '' ) . ' ' .
-            ( $params['last_name']  ?? $params['lname'] ?? '' )
-        )
-    );
-    $source  = sanitize_text_field( $params['source'] ?? 'Webhook' );
-    $referer = esc_url_raw( $params['referer'] ?? ( isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '' ) );
-
-    // Exclude routing/internal keys before storing all fields as JSON
-    $skip   = [ 'source', 'referer', 'website_url', '_wpcf7', '_wpcf7_version', '_wpcf7_locale', '_wpcf7_unit_tag', '_wpcf7_container_post' ];
-    $fields = array_diff_key( $params, array_flip( $skip ) );
-
-    $inserted = $wpdb->insert( $table, [
-        'source'     => $source,
-        'name'       => $name,
-        'email'      => $email,
-        'phone'      => $phone,
-        'referer'    => $referer,
-        'fields'     => wp_json_encode( $fields ),
-        'created_at' => current_time( 'mysql', true ),
-    ], [ '%s', '%s', '%s', '%s', '%s', '%s', '%s' ] );
-
-    if ( ! $inserted ) {
-        return new WP_Error( 'db_error', 'Failed to save lead.', [ 'status' => 500 ] );
-    }
-
-    return rest_ensure_response( [ 'success' => true, 'id' => $wpdb->insert_id ] );
-}
 
 
 // ══════════════════════════════════════════════════════════

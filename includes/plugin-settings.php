@@ -392,9 +392,6 @@ function hozio_plugin_settings_save() {
     $canonical_redirect_enabled = isset($_POST['hozio_canonical_redirect_enabled']) ? '1' : '0';
     update_option('hozio_canonical_redirect_enabled', $canonical_redirect_enabled);
 
-    // Save webhook enabled setting
-    $webhook_enabled = isset($_POST['hozio_webhook_enabled']) ? '1' : '0';
-    update_option('hozio_webhook_enabled', $webhook_enabled);
 
     // Save FAQ schema settings
     update_option('hozio_faq_schema_enabled',         isset($_POST['hozio_faq_schema_enabled'])         ? '1' : '0');
@@ -554,7 +551,6 @@ function hozio_plugin_settings_page() {
     $license_key = get_option('hozio_license_key', '');
     $auto_updates_enabled = get_option('hozio_auto_updates_enabled', '1');
     $canonical_redirect_enabled = get_option('hozio_canonical_redirect_enabled', '1');
-    $webhook_enabled            = get_option('hozio_webhook_enabled', '0');
     $faq_schema_enabled         = get_option('hozio_faq_schema_enabled', '1');
     $faq_schema_general_enabled = get_option('hozio_faq_schema_general_enabled', '1');
     $faq_schema_service_enabled = get_option('hozio_faq_schema_service_enabled', '1');
@@ -908,24 +904,6 @@ function hozio_plugin_settings_page() {
                     </div>
                 </div>
 
-                <div class="hozio-field">
-                    <div class="hozio-toggle-wrapper">
-                        <label class="hozio-toggle-switch">
-                            <input type="checkbox" name="hozio_webhook_enabled" value="1"
-                                   <?php checked($webhook_enabled, '1'); ?>>
-                            <span class="hozio-toggle-slider"></span>
-                        </label>
-                        <div class="hozio-toggle-label">
-                            <div class="hozio-toggle-title">Lead Webhook Endpoint</div>
-                            <div class="hozio-toggle-description">
-                                Enables the <code>/wp-json/hozio/v1/lead</code> REST endpoint for receiving leads from external services (Zapier, custom integrations).
-                                Disable entirely if you are not using it &mdash; the endpoint will return 404 and be invisible to bots.
-                                Standard form integrations (Elementor, WPForms, Gravity Forms, CF7) are <strong>not affected</strong> by this setting.
-                                <strong>Enabled by default.</strong>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- FAQ Schema Section -->
