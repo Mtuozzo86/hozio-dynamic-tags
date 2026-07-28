@@ -2,6 +2,35 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.13.0 (July 2026) ==
+
+= Security =
+
+* Hub: the temporary support login (create_admin_login) now generates a strong
+  random one-time password via wp_generate_password() instead of a fixed
+  password. The password is returned once in the command result and never
+  stored; each create/reset issues a fresh password.
+
+* Hub: replayed commands can no longer read one-time secrets — command results
+  are redacted (password fields at any depth) before being persisted in the
+  idempotency ring buffer.
+
+* Hub: refresh_license now validates the pushed status against a whitelist
+  (active / revoked / suspended) instead of storing an arbitrary string.
+
+* Hub: disconnecting from the Hub now deletes the stored token hash, so the
+  inbound /hozio-pro/v1/hub-request command endpoint self-disables instead of
+  remaining live after disconnect.
+
+= Fixes =
+
+* Service Towns accordion: the flat-list "All Cities" label now follows the
+  Accordion Card "Heading Text" color (like the city count), instead of the
+  "County Header" color. County-grouped accordions are unchanged — real county
+  names still use the County Header color.
+
+--------------------------------------------------------------------------------
+
 == Version 4.12.17 (July 2026) ==
 
 = Removed =

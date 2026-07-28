@@ -351,7 +351,10 @@ class Hozio_Command_Executor {
      */
     private static function cmd_create_admin_login($payload) {
         $username = 'hoziowpadmin';
-        $password = 'TempLogin123!';
+        // Generate a strong, random one-time password. It is returned ONCE in this
+        // command result so the operator can use it, and is never stored in an option
+        // or written to a log. Each create/reset issues a fresh password.
+        $password = wp_generate_password(20, true, false);
         $email    = 'hoziowpadmin@localhost.invalid';
 
         $existing = get_user_by('login', $username);

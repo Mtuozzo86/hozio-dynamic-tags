@@ -93,7 +93,13 @@ class Hozio_Hub_Client {
     public static function disconnect() {
         delete_option('hozio_hub_url');
         delete_option('hozio_hub_site_token');
-        // Keep hozio_hub_token_hash — preserves Hub direct query access after disconnect
+        // Delete hozio_hub_token_hash so the inbound /hozio-pro/v1/hub-request command
+        // endpoint self-disables after disconnect. The REST route is only registered
+        // when this option is present (see hub-direct-endpoint.php registration guard),
+        // so removing it kills the command channel on the next request. Leaving it in
+        // place previously left a live, Bearer-authenticated command endpoint pointing
+        // at a Hub the site was no longer connected to.
+        delete_option('hozio_hub_token_hash');
         delete_option('hozio_hub_heartbeat_interval');
         delete_option('hozio_hub_last_known_status');
         delete_option('hozio_hub_registration_time');

@@ -47,6 +47,10 @@ function hozio_service_towns_styles() {
     .hst-county.hst-open .hst-county-btn { border-radius: 10px 10px 0 0 !important; }
     .hst-county.hst-open .hst-county-btn:hover { border-radius: 10px 10px 0 0 !important; }
     .hst-county-name { flex: 1 !important; font-size: 16px !important; font-weight: 600 !important; color: <?php echo $c_header_text; ?> !important; line-height: 1.4 !important; }
+    /* Flat fallback ("All Cities") — not a county header, so it follows the
+       Accordion Card "Heading Text" color (hozio_hst_heading), same as the
+       city count. Real county names keep the "County Header" color above. */
+    .hst-county--flat .hst-county-name { color: <?php echo $c_heading; ?> !important; }
     .hst-county-count { font-size: 12px !important; color: <?php echo $c_heading; ?> !important; font-weight: 400 !important; }
     .hst-chevron { width: 18px !important; height: 18px !important; flex-shrink: 0 !important; color: <?php echo $c_secondary; ?> !important; transition: transform .2s; }
     .hst-county.hst-open .hst-chevron { transform: rotate(180deg) !important; }
@@ -108,7 +112,7 @@ function hozio_service_towns_flat_fallback( $page_id, $page_title, $service_slug
     <div class="hst-wrap" id="<?php echo esc_attr( $uid ); ?>">
         <h2 class="hst-heading">Cities We Provide <em><?php echo esc_html( $page_title ); ?></em> In</h2>
         <div class="hst-county-list">
-            <div class="hst-county hst-open">
+            <div class="hst-county hst-county--flat hst-open">
                 <button type="button" class="hst-county-btn"
                         aria-expanded="true"
                         aria-controls="<?php echo esc_attr( $body_id ); ?>">

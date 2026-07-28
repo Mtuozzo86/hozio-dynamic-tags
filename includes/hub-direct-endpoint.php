@@ -85,6 +85,13 @@ class Hozio_Hub_Direct_Endpoint {
                 if (empty($new_status)) {
                     return new WP_Error('missing_status', 'License status is required.', ['status' => 400]);
                 }
+                // Whitelist accepted statuses — never write an arbitrary caller-supplied
+                // string into the cached license state. Case-normalized comparison.
+                $new_status = strtolower(trim($new_status));
+                $allowed_statuses = ['active', 'revoked', 'suspended'];
+                if (!in_array($new_status, $allowed_statuses, true)) {
+                    return new WP_Error('invalid_status', 'Invalid license status.', ['status' => 400]);
+                }
                 // Apply license status immediately — no heartbeat round-trip
                 set_transient('hozio_hub_license_status', $new_status, DAY_IN_SECONDS);
                 update_option('hozio_hub_last_known_status', $new_status);
@@ -348,10 +355,13 @@ class Hozio_Hub_Direct_Endpoint {
 
         $result = Hozio_Command_Executor::execute($command_type, $command_payload);
 
-        // Store in nonce ring buffer if nonce provided
+        // Store in nonce ring buffer if nonce provided. Redact one-time secrets
+        // (e.g. create_admin_login password) before persistence — the real value
+        // only travels in the immediate return of $result on first execution; a
+        // replayed nonce legitimately returns the redacted copy.
         if (!empty($payload['nonce'])) {
             $executed_nonces = get_option('hozio_hub_executed_commands', []);
-            $executed_nonces[$payload['nonce']] = $result;
+            $executed_nonces[$payload['nonce']] = self::redact_sensitive($result);
 
             // Evict old entries
             if (count($executed_nonces) > 1000) {
@@ -361,6 +371,33 @@ class Hozio_Hub_Direct_Endpoint {
         }
 
         return $result;
+    }
+
+    /**
+     * Recursively redact sensitive values before persistence.
+     *
+     * Any array key named 'password' (case-insensitive) is replaced with
+     * '[redacted]', at any depth. Non-array input is returned untouched.
+     *
+     * @param mixed $data
+     * @return mixed
+     */
+    private static function redact_sensitive($data) {
+        if (!is_array($data)) {
+            return $data;
+        }
+
+        $out = [];
+        foreach ($data as $key => $value) {
+            if (is_string($key) && strtolower($key) === 'password') {
+                $out[$key] = '[redacted]';
+            } elseif (is_array($value)) {
+                $out[$key] = self::redact_sensitive($value);
+            } else {
+                $out[$key] = $value;
+            }
+        }
+        return $out;
     }
 
 }
