@@ -2,6 +2,30 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.15.1 (July 2026) ==
+
+= Fixes =
+
+* "Run Plugin Updates Now" now clears a stale auto-updater lock before running.
+
+  WordPress guards automatic updates with a lock (auto_updater.lock) that is only
+  released at the end of a successful run. Any run that timed out, fatalled, or
+  was interrupted leaves it stranded for a full hour — and while it is held,
+  WP_Automatic_Updater::run() returns SILENTLY. No error, no results, nothing
+  logged. Every click during that hour appeared to do nothing, which is what made
+  "13 update(s) are pending but none installed" so hard to explain.
+
+  The manual button now releases the lock first: the operator is explicitly
+  asking for a run. The scheduled cron path still honours the lock, which is what
+  prevents concurrent runs.
+
+* The "pending but none installed" message now breaks the number down — how many
+  are major-version updates (skipped by design), how many are excluded, and how
+  many were genuinely eligible — so it is clear whether the cause is this
+  plugin's own policy or something in WordPress/the environment.
+
+--------------------------------------------------------------------------------
+
 == Version 4.15.0 (July 2026) ==
 
 = New Features =

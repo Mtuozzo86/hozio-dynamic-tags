@@ -402,6 +402,23 @@ function hozio_run_plugin_auto_updates_now() {
 
     @set_time_limit( 300 );
 
+    // Release a stale auto-updater lock.
+    //
+    // WP_Automatic_Updater::run() calls WP_Upgrader::create_lock('auto_updater') and
+    // returns SILENTLY if a lock is already held — no error, no results, nothing logged.
+    // The lock is only cleared at the end of a successful run, so any run that timed out,
+    // fatalled, or was interrupted strands it for a full hour, during which every further
+    // attempt does nothing and looks like "there is simply nothing to update".
+    //
+    // This is the manual, admin-initiated path: the operator is explicitly asking for a
+    // run now, so clearing a leftover lock is the expected behaviour. The scheduled cron
+    // path is untouched and still honours the lock, which is what stops concurrent runs.
+    if ( class_exists( 'WP_Upgrader' ) && method_exists( 'WP_Upgrader', 'release_lock' ) ) {
+        WP_Upgrader::release_lock( 'auto_updater' );
+    } else {
+        delete_option( 'auto_updater.lock' );
+    }
+
     // Signals the filter that this is a genuine update run, so the per-run cap
     // applies here exactly as it does under cron.
     $GLOBALS['hozio_running_updates_now'] = true;
@@ -476,9 +493,45 @@ add_action( 'wp_ajax_hozio_run_plugin_updates', function () {
         }
 
         if ( $pending > 0 ) {
+            // Narrow it down rather than listing every possibility: count how many of the
+            // pending updates this plugin itself declined (major-version jumps and
+            // exclusions), so the operator knows whether the cause is our policy or
+            // something in WordPress/the environment.
+            $skipped_major = 0;
+            $excluded      = 0;
+            $exclusions    = hozio_auto_update_exclusions();
+
+            if ( ! function_exists( 'get_plugins' ) ) {
+                require_once ABSPATH . 'wp-admin/includes/plugin.php';
+            }
+            $installed = get_plugins();
+
+            foreach ( $t->response as $file => $info ) {
+                $folder = strpos( $file, '/' ) !== false ? strtok( $file, '/' ) : '';
+                if ( isset( $exclusions[ strtolower( $file ) ] ) || ( $folder && isset( $exclusions[ strtolower( $folder ) ] ) ) ) {
+                    $excluded++;
+                    continue;
+                }
+                $cur = isset( $installed[ $file ]['Version'] ) ? $installed[ $file ]['Version'] : '';
+                if ( $cur !== '' && isset( $info->new_version ) ) {
+                    if ( (int) strtok( ltrim( (string) $info->new_version, 'vV' ), '.' ) > (int) strtok( ltrim( $cur, 'vV' ), '.' ) ) {
+                        $skipped_major++;
+                    }
+                }
+            }
+
+            $eligible = $pending - $skipped_major - $excluded;
+
+            if ( $eligible <= 0 ) {
+                wp_send_json_success( array( 'summary' => sprintf(
+                    'Nothing eligible to install: of %d pending, %d are major-version updates (skipped by design) and %d are excluded. Install majors manually alongside any paid add-on.',
+                    $pending, $skipped_major, $excluded
+                ) ) );
+            }
+
             wp_send_json_error( sprintf(
-                '%d update(s) are pending but none installed. They may all be major-version updates (skipped by design), excluded, or WordPress declined them. Check the audit log for details.',
-                $pending
+                '%d update(s) pending, %d eligible, but none installed. WordPress declined them — most often multisite (only the main site auto-updates), a stale lock, or a permissions problem in wp-content/plugins. Check the audit log.',
+                $pending, $eligible
             ) );
         }
 
