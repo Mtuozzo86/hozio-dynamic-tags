@@ -2,6 +2,25 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.14.1 (July 2026) ==
+
+= Fixes =
+
+* Auto-updates no longer install MAJOR version jumps (e.g. 3.x -> 4.x). Major
+  releases carry breaking changes, and the sharpest case is a free plugin whose
+  premium counterpart cannot follow: Elementor updating 3.x -> 4.x while
+  Elementor Pro (no license = no update offered) stays on 3.x. Pro then fails its
+  compatibility check, causes a fatal error, and WordPress deactivates it.
+
+  Security fixes ship in patch and minor releases, so declining majors keeps the
+  patching benefit while removing this failure mode. Major updates still appear
+  in wp-admin as normal and can be installed by hand, alongside any paid add-on.
+
+  Skipped majors are recorded in the audit log. Override with the
+  hozio_block_major_auto_updates filter if a specific site needs them.
+
+--------------------------------------------------------------------------------
+
 == Version 4.14.0 (July 2026) ==
 
 = New Features =

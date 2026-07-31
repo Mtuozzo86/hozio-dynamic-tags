@@ -127,7 +127,12 @@ class Hozio_Hub_Client {
         $pending_results = get_option('hozio_hub_pending_results', []);
 
         $response = wp_remote_post($endpoint, [
-            'timeout'   => 30,
+            // 10s, not 30s. The heartbeat runs in a background loopback request, so a
+            // visitor never waits on it — but the PHP worker handling that request is
+            // held for the full timeout. If the Hub is slow or down, a 30s hold ties up
+            // a worker 24x/day on every connected site. A JSON POST needs nowhere near
+            // that, and a Hub too slow to answer in 10s is retried next hour anyway.
+            'timeout'   => 10,
             'sslverify' => true,
             'headers'   => [
                 'Authorization' => 'Bearer ' . $site_token,
@@ -141,6 +146,13 @@ class Hozio_Hub_Client {
                 'active_plugins'  => get_option('active_plugins', []),
                 'version_locked'  => get_option('hozio_version_locked', '0') === '1',
                 'pending_results' => $pending_results,
+                // Plugin patch state: what's installed, what's pending, recent
+                // auto-update results, and whether auto-updating is switched on.
+                // Lets the Hub answer "did the fleet patch?" without opening sites.
+                // Guarded because the Hub files load defensively (see main plugin file).
+                'patch_status'    => function_exists('hozio_get_patch_status')
+                    ? hozio_get_patch_status()
+                    : null,
             ]),
         ]);
 

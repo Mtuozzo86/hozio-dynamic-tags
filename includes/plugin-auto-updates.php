@@ -92,6 +92,45 @@ function hozio_auto_update_all_plugins_filter( $update, $item ) {
         }
     }
 
+    // ── Major-version guard ──────────────────────────────────────────────────
+    // Never auto-install a major version jump (3.x -> 4.x). Major releases carry
+    // breaking changes, and the sharpest case is a free plugin whose PREMIUM twin
+    // cannot follow: Elementor 3.x -> 4.x while Elementor Pro (no license, no
+    // update offered) stays on 3.x. Pro then fails its compatibility check, fatals,
+    // and WordPress deactivates it. Same shape for WooCommerce, ACF, and friends.
+    //
+    // Security fixes ship in patch/minor releases, so declining majors keeps the
+    // patching benefit while removing the breakage. Majors are left for a human to
+    // schedule alongside their paid counterpart. WordPress simply keeps offering
+    // the update in wp-admin; nothing is lost, it just isn't applied unattended.
+    if ( $file !== '' && isset( $item->new_version ) ) {
+        if ( ! function_exists( 'get_plugins' ) ) {
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        }
+        $installed = get_plugins();
+        $current   = isset( $installed[ $item->plugin ]['Version'] ) ? $installed[ $item->plugin ]['Version'] : '';
+
+        if ( $current !== '' ) {
+            $current_major = (int) strtok( ltrim( $current, 'vV' ), '.' );
+            $new_major     = (int) strtok( ltrim( (string) $item->new_version, 'vV' ), '.' );
+
+            if ( $new_major > $current_major && apply_filters( 'hozio_block_major_auto_updates', true, $item ) ) {
+                if ( function_exists( 'hozio_audit_log' ) ) {
+                    hozio_audit_log(
+                        sprintf(
+                            'Skipped major update for %s (%s → %s) — install manually alongside any paid add-on',
+                            $slug !== '' ? $slug : $file,
+                            $current,
+                            $item->new_version
+                        ),
+                        'AutoUpdate'
+                    );
+                }
+                return false;
+            }
+        }
+    }
+
     // ── Per-run cap ──────────────────────────────────────────────────────────
     // A neglected site can accumulate a long backlog. Installing all of it in one
     // PHP request risks hitting max_execution_time and finishing half-done, and it
@@ -152,15 +191,92 @@ function hozio_log_plugin_auto_updates( $results ) {
             && ! is_wp_error( $plugin_result->result )
             && $plugin_result->result;
 
-        if ( $succeeded ) {
-            hozio_audit_log( sprintf( 'Auto-updated %s to %s', $name, $version ), 'AutoUpdate' );
-        } else {
+        $reason = '';
+        if ( ! $succeeded ) {
             $reason = ( isset( $plugin_result->result ) && is_wp_error( $plugin_result->result ) )
                 ? $plugin_result->result->get_error_message()
                 : 'unknown error';
+        }
+
+        if ( $succeeded ) {
+            hozio_audit_log( sprintf( 'Auto-updated %s to %s', $name, $version ), 'AutoUpdate' );
+        } else {
             hozio_audit_log( sprintf( 'Auto-update FAILED for %s (%s): %s', $name, $version, $reason ), 'AutoUpdate' );
         }
+
+        // The audit log is a flat text file — fine on one site, unqueryable across a
+        // fleet. Mirror each result into a small structured ring buffer so the Hub
+        // heartbeat can report it. Deliberately NOT cleared on send: the heartbeat is
+        // fire-and-forget, so a fixed-size buffer stays correct across a missed beat.
+        hozio_record_auto_update_result( array(
+            'plugin'  => $item->plugin ?? '',
+            'name'    => $name,
+            'version' => $version,
+            'ok'      => (bool) $succeeded,
+            'error'   => $reason,
+            'at'      => gmdate( 'Y-m-d H:i:s' ),
+        ) );
     }
+}
+
+/**
+ * Push one result onto the auto-update history ring buffer (newest first, cap 20).
+ */
+function hozio_record_auto_update_result( array $entry ) {
+    $history = get_option( 'hozio_auto_update_history', array() );
+    if ( ! is_array( $history ) ) {
+        $history = array();
+    }
+    array_unshift( $history, $entry );
+    if ( count( $history ) > 20 ) {
+        $history = array_slice( $history, 0, 20 );
+    }
+    update_option( 'hozio_auto_update_history', $history, false );
+}
+
+/**
+ * Patch status for this site — what the Hub needs to answer "did the fleet patch?"
+ *
+ * Everything here is already computed by WordPress; this only assembles it. Safe to
+ * call in cron context. Returns an array shaped per SPEC-hub-fleet-patching.md.
+ *
+ * @return array
+ */
+function hozio_get_patch_status() {
+    if ( ! function_exists( 'get_plugins' ) ) {
+        require_once ABSPATH . 'wp-admin/includes/plugin.php';
+    }
+
+    $installed = array();
+    foreach ( get_plugins() as $file => $data ) {
+        $installed[ $file ] = array(
+            'name'    => isset( $data['Name'] ) ? $data['Name'] : $file,
+            'version' => isset( $data['Version'] ) ? $data['Version'] : '',
+        );
+    }
+
+    // Pending = what WordPress already knows is available, from its own update check.
+    $pending   = array();
+    $transient = get_site_transient( 'update_plugins' );
+    if ( $transient && ! empty( $transient->response ) && is_array( $transient->response ) ) {
+        foreach ( $transient->response as $file => $info ) {
+            $pending[ $file ] = array(
+                'name' => $installed[ $file ]['name'] ?? $file,
+                'from' => $installed[ $file ]['version'] ?? '',
+                'to'   => isset( $info->new_version ) ? $info->new_version : '',
+            );
+        }
+    }
+
+    return array(
+        'auto_update_enabled' => hozio_auto_update_all_enabled(),
+        'max_per_run'         => (int) apply_filters( 'hozio_max_plugin_auto_updates_per_run', 3 ),
+        'excluded'            => array_keys( hozio_auto_update_exclusions() ),
+        'next_run'            => (int) wp_next_scheduled( 'wp_maybe_auto_update' ),
+        'pending'             => $pending,
+        'installed'           => $installed,
+        'recent'              => get_option( 'hozio_auto_update_history', array() ),
+    );
 }
 add_action( 'automatic_updates_complete', 'hozio_log_plugin_auto_updates' );
 
