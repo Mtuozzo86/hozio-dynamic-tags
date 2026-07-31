@@ -2,6 +2,64 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.15.3 (July 2026) ==
+
+= Fixes =
+
+* FOUND IT: "Run Plugin Updates Now" was deactivating the plugins it updated.
+  Elementor was the one everybody noticed.
+
+  This is a WordPress core behaviour, not an Elementor problem. Before replacing
+  a plugin's files, core's Plugin_Upgrader silently deactivates it — and nothing
+  in core ever switches it back on. Core deliberately skips that step during the
+  scheduled background run, and its own comment explains why: "When in cron
+  (background updates) don't deactivate the plugin, as we require a browser to
+  reactivate it." The normal wp-admin update screens do that reactivation
+  themselves. Our button ran as an AJAX request, which is neither of those, so
+  core deactivated each plugin and no one turned it back on.
+
+  The manual run now declares cron context for its duration, putting it on the
+  exact code path the twice-daily run uses — the path this button always claimed
+  to be. Core no longer deactivates anything, and it also manages maintenance
+  mode around the file swap properly.
+
+  This only ever affected the button. The twice-daily automatic run was never
+  affected, because it genuinely is cron.
+
+* Added a safety net regardless: the active plugins are recorded before a run,
+  and anything switched off during it is switched back on — including when the
+  run is killed by a timeout, which could previously leave a plugin deactivated
+  with its files already swapped. Reactivation is silent, is skipped if the
+  plugin's files are missing, and cannot resurrect a plugin that WordPress has
+  paused for crashing (core uses a separate mechanism for that). Every
+  reactivation is named in the audit log.
+
+= Compatibility =
+
+* Git Updater is now respected. On a site running Git Updater (or the older
+  GitHub Updater), any plugin declaring a GitHub / GitLab / Bitbucket / Gitea /
+  Gist URI is left alone — two updaters writing the same plugin folder is how a
+  plugin ends up half-installed, and Git Updater is frequently tracking a branch
+  rather than a release, so installing "the newest version" over it can discard
+  exactly what the site is meant to run.
+
+  Only the plugins Git Updater manages are skipped; everything else on the site
+  is still patched. Skips are named in the audit log, the settings page explains
+  the situation when Git Updater is detected, and the Hub heartbeat reports it so
+  those plugins are not counted as permanently behind.
+
+  Git Updater is never deactivated automatically. Switching off a plugin the site
+  owner deliberately installed — mid-request, while its hooks are loaded — risks
+  a fatal, breaks their intended workflow, and would leave the site with it off
+  if the run then failed.
+
+* Hozio Pro no longer declares a "GitHub Plugin URI" header. Nothing here read
+  it; its only consumer was Git Updater, which would claim Hozio Pro and update
+  it from the main branch, bypassing the licence check, version lock and
+  post-rollback pause that our own updater enforces.
+
+--------------------------------------------------------------------------------
+
 == Version 4.15.2 (July 2026) ==
 
 = Fixes =

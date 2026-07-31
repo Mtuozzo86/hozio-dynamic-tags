@@ -957,6 +957,17 @@ function hozio_plugin_settings_page() {
                         </label>
                     </div>
 
+                    <?php if ( function_exists( 'hozio_git_update_manager_active' ) && hozio_git_update_manager_active() ) : ?>
+                        <div style="margin-top:10px;padding:10px 12px;border-left:3px solid #2563eb;background:#eff6ff;font-size:12px;color:#1e3a8a;line-height:1.6;">
+                            <strong>Git Updater is running on this site.</strong>
+                            Any plugin that declares a GitHub, GitLab, Bitbucket, Gitea or Gist URI is left to Git Updater
+                            and will be skipped here &mdash; two updaters writing the same plugin folder is how you end up
+                            with a half-installed plugin, and Git Updater is often tracking a branch rather than a release.
+                            Every other plugin on the site is still auto-updated as normal. Skips are named in the audit log.
+                            Git Updater is never deactivated automatically.
+                        </div>
+                    <?php endif; ?>
+
                     <div style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
                         <button type="button" id="hozio-run-updates-btn" class="button"
                                 data-nonce="<?php echo esc_attr( wp_create_nonce('hozio_run_plugin_updates') ); ?>">

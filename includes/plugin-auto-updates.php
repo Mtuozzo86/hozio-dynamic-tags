@@ -101,6 +101,81 @@ function hozio_auto_update_exclusions() {
 }
 
 /**
+ * Is a Git-based update manager running this site?
+ *
+ * Git Updater (and its predecessor GitHub Updater) serves plugin updates straight from
+ * GitHub/GitLab/Bitbucket/Gitea. Where it is in charge, WordPress must not be: the two
+ * would be writing the same plugin directories, and Git Updater is often deliberately
+ * tracking a BRANCH rather than a tagged release, so letting the generic auto-updater
+ * install over it can replace a developer's working code with something else entirely.
+ *
+ * We stand down for the plugins it manages rather than switching it off — see
+ * hozio_plugin_managed_by_git_updater().
+ *
+ * @return bool
+ */
+function hozio_git_update_manager_active() {
+    static $active = null;
+    if ( $active !== null ) {
+        return $active;
+    }
+
+    foreach ( array( 'Fragen\\Git_Updater\\Bootstrap', 'Fragen\\GitHub_Updater\\Bootstrap', 'GitHub_Updater' ) as $class ) {
+        if ( class_exists( $class ) ) {
+            return $active = true;
+        }
+    }
+
+    if ( defined( 'GIT_UPDATER_DIR' ) || defined( 'GITHUB_UPDATER_DIR' ) ) {
+        return $active = true;
+    }
+
+    // Class detection depends on load order; the active-plugins list does not.
+    foreach ( (array) get_option( 'active_plugins', array() ) as $plugin_file ) {
+        $folder = strtok( strtolower( (string) $plugin_file ), '/' );
+        if ( $folder === 'git-updater' || $folder === 'github-updater' ) {
+            return $active = true;
+        }
+    }
+
+    return $active = false;
+}
+
+/**
+ * Does this plugin carry the headers a Git-based update manager claims ownership by?
+ *
+ * These headers are inert on their own — Hozio Pro itself shipped one for years with no
+ * effect. They only mean anything when Git Updater is actually installed, so always
+ * check hozio_git_update_manager_active() first; otherwise we would decline to patch
+ * plugins that nothing else is updating.
+ *
+ * @param string $plugin_file Plugin file relative to the plugins directory.
+ * @return bool
+ */
+function hozio_plugin_managed_by_git_updater( $plugin_file ) {
+    $path = WP_PLUGIN_DIR . '/' . $plugin_file;
+    if ( ! file_exists( $path ) ) {
+        return false;
+    }
+
+    $headers = get_file_data( $path, array(
+        'github'    => 'GitHub Plugin URI',
+        'gitlab'    => 'GitLab Plugin URI',
+        'bitbucket' => 'Bitbucket Plugin URI',
+        'gitea'     => 'Gitea Plugin URI',
+        'gist'      => 'Gist Plugin URI',
+    ) );
+
+    foreach ( $headers as $value ) {
+        if ( trim( (string) $value ) !== '' ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Grant WordPress permission to auto-update third-party plugins.
  *
  * Priority 20 so this runs AFTER plugin-updater.php's own filter (priority 10);
@@ -135,6 +210,24 @@ function hozio_auto_update_all_plugins_filter( $update, $item ) {
                 return false;
             }
         }
+    }
+
+    // ── Another updater owns this plugin ─────────────────────────────────────
+    // If Git Updater is running the site, leave the plugins it manages alone. Two
+    // updaters writing the same directory is how you get a half-installed plugin, and
+    // Git Updater is frequently pointed at a branch rather than a release — installing
+    // "the newest version" over that can throw away exactly what the site is meant to
+    // be running. Everything Git Updater does NOT manage still gets patched normally,
+    // which is the whole point of doing this per-plugin instead of standing down
+    // across the site.
+    if ( $file !== '' && hozio_git_update_manager_active() && hozio_plugin_managed_by_git_updater( $item->plugin ) ) {
+        if ( function_exists( 'hozio_audit_log' ) ) {
+            hozio_audit_log(
+                sprintf( 'Skipped %s — Git Updater manages this plugin', $slug !== '' ? $slug : $file ),
+                'AutoUpdate'
+            );
+        }
+        return false;
     }
 
     // ── Major-version guard ──────────────────────────────────────────────────
@@ -320,6 +413,9 @@ function hozio_get_patch_status() {
         // would otherwise sit in the fleet looking permanently "current".
         'blocked_reason'      => hozio_auto_update_blocked_reason(),
         'max_per_run'         => (int) apply_filters( 'hozio_max_plugin_auto_updates_per_run', 3 ),
+        // Flags a site where some plugins are deliberately left to another updater, so
+        // the Hub doesn't report them as permanently behind.
+        'git_updater'         => hozio_git_update_manager_active(),
         'excluded'            => array_keys( hozio_auto_update_exclusions() ),
         'next_run'            => (int) wp_next_scheduled( 'wp_maybe_auto_update' ),
         'pending'             => $pending,
@@ -398,6 +494,10 @@ function hozio_auto_update_blocked_reason() {
  * watching the site to notice it went down.
  */
 function hozio_arm_update_crash_guard() {
+    // Snapshot what is switched on right now, so anything the run turns off can be
+    // turned back on. See hozio_restore_deactivated_plugins() for why that happens.
+    $GLOBALS['hozio_active_plugins_before'] = (array) get_option( 'active_plugins', array() );
+
     if ( isset( $GLOBALS['hozio_update_crash_guard_armed'] ) ) {
         $GLOBALS['hozio_update_run_active'] = true; // Already registered; just re-arm.
         return;
@@ -410,6 +510,7 @@ function hozio_arm_update_crash_guard() {
             return; // Finished normally; nothing to undo.
         }
 
+        // Get the site back online first — this is the visitor-facing symptom.
         $maintenance = ABSPATH . '.maintenance';
         if ( file_exists( $maintenance ) ) {
             @unlink( $maintenance );
@@ -429,6 +530,10 @@ function hozio_arm_update_crash_guard() {
                 'AutoUpdate'
             );
         }
+
+        // A run killed partway through can leave a plugin deactivated with its files
+        // already swapped. Put it back.
+        hozio_restore_deactivated_plugins();
     } );
 }
 
@@ -444,6 +549,83 @@ function hozio_disarm_update_crash_guard() {
     if ( file_exists( ABSPATH . '.maintenance' ) ) {
         @unlink( ABSPATH . '.maintenance' );
     }
+
+    hozio_restore_deactivated_plugins();
+}
+
+/**
+ * Switch back on any plugin that was active before the run and isn't now.
+ *
+ * The safety net for the deactivation problem, kept even though the run now declares
+ * cron context (which stops core deactivating anything in the first place). Two cases
+ * it still covers: a run killed after core deactivated a plugin but before the files
+ * finished swapping, and any other code on the site that deactivates during an upgrade.
+ *
+ * Reactivation is SILENT — no activation hooks. The deactivation was silent too, so the
+ * plugin never ran its deactivation routine and its stored state is untouched; firing
+ * activation hooks on a plugin that never really deactivated could re-run installers.
+ *
+ * Safe against reactivating something genuinely broken: activate_plugin() validates the
+ * plugin first and returns WP_Error if its files are missing or unreadable. WordPress's
+ * own fatal-error protection works through wp_paused_plugins, not active_plugins, so
+ * this cannot fight it or resurrect a plugin core has paused for crashing.
+ *
+ * @return int How many plugins were switched back on.
+ */
+function hozio_restore_deactivated_plugins() {
+    if ( empty( $GLOBALS['hozio_active_plugins_before'] ) ) {
+        return 0;
+    }
+
+    $before = (array) $GLOBALS['hozio_active_plugins_before'];
+    $now    = (array) get_option( 'active_plugins', array() );
+    $lost   = array_diff( $before, $now );
+
+    if ( empty( $lost ) ) {
+        return 0;
+    }
+
+    if ( ! function_exists( 'activate_plugin' ) ) {
+        require_once ABSPATH . 'wp-admin/includes/plugin.php';
+    }
+
+    $restored = 0;
+    foreach ( $lost as $plugin_file ) {
+        if ( ! file_exists( WP_PLUGIN_DIR . '/' . $plugin_file ) ) {
+            if ( function_exists( 'hozio_audit_log' ) ) {
+                hozio_audit_log(
+                    sprintf( 'Cannot reactivate %s — its files are missing after the update. Reinstall it.', $plugin_file ),
+                    'AutoUpdate'
+                );
+            }
+            continue;
+        }
+
+        $result = activate_plugin( $plugin_file, '', false, true );
+
+        if ( function_exists( 'hozio_audit_log' ) ) {
+            if ( is_wp_error( $result ) ) {
+                hozio_audit_log(
+                    sprintf( 'Failed to reactivate %s after the update: %s', $plugin_file, $result->get_error_message() ),
+                    'AutoUpdate'
+                );
+            } else {
+                hozio_audit_log(
+                    sprintf( 'Reactivated %s — WordPress deactivated it during the update', $plugin_file ),
+                    'AutoUpdate'
+                );
+            }
+        }
+
+        if ( ! is_wp_error( $result ) ) {
+            $restored++;
+        }
+    }
+
+    // Don't repeat the work if this runs twice (normal path, then shutdown).
+    $GLOBALS['hozio_active_plugins_before'] = (array) get_option( 'active_plugins', array() );
+
+    return $restored;
 }
 
 // Wrap the scheduled run too. Core registers wp_maybe_auto_update() on this action at
@@ -522,6 +704,28 @@ function hozio_run_plugin_auto_updates_now( $max = 0 ) {
 
     hozio_arm_update_crash_guard();
 
+    // ── Run as though this were the scheduled cron job ───────────────────────
+    // THIS IS WHAT WAS DEACTIVATING ELEMENTOR.
+    //
+    // Core's Plugin_Upgrader::upgrade() hooks deactivate_plugin_before_upgrade() onto
+    // upgrader_pre_install, which SILENTLY DEACTIVATES a plugin before replacing its
+    // files — and nothing in core ever switches it back on. Core's own comment says it
+    // all: "When in cron (background updates) don't deactivate the plugin, as we require
+    // a browser to reactivate it." The browser update screens do that reactivation
+    // themselves; the automatic path is exempted from the deactivation entirely.
+    //
+    // This button is an AJAX request, so wp_doing_cron() was false and core took the
+    // deactivate branch — switching off every plugin it updated. A big plugin like
+    // Elementor is simply where it got noticed first.
+    //
+    // Declaring cron context puts us on exactly the same path as the twice-daily run,
+    // which is what this button has always claimed to be. It also lets core manage
+    // maintenance mode around the file swap properly (active_before/active_after are
+    // likewise cron-only). Uses the wp_doing_cron filter rather than defining DOING_CRON
+    // so it can be lifted again afterwards instead of poisoning the rest of the request.
+    $as_cron = function () { return true; };
+    add_filter( 'wp_doing_cron', $as_cron, PHP_INT_MAX );
+
     // Keep this run to plugins only. wp_maybe_auto_update() would otherwise also
     // attempt core, theme, and translation updates — a core update is a large
     // download that makes a timeout far more likely, and the button says plugins.
@@ -572,6 +776,7 @@ function hozio_run_plugin_auto_updates_now( $max = 0 ) {
     wp_maybe_auto_update();
 
     remove_action( 'automatic_updates_complete', $collect, 99 );
+    remove_filter( 'wp_doing_cron', $as_cron, PHP_INT_MAX );
     remove_filter( 'auto_update_core', $deny, PHP_INT_MAX );
     remove_filter( 'auto_update_theme', $deny, PHP_INT_MAX );
     remove_filter( 'auto_update_translation', $deny, PHP_INT_MAX );
