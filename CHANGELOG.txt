@@ -2,6 +2,33 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.14.2 (July 2026) ==
+
+= Fixes =
+
+* "Run Plugin Updates Now" no longer reports "all plugins are already current"
+  when updates are actually pending. When WordPress's automatic updater is
+  disabled it returns silently without firing its completion hook, which the
+  button previously read as "nothing to do" — the most misleading possible
+  outcome. It now reports the real reason instead:
+
+    - WordPress automatic updates are switched off (an update-management plugin
+      such as ManageWP Worker or MainWP Child, a security plugin, the
+      AUTOMATIC_UPDATER_DISABLED constant, or a host mu-plugin). The
+      "next automatic run: not scheduled" note is the same symptom.
+    - File modifications are disabled (DISALLOW_FILE_MODS).
+    - The site is under version control (.git / .svn present).
+    - WordPress cannot write to the plugins directory directly.
+
+  If updates are pending but none installed, it now says so explicitly rather
+  than claiming the site is current — that case usually means the pending
+  updates are all major versions, which 4.14.1 skips by design.
+
+* The blocking reason is also sent to Hozio Hub in the heartbeat, so a site that
+  physically cannot update is visible fleet-wide instead of appearing healthy.
+
+--------------------------------------------------------------------------------
+
 == Version 4.14.1 (July 2026) ==
 
 = Fixes =

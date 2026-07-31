@@ -270,6 +270,10 @@ function hozio_get_patch_status() {
 
     return array(
         'auto_update_enabled' => hozio_auto_update_all_enabled(),
+        // Empty when updates can run. A non-empty value means this site CANNOT install
+        // updates at all (host lockout, no direct filesystem access, VCS checkout) — it
+        // would otherwise sit in the fleet looking permanently "current".
+        'blocked_reason'      => hozio_auto_update_blocked_reason(),
         'max_per_run'         => (int) apply_filters( 'hozio_max_plugin_auto_updates_per_run', 3 ),
         'excluded'            => array_keys( hozio_auto_update_exclusions() ),
         'next_run'            => (int) wp_next_scheduled( 'wp_maybe_auto_update' ),
@@ -279,6 +283,59 @@ function hozio_get_patch_status() {
     );
 }
 add_action( 'automatic_updates_complete', 'hozio_log_plugin_auto_updates' );
+
+/**
+ * Why this site cannot install plugin updates, if it can't.
+ *
+ * WordPress refuses to auto-update for several environmental reasons, and it does so
+ * SILENTLY — wp_maybe_auto_update() simply returns and nothing is logged. That makes a
+ * blocked site look identical to an up-to-date one, which is the worst possible failure
+ * mode across a fleet. This names the blocker instead.
+ *
+ * Uses core's own WP_Automatic_Updater checks rather than re-implementing them, so it
+ * stays correct as WordPress changes.
+ *
+ * @return string Empty string when updates can run, otherwise a human-readable reason.
+ */
+function hozio_auto_update_blocked_reason() {
+    // Most specific first: a hard host/wp-config lockout on all file changes.
+    if ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS ) {
+        return 'File modifications are disabled on this site (DISALLOW_FILE_MODS is set in wp-config.php or by the host). No plugin can be installed or updated, by any method.';
+    }
+
+    if ( ! class_exists( 'WP_Automatic_Updater' ) ) {
+        require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+    }
+
+    if ( class_exists( 'WP_Automatic_Updater' ) ) {
+        $updater = new WP_Automatic_Updater();
+
+        // Covers AUTOMATIC_UPDATER_DISABLED and the automatic_updater_disabled filter,
+        // which hosts and security plugins both commonly set.
+        if ( method_exists( $updater, 'is_disabled' ) && $updater->is_disabled() ) {
+            return 'WordPress automatic updates are switched off on this site, so nothing can install unattended. '
+                 . 'Common causes: an update-management plugin that takes over updates (ManageWP Worker, MainWP Child), '
+                 . 'a security plugin, the AUTOMATIC_UPDATER_DISABLED constant in wp-config.php, or a host mu-plugin. '
+                 . 'The "next automatic run: not scheduled" note above is the same symptom.';
+        }
+
+        // WordPress refuses to auto-update a site under version control.
+        if ( method_exists( $updater, 'is_vcs_checkout' ) && $updater->is_vcs_checkout( ABSPATH ) ) {
+            return 'This site is under version control (a .git or .svn directory was found), so WordPress blocks automatic updates to avoid conflicting with deployments.';
+        }
+    }
+
+    // Without direct write access WordPress would need FTP credentials, which it cannot
+    // prompt for during an unattended run.
+    if ( ! function_exists( 'get_filesystem_method' ) ) {
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+    }
+    if ( function_exists( 'get_filesystem_method' ) && get_filesystem_method() !== 'direct' ) {
+        return 'WordPress cannot write to the plugins directory directly (it would need FTP/SSH credentials). This is usually a file-ownership or permissions problem on the server.';
+    }
+
+    return '';
+}
 
 /**
  * Run the plugin auto-updater immediately, instead of waiting for the twice-daily
@@ -355,9 +412,31 @@ add_action( 'wp_ajax_hozio_run_plugin_updates', function () {
         wp_send_json_error( 'Auto-Update All Plugins is turned off for this site.' );
     }
 
+    // Report an environmental blocker plainly rather than letting the run come back
+    // empty and read as "everything is current".
+    $blocked = hozio_auto_update_blocked_reason();
+    if ( $blocked !== '' ) {
+        wp_send_json_error( $blocked );
+    }
+
     $result = hozio_run_plugin_auto_updates_now();
 
     if ( $result['updated'] === 0 && $result['failed'] === 0 ) {
+        // Distinguish "already current" from "updates are pending but none installed",
+        // which means something stopped the run after the preflight passed.
+        $pending = 0;
+        $t = get_site_transient( 'update_plugins' );
+        if ( $t && ! empty( $t->response ) && is_array( $t->response ) ) {
+            $pending = count( $t->response );
+        }
+
+        if ( $pending > 0 ) {
+            wp_send_json_error( sprintf(
+                '%d update(s) are pending but none installed. They may all be major-version updates (skipped by design), excluded, or WordPress declined them. Check the audit log for details.',
+                $pending
+            ) );
+        }
+
         wp_send_json_success( array( 'summary' => 'Nothing to update — all plugins are already current.' ) );
     }
 
