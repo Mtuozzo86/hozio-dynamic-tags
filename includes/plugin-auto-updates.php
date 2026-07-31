@@ -383,15 +383,133 @@ function hozio_auto_update_blocked_reason() {
 }
 
 /**
+ * Arm the crash guard for an update run.
+ *
+ * WordPress puts the site into maintenance mode (a .maintenance file in the web root)
+ * for the duration of an update and removes it when finished. If PHP is killed
+ * mid-update — max_execution_time on a host that ignores set_time_limit(), a memory
+ * limit, a 502 — that file is left behind and THE SITE STAYS OFFLINE showing "Briefly
+ * unavailable for scheduled maintenance". Core self-expires it after 10 minutes, but
+ * ten minutes of downtime on a client site is not acceptable, and the stranded
+ * auto_updater lock then blocks every further attempt for a full hour.
+ *
+ * A shutdown handler runs even on timeout and fatal error, so the cleanup lives there.
+ * Armed for the cron run as well as the button: unattended is the case where nobody is
+ * watching the site to notice it went down.
+ */
+function hozio_arm_update_crash_guard() {
+    if ( isset( $GLOBALS['hozio_update_crash_guard_armed'] ) ) {
+        $GLOBALS['hozio_update_run_active'] = true; // Already registered; just re-arm.
+        return;
+    }
+    $GLOBALS['hozio_update_crash_guard_armed'] = true;
+    $GLOBALS['hozio_update_run_active']        = true;
+
+    register_shutdown_function( function () {
+        if ( empty( $GLOBALS['hozio_update_run_active'] ) ) {
+            return; // Finished normally; nothing to undo.
+        }
+
+        $maintenance = ABSPATH . '.maintenance';
+        if ( file_exists( $maintenance ) ) {
+            @unlink( $maintenance );
+        }
+
+        if ( class_exists( 'WP_Upgrader' ) && method_exists( 'WP_Upgrader', 'release_lock' ) ) {
+            WP_Upgrader::release_lock( 'auto_updater' );
+        } else {
+            delete_option( 'auto_updater.lock' );
+        }
+
+        if ( function_exists( 'hozio_audit_log' ) ) {
+            $err = error_get_last();
+            hozio_audit_log(
+                'Update run ended unexpectedly (timeout or fatal error) — cleared maintenance mode and the updater lock so the site stays online'
+                    . ( $err && ! empty( $err['message'] ) ? '. Last error: ' . $err['message'] : '' ),
+                'AutoUpdate'
+            );
+        }
+    } );
+}
+
+/**
+ * Stand the crash guard down after a run that reached its own end.
+ *
+ * Also clears maintenance mode defensively: whatever happened during the run, a site
+ * that is finished updating must never be left showing the maintenance page.
+ */
+function hozio_disarm_update_crash_guard() {
+    $GLOBALS['hozio_update_run_active'] = false;
+
+    if ( file_exists( ABSPATH . '.maintenance' ) ) {
+        @unlink( ABSPATH . '.maintenance' );
+    }
+}
+
+// Wrap the scheduled run too. Core registers wp_maybe_auto_update() on this action at
+// the default priority, so arming before it and disarming after brackets the whole run.
+add_action( 'wp_maybe_auto_update', 'hozio_arm_update_crash_guard', 1 );
+add_action( 'wp_maybe_auto_update', 'hozio_disarm_update_crash_guard', PHP_INT_MAX );
+
+/**
+ * Break down what WordPress currently has pending for this site.
+ *
+ * "Pending" is whatever core's own update check found. "Eligible" is the part this
+ * plugin would actually install — majors and exclusions are declined by policy, so
+ * counting them as outstanding work makes a fully-patched site look behind forever.
+ *
+ * @return array{pending:int,eligible:int,skipped_major:int,excluded:int}
+ */
+function hozio_count_pending_updates() {
+    $out = array( 'pending' => 0, 'eligible' => 0, 'skipped_major' => 0, 'excluded' => 0 );
+
+    $transient = get_site_transient( 'update_plugins' );
+    if ( ! $transient || empty( $transient->response ) || ! is_array( $transient->response ) ) {
+        return $out;
+    }
+
+    if ( ! function_exists( 'get_plugins' ) ) {
+        require_once ABSPATH . 'wp-admin/includes/plugin.php';
+    }
+    $installed  = get_plugins();
+    $exclusions = hozio_auto_update_exclusions();
+
+    foreach ( $transient->response as $file => $info ) {
+        $out['pending']++;
+
+        $folder = strpos( $file, '/' ) !== false ? strtok( $file, '/' ) : '';
+        if ( isset( $exclusions[ strtolower( $file ) ] ) || ( $folder && isset( $exclusions[ strtolower( $folder ) ] ) ) ) {
+            $out['excluded']++;
+            continue;
+        }
+
+        $current = isset( $installed[ $file ]['Version'] ) ? $installed[ $file ]['Version'] : '';
+        if ( $current !== '' && isset( $info->new_version ) ) {
+            if ( (int) strtok( ltrim( (string) $info->new_version, 'vV' ), '.' ) > (int) strtok( ltrim( $current, 'vV' ), '.' ) ) {
+                $out['skipped_major']++;
+                continue;
+            }
+        }
+
+        $out['eligible']++;
+    }
+
+    return $out;
+}
+
+/**
  * Run the plugin auto-updater immediately, instead of waiting for the twice-daily
  * cron. Same code path WordPress uses on its own schedule — this just stops waiting.
  *
  * Exists because WP-cron is visitor-triggered and can drift on quiet sites, and
  * because not every host has WP-CLI available for a manual nudge.
  *
+ * @param int $max Cap for THIS run only (0 = use the normal per-run cap). The
+ *                 settings-page button passes 1 and repeats, so a host with a tight
+ *                 max_execution_time never has to finish several updates in one request.
  * @return array{updated:int,failed:int,messages:string[]}
  */
-function hozio_run_plugin_auto_updates_now() {
+function hozio_run_plugin_auto_updates_now( $max = 0 ) {
     if ( ! function_exists( 'wp_maybe_auto_update' ) ) {
         require_once ABSPATH . 'wp-admin/includes/update.php';
     }
@@ -401,6 +519,24 @@ function hozio_run_plugin_auto_updates_now() {
     require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
     @set_time_limit( 300 );
+
+    hozio_arm_update_crash_guard();
+
+    // Keep this run to plugins only. wp_maybe_auto_update() would otherwise also
+    // attempt core, theme, and translation updates — a core update is a large
+    // download that makes a timeout far more likely, and the button says plugins.
+    $deny = function () { return false; };
+    add_filter( 'auto_update_core', $deny, PHP_INT_MAX );
+    add_filter( 'auto_update_theme', $deny, PHP_INT_MAX );
+    add_filter( 'auto_update_translation', $deny, PHP_INT_MAX );
+
+    // Tighter cap for this run only, when the caller asked for one.
+    $cap = null;
+    $max = (int) $max;
+    if ( $max > 0 ) {
+        $cap = function () use ( $max ) { return $max; };
+        add_filter( 'hozio_max_plugin_auto_updates_per_run', $cap, PHP_INT_MAX );
+    }
 
     // Release a stale auto-updater lock.
     //
@@ -436,7 +572,15 @@ function hozio_run_plugin_auto_updates_now() {
     wp_maybe_auto_update();
 
     remove_action( 'automatic_updates_complete', $collect, 99 );
+    remove_filter( 'auto_update_core', $deny, PHP_INT_MAX );
+    remove_filter( 'auto_update_theme', $deny, PHP_INT_MAX );
+    remove_filter( 'auto_update_translation', $deny, PHP_INT_MAX );
+    if ( $cap ) {
+        remove_filter( 'hozio_max_plugin_auto_updates_per_run', $cap, PHP_INT_MAX );
+    }
     unset( $GLOBALS['hozio_running_updates_now'] );
+
+    hozio_disarm_update_crash_guard();
 
     $updated  = 0;
     $failed   = 0;
@@ -481,69 +625,50 @@ add_action( 'wp_ajax_hozio_run_plugin_updates', function () {
         wp_send_json_error( $blocked );
     }
 
-    $result = hozio_run_plugin_auto_updates_now();
+    // ONE plugin per request, and the browser calls back for the next one.
+    //
+    // Installing several in a single request is what took a site down: shared hosts cap
+    // max_execution_time and ignore set_time_limit(), so a batch gets killed partway
+    // through with the .maintenance file still in place. One update per request finishes
+    // inside any sane limit, and a kill can only ever cost one plugin instead of the batch.
+    $batch  = max( 1, (int) apply_filters( 'hozio_manual_update_batch_size', 1 ) );
+    $result = hozio_run_plugin_auto_updates_now( $batch );
+
+    $counts    = hozio_count_pending_updates();
+    $remaining = (int) $counts['eligible'];
 
     if ( $result['updated'] === 0 && $result['failed'] === 0 ) {
-        // Distinguish "already current" from "updates are pending but none installed",
-        // which means something stopped the run after the preflight passed.
-        $pending = 0;
-        $t = get_site_transient( 'update_plugins' );
-        if ( $t && ! empty( $t->response ) && is_array( $t->response ) ) {
-            $pending = count( $t->response );
-        }
-
-        if ( $pending > 0 ) {
-            // Narrow it down rather than listing every possibility: count how many of the
-            // pending updates this plugin itself declined (major-version jumps and
-            // exclusions), so the operator knows whether the cause is our policy or
-            // something in WordPress/the environment.
-            $skipped_major = 0;
-            $excluded      = 0;
-            $exclusions    = hozio_auto_update_exclusions();
-
-            if ( ! function_exists( 'get_plugins' ) ) {
-                require_once ABSPATH . 'wp-admin/includes/plugin.php';
-            }
-            $installed = get_plugins();
-
-            foreach ( $t->response as $file => $info ) {
-                $folder = strpos( $file, '/' ) !== false ? strtok( $file, '/' ) : '';
-                if ( isset( $exclusions[ strtolower( $file ) ] ) || ( $folder && isset( $exclusions[ strtolower( $folder ) ] ) ) ) {
-                    $excluded++;
-                    continue;
-                }
-                $cur = isset( $installed[ $file ]['Version'] ) ? $installed[ $file ]['Version'] : '';
-                if ( $cur !== '' && isset( $info->new_version ) ) {
-                    if ( (int) strtok( ltrim( (string) $info->new_version, 'vV' ), '.' ) > (int) strtok( ltrim( $cur, 'vV' ), '.' ) ) {
-                        $skipped_major++;
-                    }
-                }
-            }
-
-            $eligible = $pending - $skipped_major - $excluded;
-
-            if ( $eligible <= 0 ) {
-                wp_send_json_success( array( 'summary' => sprintf(
-                    'Nothing eligible to install: of %d pending, %d are major-version updates (skipped by design) and %d are excluded. Install majors manually alongside any paid add-on.',
-                    $pending, $skipped_major, $excluded
-                ) ) );
+        // Nothing installed. Separate "there was nothing to do" from "something stopped
+        // the run", because those need completely different responses from the operator.
+        if ( $counts['pending'] > 0 ) {
+            if ( $remaining <= 0 ) {
+                wp_send_json_success( array(
+                    'summary'   => sprintf(
+                        'Nothing eligible to install: of %d pending, %d are major-version updates (skipped by design) and %d are excluded. Install majors manually alongside any paid add-on.',
+                        $counts['pending'], $counts['skipped_major'], $counts['excluded']
+                    ),
+                    'remaining' => 0,
+                    'installed' => 0,
+                ) );
             }
 
             wp_send_json_error( sprintf(
                 '%d update(s) pending, %d eligible, but none installed. WordPress declined them — most often multisite (only the main site auto-updates), a stale lock, or a permissions problem in wp-content/plugins. Check the audit log.',
-                $pending, $eligible
+                $counts['pending'], $remaining
             ) );
         }
 
-        wp_send_json_success( array( 'summary' => 'Nothing to update — all plugins are already current.' ) );
+        wp_send_json_success( array(
+            'summary'   => 'Nothing to update — all plugins are already current.',
+            'remaining' => 0,
+            'installed' => 0,
+        ) );
     }
 
     wp_send_json_success( array(
-        'summary' => sprintf(
-            '%d updated, %d failed. %s',
-            $result['updated'],
-            $result['failed'],
-            implode( ' · ', $result['messages'] )
-        ),
+        'summary'   => implode( ' · ', $result['messages'] ),
+        'installed' => (int) $result['updated'],
+        'failed'    => (int) $result['failed'],
+        'remaining' => $remaining,
     ) );
 } );

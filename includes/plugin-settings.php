@@ -979,9 +979,11 @@ function hozio_plugin_settings_page() {
                         Updates install on their own twice a day &mdash; <strong>next automatic run: <?php echo esc_html( $hozio_next_label ); ?></strong>.
                         Installing or updating a plugin does not trigger a run; only the schedule does. This button runs
                         that same process immediately, which is useful for testing or when you don't want to wait.
-                        A maximum of <strong>3 plugins are updated per run</strong>, so a site with a large backlog works
-                        through it over a few runs instead of attempting everything in one request. Click again (or wait
-                        for the next automatic run) to continue.
+                        The button installs <strong>one plugin per request</strong> and keeps going until the backlog is
+                        clear, so keep this page open while it works. Doing them one at a time is deliberate: shared hosts
+                        cap how long a single request may run, and a run killed halfway through can leave the site stuck on
+                        the &ldquo;scheduled maintenance&rdquo; page. The twice-daily automatic run installs up to
+                        <strong>3 per run</strong> and works through a backlog over a few days.
                     </p>
                 </div>
 
@@ -2682,38 +2684,79 @@ function hozio_plugin_settings_page() {
             });
         });
 
-        // Run plugin auto-updates now (same process the twice-daily cron runs)
+        // Run plugin auto-updates now (same process the twice-daily cron runs).
+        //
+        // The server installs ONE plugin per request and reports how many are left, so
+        // this loops until it's done. Shared hosts cap how long a PHP request may run and
+        // ignore set_time_limit(), so asking for a whole backlog in one request is what
+        // gets the process killed mid-install — which strands the site in maintenance mode.
         $('#hozio-run-updates-btn').on('click', function() {
             var $btn    = $(this);
             var $status = $('#hozio-run-updates-status');
             var label   = $btn.html();
 
-            $btn.prop('disabled', true).text('Updating…');
-            $status.css('color', '#6b7280').text('This can take a minute — do not leave the page.');
+            var done  = [];   // Plugins installed across the whole loop.
+            var round = 0;    // Backstop so a mis-reported "remaining" can't spin forever.
 
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                timeout: 300000,
-                data: {
-                    action: 'hozio_run_plugin_updates',
-                    nonce: $btn.data('nonce')
-                },
-                success: function(response) {
-                    if (response.success) {
-                        $status.css('color', '#15803d').text(response.data.summary);
-                    } else {
-                        $status.css('color', '#dc2626').text(response.data || 'Update run failed.');
-                    }
-                },
-                error: function() {
-                    $status.css('color', '#dc2626')
-                           .text('Request failed or timed out. Check the audit log — updates may still have applied.');
-                },
-                complete: function() {
-                    $btn.prop('disabled', false).html(label);
+            $btn.prop('disabled', true).text('Updating…');
+
+            function finish(color, message) {
+                $status.css('color', color).text(message);
+                $btn.prop('disabled', false).html(label);
+            }
+
+            function progress(extra) {
+                $status.css('color', '#6b7280').text(
+                    (done.length ? done.length + ' installed so far. ' : '') +
+                    (extra || '') + ' Do not leave the page.'
+                );
+            }
+
+            function runOne() {
+                round++;
+                if (round > 60) {
+                    finish('#15803d', done.join(' · ') + ' — stopped after 60 rounds. Click again to continue.');
+                    return;
                 }
-            });
+
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    timeout: 180000,
+                    data: {
+                        action: 'hozio_run_plugin_updates',
+                        nonce: $btn.data('nonce')
+                    },
+                    success: function(response) {
+                        if (!response.success) {
+                            finish('#dc2626', response.data || 'Update run failed.');
+                            return;
+                        }
+
+                        var d = response.data || {};
+                        if (d.summary) { done.push(d.summary); }
+
+                        // Only keep going while we're actually making progress. A plugin
+                        // that fails stays in the pending list, so looping on "remaining"
+                        // alone would retry the same failure until the round cap.
+                        if (d.installed > 0 && d.remaining > 0) {
+                            progress(d.remaining + ' left.');
+                            runOne();
+                            return;
+                        }
+
+                        finish(d.failed > 0 ? '#dc2626' : '#15803d', done.join(' · '));
+                    },
+                    error: function() {
+                        finish('#dc2626',
+                            (done.length ? done.join(' · ') + ' — then: ' : '') +
+                            'a request failed or timed out. Check the audit log, then click again to carry on.');
+                    }
+                });
+            }
+
+            progress('Installing one plugin at a time.');
+            runOne();
         });
 
         // Hub Connect

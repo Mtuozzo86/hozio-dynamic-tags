@@ -2,6 +2,40 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.15.2 (July 2026) ==
+
+= Fixes =
+
+* A site could be left stuck on "Briefly unavailable for scheduled maintenance"
+  after running plugin updates. Fixed, in two parts.
+
+  What happened: WordPress puts the site into maintenance mode (a .maintenance
+  file in the web root) while it installs an update, and removes it when done. On
+  shared hosting, PHP requests are capped by max_execution_time and many hosts
+  ignore set_time_limit(), so a run that tried to install several plugins was
+  killed partway through — leaving that file behind. The site then served the
+  maintenance page to every visitor until core expired the file ten minutes
+  later, and the stranded updater lock blocked further attempts for an hour.
+
+  1. "Run Plugin Updates Now" installs ONE plugin per request and the browser
+     asks for the next one, repeating until the backlog is clear. A single
+     update finishes well inside any host's limit, and a request that is killed
+     can now only cost one plugin instead of the whole batch. Keep the settings
+     page open while it works; progress is shown as it goes.
+
+  2. A crash guard now runs on both the button and the twice-daily automatic run.
+     It fires even on a timeout or fatal error, deletes the .maintenance file,
+     releases the updater lock, and writes what happened to the audit log. The
+     site comes straight back online instead of waiting out the ten minutes, and
+     the next run is not blocked. This matters most for the unattended run, where
+     nobody is watching to notice the site went down.
+
+* The manual button no longer attempts core, theme, or translation updates. It
+  says plugins, so it does plugins — and a core update is a large download that
+  made a timeout considerably more likely. The automatic run is unchanged.
+
+--------------------------------------------------------------------------------
+
 == Version 4.15.1 (July 2026) ==
 
 = Fixes =
