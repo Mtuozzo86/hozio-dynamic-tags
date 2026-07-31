@@ -31,6 +31,51 @@ function hozio_auto_update_all_enabled() {
 }
 
 /**
+ * Is the operator forcing auto-updates on despite something having disabled them?
+ */
+function hozio_auto_update_force_enabled() {
+    return get_option( 'hozio_auto_update_force', '0' ) === '1';
+}
+
+/**
+ * Override another plugin's decision to switch WordPress auto-updates off.
+ *
+ * Update-management plugins (ManageWP Worker, MainWP Child), security plugins, and some
+ * hosts set the automatic_updater_disabled filter or the AUTOMATIC_UPDATER_DISABLED
+ * constant. Core reads both through this one filter, so a late filter re-enables either.
+ *
+ * OPT-IN ONLY, and deliberately so: if a tool really is managing updates, forcing WP to
+ * update as well means two systems writing the same plugin directories. The operator has
+ * to make that call knowingly.
+ *
+ * Note this cannot override DISALLOW_FILE_MODS or a non-direct filesystem — core checks
+ * those before the filter, and rightly so: they mean writes genuinely aren't permitted.
+ */
+add_filter( 'automatic_updater_disabled', function ( $disabled ) {
+    if ( hozio_auto_update_all_enabled() && hozio_auto_update_force_enabled() ) {
+        return false;
+    }
+    return $disabled;
+}, PHP_INT_MAX );
+
+/**
+ * Re-schedule WordPress's auto-update cron if something removed it.
+ *
+ * A missing wp_maybe_auto_update event means updates can never install unattended, no
+ * matter what else is configured — the "next automatic run: not scheduled" symptom.
+ * Restoring it is safe: it is the same event core schedules itself, and WordPress still
+ * decides whether to act when it fires.
+ */
+add_action( 'init', function () {
+    if ( ! hozio_auto_update_all_enabled() || wp_installing() ) {
+        return;
+    }
+    if ( ! wp_next_scheduled( 'wp_maybe_auto_update' ) ) {
+        wp_schedule_event( time() + HOUR_IN_SECONDS, 'twicedaily', 'wp_maybe_auto_update' );
+    }
+}, 20 );
+
+/**
  * Operator's exclusion list as a fast lookup array.
  *
  * Accepts either a plugin file ("akismet/akismet.php") or just the folder slug
@@ -316,7 +361,7 @@ function hozio_auto_update_blocked_reason() {
             return 'WordPress automatic updates are switched off on this site, so nothing can install unattended. '
                  . 'Common causes: an update-management plugin that takes over updates (ManageWP Worker, MainWP Child), '
                  . 'a security plugin, the AUTOMATIC_UPDATER_DISABLED constant in wp-config.php, or a host mu-plugin. '
-                 . 'The "next automatic run: not scheduled" note above is the same symptom.';
+                 . 'Tick "Override and force updates on" below to have Hozio Pro re-enable them.';
         }
 
         // WordPress refuses to auto-update a site under version control.

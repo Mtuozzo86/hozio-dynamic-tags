@@ -2,6 +2,32 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.15.0 (July 2026) ==
+
+= New Features =
+
+* "Override and force updates on": a new opt-in setting that re-enables
+  WordPress's automatic updater on sites where something has switched it off.
+  Update-management plugins (ManageWP Worker, MainWP Child), security plugins,
+  the AUTOMATIC_UPDATER_DISABLED constant, and some host mu-plugins all disable
+  it — which silently prevents any plugin from installing unattended.
+
+  OFF by default and deliberately opt-in: if a tool is genuinely managing
+  updates, forcing WordPress to update as well means two systems writing the
+  same plugin directories. Enable it only when the settings page reports that
+  automatic updates are switched off.
+
+  It cannot override a host-level lock (DISALLOW_FILE_MODS) or missing direct
+  write access — WordPress checks those before the filter, and they mean writes
+  genuinely are not permitted. Those are still reported separately.
+
+* Update schedule self-heal: if the wp_maybe_auto_update cron event has been
+  removed (the "next automatic run: not scheduled" symptom), Hozio Pro restores
+  it. Without that event nothing can ever install unattended, regardless of any
+  other setting. This runs whenever Auto-Update All Plugins is enabled.
+
+--------------------------------------------------------------------------------
+
 == Version 4.14.2 (July 2026) ==
 
 = Fixes =

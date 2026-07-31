@@ -395,6 +395,7 @@ function hozio_plugin_settings_save() {
     // Save fleet plugin auto-update settings
     $auto_update_all = isset($_POST['hozio_auto_update_all_plugins']) ? '1' : '0';
     update_option('hozio_auto_update_all_plugins', $auto_update_all);
+    update_option('hozio_auto_update_force', isset($_POST['hozio_auto_update_force']) ? '1' : '0');
     update_option(
         'hozio_auto_update_exclude',
         sanitize_textarea_field($_POST['hozio_auto_update_exclude'] ?? '')
@@ -560,6 +561,7 @@ function hozio_plugin_settings_page() {
     $auto_updates_enabled = get_option('hozio_auto_updates_enabled', '1');
     $canonical_redirect_enabled = get_option('hozio_canonical_redirect_enabled', '1');
     $auto_update_all_plugins    = get_option('hozio_auto_update_all_plugins', '1');
+    $auto_update_force          = get_option('hozio_auto_update_force', '0');
     $auto_update_exclude        = get_option('hozio_auto_update_exclude', '');
     $faq_schema_enabled         = get_option('hozio_faq_schema_enabled', '1');
     $faq_schema_general_enabled = get_option('hozio_faq_schema_general_enabled', '1');
@@ -935,6 +937,26 @@ function hozio_plugin_settings_page() {
                             </div>
                         </div>
                     </div>
+                    <div style="margin-top:12px;padding:12px 16px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+                        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;color:#7c2d12;">
+                            <input type="checkbox" name="hozio_auto_update_force" value="1"
+                                   <?php checked($auto_update_force, '1'); ?> style="margin:2px 0 0;">
+                            <span>
+                                <strong>Override and force updates on.</strong>
+                                Use this only if the message above says automatic updates are switched off.
+                                It re-enables WordPress's updater even when another plugin has disabled it, and
+                                restores the update schedule if it was removed.
+                                <br>
+                                <span style="color:#9a3412;">
+                                    Leave this off if ManageWP, MainWP, or a similar tool is intentionally handling
+                                    updates for you &mdash; forcing it on means two systems updating the same plugins.
+                                    This cannot override a host-level lock (<code>DISALLOW_FILE_MODS</code>) or missing
+                                    write access; those are reported separately and need fixing on the server.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+
                     <div style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
                         <button type="button" id="hozio-run-updates-btn" class="button"
                                 data-nonce="<?php echo esc_attr( wp_create_nonce('hozio_run_plugin_updates') ); ?>">
