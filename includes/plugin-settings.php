@@ -392,6 +392,14 @@ function hozio_plugin_settings_save() {
     $canonical_redirect_enabled = isset($_POST['hozio_canonical_redirect_enabled']) ? '1' : '0';
     update_option('hozio_canonical_redirect_enabled', $canonical_redirect_enabled);
 
+    // Save fleet plugin auto-update settings
+    $auto_update_all = isset($_POST['hozio_auto_update_all_plugins']) ? '1' : '0';
+    update_option('hozio_auto_update_all_plugins', $auto_update_all);
+    update_option(
+        'hozio_auto_update_exclude',
+        sanitize_textarea_field($_POST['hozio_auto_update_exclude'] ?? '')
+    );
+
 
     // Save FAQ schema settings
     update_option('hozio_faq_schema_enabled',         isset($_POST['hozio_faq_schema_enabled'])         ? '1' : '0');
@@ -551,6 +559,8 @@ function hozio_plugin_settings_page() {
     $license_key = get_option('hozio_license_key', '');
     $auto_updates_enabled = get_option('hozio_auto_updates_enabled', '1');
     $canonical_redirect_enabled = get_option('hozio_canonical_redirect_enabled', '1');
+    $auto_update_all_plugins    = get_option('hozio_auto_update_all_plugins', '1');
+    $auto_update_exclude        = get_option('hozio_auto_update_exclude', '');
     $faq_schema_enabled         = get_option('hozio_faq_schema_enabled', '1');
     $faq_schema_general_enabled = get_option('hozio_faq_schema_general_enabled', '1');
     $faq_schema_service_enabled = get_option('hozio_faq_schema_service_enabled', '1');
@@ -902,6 +912,69 @@ function hozio_plugin_settings_page() {
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_auto_update_all_plugins" value="1"
+                                   <?php checked($auto_update_all_plugins, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">Auto-Update All Plugins</div>
+                            <div class="hozio-toggle-description">
+                                Lets WordPress automatically install updates for <strong>every</strong> plugin on this site,
+                                not just Hozio Pro. WordPress already checks for plugin updates twice a day &mdash; this
+                                grants permission to install what it finds, and on WordPress&nbsp;6.3+ it automatically
+                                restores the previous version if an update causes a fatal error.
+                                Premium plugins without an active license are skipped automatically (no update is offered),
+                                so those still need updating by hand.
+                                Every update is written to the audit log.
+                                <strong>Enabled by default.</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <button type="button" id="hozio-run-updates-btn" class="button"
+                                data-nonce="<?php echo esc_attr( wp_create_nonce('hozio_run_plugin_updates') ); ?>">
+                            <span class="dashicons dashicons-update" style="vertical-align:middle;"></span>
+                            Run Plugin Updates Now
+                        </button>
+                        <span id="hozio-run-updates-status" style="font-size:12px;color:#6b7280;"></span>
+                    </div>
+                    <?php
+                    $hozio_next_auto_run = wp_next_scheduled( 'wp_maybe_auto_update' );
+                    if ( $hozio_next_auto_run ) {
+                        $hozio_next_label = $hozio_next_auto_run <= time()
+                            ? 'due now (runs on the next visit to the site)'
+                            : 'in ' . human_time_diff( time(), $hozio_next_auto_run );
+                    } else {
+                        $hozio_next_label = 'not scheduled — WordPress will reschedule it automatically';
+                    }
+                    ?>
+                    <p style="margin:8px 0 0;font-size:12px;color:#9ca3af;">
+                        Updates install on their own twice a day &mdash; <strong>next automatic run: <?php echo esc_html( $hozio_next_label ); ?></strong>.
+                        Installing or updating a plugin does not trigger a run; only the schedule does. This button runs
+                        that same process immediately, which is useful for testing or when you don't want to wait.
+                        A maximum of <strong>3 plugins are updated per run</strong>, so a site with a large backlog works
+                        through it over a few runs instead of attempting everything in one request. Click again (or wait
+                        for the next automatic run) to continue.
+                    </p>
+                </div>
+
+                <div class="hozio-field" style="margin-top:-4px;">
+                    <label for="hozio_auto_update_exclude" style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">
+                        Never auto-update these plugins
+                    </label>
+                    <textarea name="hozio_auto_update_exclude" id="hozio_auto_update_exclude" rows="4"
+                              class="hozio-input" style="width:100%;font-family:monospace;font-size:12px;"
+                              placeholder="one per line, e.g.&#10;advanced-custom-fields-pro&#10;elementor-pro/elementor-pro.php"><?php echo esc_textarea($auto_update_exclude); ?></textarea>
+                    <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">
+                        One per line. Use either the folder name (<code>elementor-pro</code>) or the full plugin file
+                        (<code>elementor-pro/elementor-pro.php</code>). Use this for premium or heavily customized
+                        plugins you want to update manually. Hozio Pro is always excluded automatically.
+                    </p>
                 </div>
 
             </div>
@@ -2583,6 +2656,40 @@ function hozio_plugin_settings_page() {
                 error: function() {
                     alert('An error occurred while clearing caches');
                     $btn.text('Clear Plugin Caches').prop('disabled', false);
+                }
+            });
+        });
+
+        // Run plugin auto-updates now (same process the twice-daily cron runs)
+        $('#hozio-run-updates-btn').on('click', function() {
+            var $btn    = $(this);
+            var $status = $('#hozio-run-updates-status');
+            var label   = $btn.html();
+
+            $btn.prop('disabled', true).text('Updating…');
+            $status.css('color', '#6b7280').text('This can take a minute — do not leave the page.');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                timeout: 300000,
+                data: {
+                    action: 'hozio_run_plugin_updates',
+                    nonce: $btn.data('nonce')
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $status.css('color', '#15803d').text(response.data.summary);
+                    } else {
+                        $status.css('color', '#dc2626').text(response.data || 'Update run failed.');
+                    }
+                },
+                error: function() {
+                    $status.css('color', '#dc2626')
+                           .text('Request failed or timed out. Check the audit log — updates may still have applied.');
+                },
+                complete: function() {
+                    $btn.prop('disabled', false).html(label);
                 }
             });
         });

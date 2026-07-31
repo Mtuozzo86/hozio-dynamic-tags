@@ -2,6 +2,48 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.14.0 (July 2026) ==
+
+= New Features =
+
+* Auto-Update All Plugins: WordPress can now automatically install updates for
+  every plugin on the site, not just Hozio Pro. This uses WordPress's own
+  auto-update system — it already checks for plugin updates twice a day; this
+  grants permission to install what it finds. On WordPress 6.3+ WordPress
+  automatically restores the previous version if an update causes a fatal error.
+
+  ENABLED BY DEFAULT. Turn it off per-site in Hozio Pro Settings -> Feature
+  Toggles, or remotely on Hub-connected sites via the update_option command
+  (hozio_auto_update_all_plugins = '0').
+
+* Exclusion list: plugins listed in Hozio Pro Settings are never auto-updated.
+  Use this for premium or heavily customized plugins you want to update by hand.
+  Accepts either the folder name (elementor-pro) or the full plugin file
+  (elementor-pro/elementor-pro.php).
+
+* Per-run cap: a maximum of 3 plugins are updated per run, so a site with a
+  large backlog works through it over several runs rather than attempting
+  everything in one request (which risks a PHP timeout mid-update). Steady-state
+  sites are unaffected. Filterable via hozio_max_plugin_auto_updates_per_run.
+
+* "Run Plugin Updates Now" button: runs the same process the twice-daily cron
+  runs, immediately, and reports what was updated. No WP-CLI required. The
+  settings page also shows when the next automatic run is due.
+
+* Every automatic plugin update — success or failure — is written to the audit
+  log (wp-content/hozio-audit.log) under the AutoUpdate context.
+
+= Notes =
+
+* Hozio Pro is deliberately excluded from this setting; it continues to update
+  through its own updater, which carries additional guards (valid license,
+  version lock, post-rollback pause).
+
+* Premium plugins without an active license are skipped automatically, because
+  no update is offered for them. Those still require manual updating.
+
+--------------------------------------------------------------------------------
+
 == Version 4.13.0 (July 2026) ==
 
 = Security =
