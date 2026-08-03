@@ -2,7 +2,45 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
-== Version 4.15.3 (July 2026) ==
+== Version 4.16.0 (August 2026) ==
+
+= New Features =
+
+* Hub command "run_plugin_updates": the Hozio Hub can now trigger a site's normal
+  plugin update run on demand instead of waiting for the twice-daily schedule.
+  Refuses with a real reason when updates are blocked on the site or the
+  Auto-Update All Plugins switch is off, rather than reporting "0 updated".
+  Optional { max } tightens the per-run cap for that run only.
+
+* Hub command "update_plugin": updates ONE named plugin and nothing else — for
+  pushing a single security release across the fleet, or bringing one site back
+  in line. Payload { plugin: "folder/file.php", force?: bool }.
+
+  Guards: refuses Hozio Pro itself (use rollback_plugin, which carries the
+  licence, version-lock and rollback-pause guards), refuses when updates are
+  blocked, refuses plugins that are not installed, and refuses plugins managed by
+  Git Updater. By default it still honours the site's exclusion list, the
+  major-version guard, and the Auto-Update All Plugins switch; "force" overrides
+  all three and is audit-logged as an override.
+
+  Both commands reuse the same hardened run path as the settings-page button, so
+  they inherit cron context (plugins are never silently deactivated mid-upgrade),
+  the crash guard, stale-lock release and maintenance-mode handling.
+
+= Fixes =
+
+* Per-run update cap is now genuinely per RUN rather than per PHP request. A Hub
+  heartbeat executes every queued command in one request, so a targeted update
+  followed by a general update run previously shared one tally — the second run
+  would refuse everything and report "0 updated" as though nothing needed doing.
+
+* Hub patching commands now report failure honestly. Previously a run whose
+  updates failed still returned success, so the Hub marked the site "completed"
+  when the patch had not installed.
+
+--------------------------------------------------------------------------------
+
+== Version 4.15.3(July 2026) ==
 
 = Fixes =
 

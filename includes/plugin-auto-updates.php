@@ -283,7 +283,22 @@ function hozio_auto_update_all_plugins_filter( $update, $item ) {
         || ! empty( $GLOBALS['hozio_running_updates_now'] );
 
     if ( $in_update_run ) {
-        static $approved = 0;
+        // The counter is static, so it survives for the whole PHP request — but the cap
+        // is meant to be PER RUN. A single request can perform more than one run: a Hub
+        // heartbeat executes every queued command in one request, so a targeted update
+        // followed by a general run both land here. Without this reset the first run's
+        // tally carries into the second, which then refuses everything and reports
+        // "0 updated" as though nothing needed doing.
+        //
+        // Each run stamps a fresh token; a changed token means a new run, so recount.
+        static $approved  = 0;
+        static $seen_run  = null;
+        $run_token = isset( $GLOBALS['hozio_update_run_token'] ) ? $GLOBALS['hozio_update_run_token'] : 'cron';
+        if ( $run_token !== $seen_run ) {
+            $seen_run = $run_token;
+            $approved = 0;
+        }
+
         $max = (int) apply_filters( 'hozio_max_plugin_auto_updates_per_run', 3 );
         if ( $max > 0 && $approved >= $max ) {
             return false;
@@ -760,8 +775,12 @@ function hozio_run_plugin_auto_updates_now( $max = 0 ) {
     }
 
     // Signals the filter that this is a genuine update run, so the per-run cap
-    // applies here exactly as it does under cron.
+    // applies here exactly as it does under cron. The token additionally tells the
+    // filter that THIS is a new run, so its per-run tally starts from zero even when
+    // an earlier run already happened in this same request (Hub heartbeats execute
+    // every queued command in one request).
     $GLOBALS['hozio_running_updates_now'] = true;
+    $GLOBALS['hozio_update_run_token']    = uniqid( 'hzrun', true );
 
     // Capture the batch result without disturbing the audit-log listener.
     $captured = array();
@@ -783,7 +802,7 @@ function hozio_run_plugin_auto_updates_now( $max = 0 ) {
     if ( $cap ) {
         remove_filter( 'hozio_max_plugin_auto_updates_per_run', $cap, PHP_INT_MAX );
     }
-    unset( $GLOBALS['hozio_running_updates_now'] );
+    unset( $GLOBALS['hozio_running_updates_now'], $GLOBALS['hozio_update_run_token'] );
 
     hozio_disarm_update_crash_guard();
 

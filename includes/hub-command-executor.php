@@ -45,6 +45,12 @@ class Hozio_Command_Executor {
                 case 'remove_admin_login':
                     return self::cmd_remove_admin_login($command_payload);
 
+                // Plugin patching
+                case 'run_plugin_updates':
+                    return self::cmd_run_plugin_updates($command_payload);
+                case 'update_plugin':
+                    return self::cmd_update_plugin($command_payload);
+
                 // Rollback
                 case 'rollback_plugin':
                     return self::cmd_rollback_plugin($command_payload);
@@ -429,6 +435,193 @@ class Hozio_Command_Executor {
                 'user_id'  => $user->ID,
                 'username' => $username,
             ],
+        ];
+    }
+
+    // ─── Plugin patching ─────────────────────────────────────────────
+
+    /**
+     * Run this site's normal plugin update process now, instead of waiting for the
+     * twice-daily schedule.
+     *
+     * Delegates to hozio_run_plugin_auto_updates_now(), which is the same code path the
+     * settings-page button uses. That matters: it declares cron context (so core does NOT
+     * silently deactivate plugins mid-upgrade), arms the crash guard, releases a stale
+     * auto-updater lock, and restricts the run to plugins. Reimplementing any of that here
+     * would reintroduce bugs already fixed there.
+     *
+     * Payload: { max?: int }  — optional tighter cap for this run only.
+     */
+    private static function cmd_run_plugin_updates($payload) {
+        if (!function_exists('hozio_run_plugin_auto_updates_now')) {
+            return ['success' => false, 'error' => 'Auto-update module not available on this site.'];
+        }
+
+        // A site that physically cannot write updates should say so, rather than
+        // reporting "0 updated" and looking healthy.
+        if (function_exists('hozio_auto_update_blocked_reason')) {
+            $blocked = hozio_auto_update_blocked_reason();
+            if (!empty($blocked)) {
+                return ['success' => false, 'error' => 'Updates are blocked on this site: ' . $blocked];
+            }
+        }
+
+        if (function_exists('hozio_auto_update_all_enabled') && !hozio_auto_update_all_enabled()) {
+            return ['success' => false, 'error' => 'Auto-Update All Plugins is switched off on this site.'];
+        }
+
+        $max = isset($payload['max']) ? (int) $payload['max'] : 0;
+
+        hozio_audit_log('Hub triggered a plugin update run', 'AutoUpdate');
+
+        $result = hozio_run_plugin_auto_updates_now($max);
+
+        // Report failure honestly. hub-client.php derives the Hub-visible command status
+        // straight from this flag, so returning true with failures would mark a site
+        // "completed" when an update actually did not install.
+        return [
+            'success' => empty($result['failed']),
+            'data'    => $result,
+            'error'   => empty($result['failed'])
+                ? null
+                : sprintf('%d plugin update(s) failed: %s', (int) $result['failed'], implode(' · ', (array) $result['messages'])),
+        ];
+    }
+
+    /**
+     * Update ONE named plugin, leaving everything else alone.
+     *
+     * The surgical option: push a single security release fleet-wide, or bring one site
+     * back in line, without touching any other plugin.
+     *
+     * Implemented by constraining the normal update run rather than calling
+     * Plugin_Upgrader directly. Driving the upgrader by hand would re-enter the bug fixed
+     * in 4.15.3 — outside cron context core hooks deactivate_plugin_before_upgrade() and
+     * switches the plugin off before swapping its files, with nothing turning it back on.
+     * Constraining the hardened path keeps the crash guard, lock handling, maintenance
+     * mode and cron semantics intact.
+     *
+     * Payload: { plugin: "folder/file.php", force?: bool }
+     *   force = override this site's exclusion list, the major-version guard, AND the
+     *   site's "Auto-Update All Plugins" switch. That last one overrides a decision the
+     *   site owner made deliberately, so it is audit-logged as such — intended for an
+     *   emergency security patch, not routine use.
+     */
+    private static function cmd_update_plugin($payload) {
+        $plugin_file = isset($payload['plugin']) ? trim((string) $payload['plugin']) : '';
+        $force       = !empty($payload['force']);
+
+        if ($plugin_file === '') {
+            return ['success' => false, 'error' => 'A plugin file is required.'];
+        }
+
+        if (!function_exists('hozio_run_plugin_auto_updates_now')) {
+            return ['success' => false, 'error' => 'Auto-update module not available on this site.'];
+        }
+
+        // Self-protection, consistent with deactivate_plugin / uninstall_plugin. Changing
+        // the Hozio Pro version goes through rollback_plugin, which carries the license,
+        // version-lock and rollback-pause guards this path does not.
+        if (self::is_hozio_plugin($plugin_file)) {
+            return ['success' => false, 'error' => 'Use rollback_plugin to change the Hozio Pro version.'];
+        }
+
+        if (function_exists('hozio_auto_update_blocked_reason')) {
+            $blocked = hozio_auto_update_blocked_reason();
+            if (!empty($blocked)) {
+                return ['success' => false, 'error' => 'Updates are blocked on this site: ' . $blocked];
+            }
+        }
+
+        if (!function_exists('get_plugins')) {
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        }
+        $installed = get_plugins();
+        if (!isset($installed[$plugin_file])) {
+            return ['success' => false, 'error' => 'That plugin is not installed on this site.'];
+        }
+
+        // Leave plugins owned by another updater alone unless explicitly forced —
+        // two systems writing the same directory is how directories get corrupted.
+        if (!$force
+            && function_exists('hozio_plugin_managed_by_git_updater')
+            && hozio_plugin_managed_by_git_updater($plugin_file)) {
+            return ['success' => false, 'error' => 'That plugin is managed by Git Updater on this site.'];
+        }
+
+        // Respect the site's master switch. Without this, force silently patched sites
+        // whose owner had deliberately turned fleet auto-updating off.
+        if (function_exists('hozio_auto_update_all_enabled') && !hozio_auto_update_all_enabled()) {
+            if (!$force) {
+                return ['success' => false, 'error' => 'Auto-Update All Plugins is switched off on this site. Send force to override.'];
+            }
+            hozio_audit_log(
+                sprintf('Hub FORCED an update of %s despite auto-updates being switched off on this site', $plugin_file),
+                'AutoUpdate'
+            );
+        }
+
+        // Constrain the run to this one plugin. Highest priority so it is the last word,
+        // and it runs AFTER the normal filter: returning $update for the target preserves
+        // this site's exclusions and major-version guard, while force overrides both.
+        $only = function ($update, $item) use ($plugin_file, $force) {
+            $file = isset($item->plugin) ? (string) $item->plugin : '';
+            if ($file !== $plugin_file) {
+                return false;
+            }
+            return $force ? true : $update;
+        };
+        add_filter('auto_update_plugin', $only, PHP_INT_MAX, 2);
+
+        // Lift the per-run cap for this run ONLY.
+        //
+        // Not an optimisation — without it a targeted update can silently do nothing.
+        // The normal filter counts every plugin IT approves, and it runs before the
+        // constraint above. With three other updates pending, those three consume the
+        // cap first and the target is then refused for being over the limit, even
+        // though none of them would actually have installed. Lifting the cap is safe
+        // precisely because $only guarantees exactly one plugin can pass.
+        $nocap = function () { return PHP_INT_MAX; };
+        add_filter('hozio_max_plugin_auto_updates_per_run', $nocap, PHP_INT_MAX);
+
+        hozio_audit_log(
+            sprintf('Hub triggered a targeted update of %s%s', $plugin_file, $force ? ' (forced)' : ''),
+            'AutoUpdate'
+        );
+
+        // try/finally so a throw inside the run cannot leave these filters registered.
+        // A heartbeat can deliver several commands in one request; a leaked $only would
+        // block every plugin in whatever ran next.
+        try {
+            // 0 = don't add a second cap filter; $nocap above already governs this run.
+            $result = hozio_run_plugin_auto_updates_now(0);
+        } finally {
+            remove_filter('auto_update_plugin', $only, PHP_INT_MAX);
+            remove_filter('hozio_max_plugin_auto_updates_per_run', $nocap, PHP_INT_MAX);
+        }
+
+        // Nothing happened: say why, rather than reporting a hollow success.
+        if (empty($result['updated']) && empty($result['failed'])) {
+            $current = isset($installed[$plugin_file]['Version']) ? $installed[$plugin_file]['Version'] : '?';
+            return [
+                'success' => true,
+                'data'    => array_merge($result, [
+                    'note' => sprintf(
+                        'No update applied for %s (installed %s). It is already current, excluded on this site, or the available release is a major version — send force to override.',
+                        $plugin_file,
+                        $current
+                    ),
+                ]),
+            ];
+        }
+
+        // Same honesty as above: a failed install must not report as completed.
+        return [
+            'success' => empty($result['failed']),
+            'data'    => $result,
+            'error'   => empty($result['failed'])
+                ? null
+                : sprintf('Update of %s failed: %s', $plugin_file, implode(' · ', (array) $result['messages'])),
         ];
     }
 
