@@ -98,9 +98,65 @@ function hozio_maybe_disable_canonical_redirect() {
 // (e.g., /bathroom-remodeling/ serves /services/bathroom-remodeling/).
 // This hook compares the requested URL to the page's canonical permalink
 // and forces a 404 if they don't match.
+
+/**
+ * Is a registered rewrite endpoint active on this request?
+ *
+ * add_rewrite_endpoint() pushes array( $places, $name, $query_var ) onto
+ * WP_Rewrite::$endpoints and registers $query_var as a public query var.
+ * If one is present on this request, the URL is a legitimate endpoint
+ * sub-path (e.g. /my-account/orders/), not a ghost URL.
+ */
+function hozio_request_has_rewrite_endpoint() {
+    global $wp, $wp_rewrite;
+
+    if (!isset($wp->query_vars) || !is_array($wp->query_vars)) {
+        return false;
+    }
+    if (empty($wp_rewrite->endpoints) || !is_array($wp_rewrite->endpoints)) {
+        return false;
+    }
+
+    foreach ($wp_rewrite->endpoints as $endpoint) {
+        $query_var = isset($endpoint[2]) ? $endpoint[2] : '';
+
+        if (!is_string($query_var) || '' === $query_var) {
+            continue;
+        }
+        // array_key_exists, NOT isset() — endpoint values are frequently ''.
+        if (array_key_exists($query_var, $wp->query_vars)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 add_action('template_redirect', 'hozio_block_wrong_url_pages', 1);
 function hozio_block_wrong_url_pages() {
     if (is_admin() || wp_doing_ajax()) {
+        return;
+    }
+
+    // Feature toggle (Hozio Pro Settings). Default ON.
+    $block_wrong_urls = get_option('hozio_block_wrong_urls_enabled', '1');
+    if ($block_wrong_urls !== '1' && $block_wrong_urls !== true) {
+        return;
+    }
+
+    // Rewrite endpoints are legitimate sub-paths of a page and will never
+    // match the parent permalink. Skip the ghost-URL check for them.
+    if (hozio_request_has_rewrite_endpoint()) {
+        return;
+    }
+
+    // Belt and braces in case WooCommerce ever stops using the standard API.
+    if (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url()) {
+        return;
+    }
+
+    // Escape hatch so a site can whitelist without a code snippet.
+    if (apply_filters('hozio_skip_wrong_url_guard', false)) {
         return;
     }
 

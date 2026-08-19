@@ -46,6 +46,12 @@ function hozio_plugin_settings_register() {
         'sanitize_callback' => 'rest_sanitize_boolean'
     ]);
 
+    register_setting('hozio_plugin_settings', 'hozio_block_wrong_urls_enabled', [
+        'type' => 'boolean',
+        'default' => true,
+        'sanitize_callback' => 'rest_sanitize_boolean'
+    ]);
+
     register_setting('hozio_plugin_settings', 'hozio_faq_schema_enabled', [
         'type' => 'boolean',
         'default' => true,
@@ -392,6 +398,10 @@ function hozio_plugin_settings_save() {
     $canonical_redirect_enabled = isset($_POST['hozio_canonical_redirect_enabled']) ? '1' : '0';
     update_option('hozio_canonical_redirect_enabled', $canonical_redirect_enabled);
 
+    // Save wrong-URL (ghost page) guard setting
+    $block_wrong_urls_enabled = isset($_POST['hozio_block_wrong_urls_enabled']) ? '1' : '0';
+    update_option('hozio_block_wrong_urls_enabled', $block_wrong_urls_enabled);
+
     // Save fleet plugin auto-update settings
     $auto_update_all = isset($_POST['hozio_auto_update_all_plugins']) ? '1' : '0';
     update_option('hozio_auto_update_all_plugins', $auto_update_all);
@@ -560,6 +570,7 @@ function hozio_plugin_settings_page() {
     $license_key = get_option('hozio_license_key', '');
     $auto_updates_enabled = get_option('hozio_auto_updates_enabled', '1');
     $canonical_redirect_enabled = get_option('hozio_canonical_redirect_enabled', '1');
+    $block_wrong_urls_enabled   = get_option('hozio_block_wrong_urls_enabled', '1');
     $auto_update_all_plugins    = get_option('hozio_auto_update_all_plugins', '1');
     $auto_update_force          = get_option('hozio_auto_update_force', '0');
     $auto_update_exclude        = get_option('hozio_auto_update_exclude', '');
@@ -910,6 +921,27 @@ function hozio_plugin_settings_page() {
                             <div class="hozio-toggle-description">
                                 WordPress automatically redirects mistyped or guessed URLs to the closest matching page.
                                 Disable this if canonical redirects are causing unwanted redirects on your site.
+                                <strong>Enabled by default.</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_block_wrong_urls_enabled" value="1"
+                                   <?php checked($block_wrong_urls_enabled, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">Block Pages at Wrong URLs</div>
+                            <div class="hozio-toggle-description">
+                                Blocks &ldquo;ghost&rdquo; URLs &mdash; child pages that WordPress will also serve at a
+                                root-level URL (e.g. <code>/bathroom-remodeling/</code> serving
+                                <code>/services/bathroom-remodeling/</code>). Registered rewrite endpoints
+                                (WooCommerce My&nbsp;Account, order&#8209;received, and similar) are always allowed
+                                through. Disable this if a legitimate URL on your site is being redirected or 404&rsquo;d.
                                 <strong>Enabled by default.</strong>
                             </div>
                         </div>

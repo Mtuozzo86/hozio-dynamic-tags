@@ -2,6 +2,36 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.16.1 (August 2026) ==
+
+= Fixes =
+
+* Wrong-URL (ghost page) guard no longer blocks registered rewrite endpoints.
+  The guard compared the raw request path to the page's permalink and treated any
+  mismatch as a ghost URL, but URLs created with add_rewrite_endpoint() are
+  legitimate sub-paths of a page and can never match the parent permalink. On
+  WooCommerce sites this 301'd the whole My Account area back to the dashboard and
+  killed the order-confirmation page: /my-account/orders/,
+  /my-account/edit-account/, /my-account/edit-address/,
+  /my-account/payment-methods/, /my-account/lost-password/ (so password resets),
+  /my-account/view-order/123/, /checkout/order-received/123/ and
+  /checkout/order-pay/123/. With the "WordPress Canonical Redirects" switch off the
+  same URLs hard-404'd instead.
+
+  The guard now reads the endpoints registered on WP_Rewrite and bails out when one
+  is active on the request, so the fix also covers LearnDash, BuddyPress, EDD,
+  membership plugins and custom endpoints - not just WooCommerce. Genuine ghost
+  URLs (orphaned child pages at root-level URLs, mistyped slugs) are still blocked
+  exactly as before.
+
+= New Features =
+
+* New "Block Pages at Wrong URLs" switch in Hozio Pro Settings, enabled by default.
+  The guard previously could not be switched off at all - the only related setting,
+  "WordPress Canonical Redirects", just chose whether it broke a URL via a 301 or
+  via a 404. A single request can also be whitelisted in code with the new
+  'hozio_skip_wrong_url_guard' filter.
+
 == Version 4.16.0 (August 2026) ==
 
 = New Features =
