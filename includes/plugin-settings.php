@@ -46,6 +46,27 @@ function hozio_plugin_settings_register() {
         'sanitize_callback' => 'rest_sanitize_boolean'
     ]);
 
+    register_setting('hozio_plugin_settings', 'hozio_staging_guard_enabled', [
+        'type' => 'boolean',
+        'default' => true,
+        'sanitize_callback' => 'rest_sanitize_boolean'
+    ]);
+    register_setting('hozio_plugin_settings', 'hozio_staging_banner_public', [
+        'type' => 'boolean',
+        'default' => false,
+        'sanitize_callback' => 'rest_sanitize_boolean'
+    ]);
+    register_setting('hozio_plugin_settings', 'hozio_staging_guard_all_red', [
+        'type' => 'boolean',
+        'default' => false,
+        'sanitize_callback' => 'rest_sanitize_boolean'
+    ]);
+    register_setting('hozio_plugin_settings', 'hozio_staging_guard_environment', [
+        'type' => 'string',
+        'default' => 'auto',
+        'sanitize_callback' => 'sanitize_key'
+    ]);
+
     register_setting('hozio_plugin_settings', 'hozio_block_wrong_urls_enabled', [
         'type' => 'boolean',
         'default' => true,
@@ -402,6 +423,21 @@ function hozio_plugin_settings_save() {
     $block_wrong_urls_enabled = isset($_POST['hozio_block_wrong_urls_enabled']) ? '1' : '0';
     update_option('hozio_block_wrong_urls_enabled', $block_wrong_urls_enabled);
 
+    // Save Staging Index Guard settings
+    update_option('hozio_staging_guard_enabled', isset($_POST['hozio_staging_guard_enabled']) ? '1' : '0');
+    update_option('hozio_staging_banner_public', isset($_POST['hozio_staging_banner_public']) ? '1' : '0');
+    update_option('hozio_staging_guard_all_red', isset($_POST['hozio_staging_guard_all_red']) ? '1' : '0');
+    $staging_env = isset($_POST['hozio_staging_guard_environment'])
+        ? sanitize_key(wp_unslash($_POST['hozio_staging_guard_environment']))
+        : 'auto';
+    if (!in_array($staging_env, ['auto', 'staging', 'production'], true)) {
+        $staging_env = 'auto';
+    }
+    update_option('hozio_staging_guard_environment', $staging_env);
+    if (function_exists('hozio_sig_flush_status')) {
+        hozio_sig_flush_status();
+    }
+
     // Save fleet plugin auto-update settings
     $auto_update_all = isset($_POST['hozio_auto_update_all_plugins']) ? '1' : '0';
     update_option('hozio_auto_update_all_plugins', $auto_update_all);
@@ -571,6 +607,10 @@ function hozio_plugin_settings_page() {
     $auto_updates_enabled = get_option('hozio_auto_updates_enabled', '1');
     $canonical_redirect_enabled = get_option('hozio_canonical_redirect_enabled', '1');
     $block_wrong_urls_enabled   = get_option('hozio_block_wrong_urls_enabled', '1');
+    $staging_guard_enabled      = get_option('hozio_staging_guard_enabled', '1');
+    $staging_banner_public      = get_option('hozio_staging_banner_public', '0');
+    $staging_guard_all_red      = get_option('hozio_staging_guard_all_red', '0');
+    $staging_guard_environment  = get_option('hozio_staging_guard_environment', 'auto');
     $auto_update_all_plugins    = get_option('hozio_auto_update_all_plugins', '1');
     $auto_update_force          = get_option('hozio_auto_update_force', '0');
     $auto_update_exclude        = get_option('hozio_auto_update_exclude', '');
@@ -811,6 +851,207 @@ function hozio_plugin_settings_page() {
                             </td>
                         </tr>
                     </table>
+                </div>
+
+            </div>
+
+            <!-- Search Engine Visibility Section -->
+            <div class="hozio-section">
+                <h2 class="hozio-section-title">Search Engine Visibility</h2>
+                <p class="hozio-section-description">
+                    Watches whether this site can be crawled and indexed. On a <strong>staging</strong> site it warns when
+                    search engines are still allowed in. On a <strong>live</strong> site it warns when the site has
+                    accidentally been hidden from Google. The warning banner appears in the admin and on the front end.
+                </p>
+
+                <?php
+                $sig = function_exists('hozio_sig_status') ? hozio_sig_status(true) : null;
+                if ($sig) :
+                    $sig_notice_key = 'hozio_sig_notice_' . get_current_user_id();
+                    $sig_notice = get_transient($sig_notice_key);
+                    if ($sig_notice) {
+                        delete_transient($sig_notice_key);
+                    }
+                    $sig_remote = get_transient('hozio_sig_remote_result');
+
+                    $sig_palette = array(
+                        'green' => array('#116329', '#dafbe1', '#aceebb'),
+                        'amber' => array('#7d4a00', '#fff4e0', '#f5d8a8'),
+                        'red'   => array('#7d0d0a', '#ffe9e7', '#f5b8b3'),
+                    );
+                    $sig_c = isset($sig_palette[$sig['level']]) ? $sig_palette[$sig['level']] : $sig_palette['green'];
+                ?>
+
+                <?php if ($sig_notice && !empty($sig_notice['messages'])) : ?>
+                    <div style="margin:0 0 16px;padding:12px 14px;border-radius:4px;border:1px solid <?php echo empty($sig_notice['failed']) ? '#aceebb' : '#f5b8b3'; ?>;background:<?php echo empty($sig_notice['failed']) ? '#dafbe1' : '#ffe9e7'; ?>;color:<?php echo empty($sig_notice['failed']) ? '#116329' : '#7d0d0a'; ?>;">
+                        <strong><?php echo empty($sig_notice['failed']) ? 'Done:' : 'Could not finish:'; ?></strong>
+                        <?php foreach ($sig_notice['messages'] as $sig_msg) : ?>
+                            <div><?php echo esc_html($sig_msg); ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <div style="border:1px solid <?php echo esc_attr($sig_c[2]); ?>;background:<?php echo esc_attr($sig_c[1]); ?>;border-radius:5px;padding:14px 16px;margin-bottom:18px;">
+                    <div style="font-weight:700;color:<?php echo esc_attr($sig_c[0]); ?>;margin-bottom:10px;font-size:14px;">
+                        <?php
+                        if ('green' === $sig['level']) {
+                            echo 'staging' === $sig['environment']
+                                ? 'Staging site is correctly blocked from search engines.'
+                                : 'Live site is visible to search engines.';
+                        } elseif ('production' === $sig['environment']) {
+                            echo 'This LIVE site is hidden from search engines.';
+                        } else {
+                            echo 'red' === $sig['level']
+                                ? 'This staging site can be indexed by Google.'
+                                : 'This staging site can be crawled by Google.';
+                        }
+                        ?>
+                    </div>
+
+                    <table style="border-collapse:collapse;font-size:13px;color:#1f2328;">
+                        <tr>
+                            <td style="padding:3px 18px 3px 0;color:#57606a;">Environment</td>
+                            <td style="padding:3px 0;font-weight:600;">
+                                <?php echo 'staging' === $sig['environment'] ? 'Staging' : 'Production (live)'; ?>
+                                <?php if ('auto' !== get_option('hozio_staging_guard_environment', 'auto')) : ?>
+                                    <span style="color:#7d4a00;">(manually overridden)</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:3px 18px 3px 0;color:#57606a;">Discourage search engines</td>
+                            <td style="padding:3px 0;font-weight:600;"><?php echo $sig['discourage_on'] ? 'On (noindex tag is being sent)' : 'Off (pages are indexable)'; ?></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:3px 18px 3px 0;color:#57606a;">robots.txt</td>
+                            <td style="padding:3px 0;font-weight:600;">
+                                <?php
+                                if (!$sig['robots_managed']) {
+                                    echo 'Outside this install (WordPress is in a subdirectory)';
+                                } elseif (!$sig['robots_exists']) {
+                                    echo 'No file on disk &mdash; generated by WordPress';
+                                } else {
+                                    echo 'Real file on disk';
+                                }
+                                echo ' &mdash; ';
+                                echo $sig['robots_blocks_all'] ? 'blocks all crawlers' : '<span style="color:#7d0d0a;">does NOT block crawlers</span>';
+                                ?>
+                            </td>
+                        </tr>
+                        <?php if (is_array($sig_remote) && !empty($sig_remote['ok'])) : ?>
+                        <tr>
+                            <td style="padding:3px 18px 3px 0;color:#57606a;">Live check</td>
+                            <td style="padding:3px 0;font-weight:600;">
+                                HTTP <?php echo (int) $sig_remote['status']; ?>,
+                                <?php echo empty($sig_remote['blocks_all']) ? 'does NOT block crawlers' : 'blocks all crawlers'; ?>
+                                <?php if (!empty($sig_remote['served_static'])) : ?>
+                                    <span style="color:#57606a;font-weight:400;">(served as a real file by the web server, so WordPress cannot override it)</span>
+                                <?php endif; ?>
+                                <span style="color:#57606a;font-weight:400;">&mdash; <?php echo esc_html(human_time_diff($sig_remote['checked_at'])); ?> ago</span>
+                            </td>
+                        </tr>
+                        <?php endif; ?>
+                    </table>
+
+                    <?php if (!empty($sig['issues'])) : ?>
+                        <ul style="margin:12px 0 0;padding-left:18px;font-size:13px;color:#1f2328;">
+                            <?php foreach ($sig['issues'] as $sig_issue) : ?>
+                                <li style="margin-bottom:4px;"><?php echo esc_html($sig_issue); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+
+                    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                        <?php if ('staging' === $sig['environment'] && 'green' !== $sig['level']) : ?>
+                            <a href="<?php echo esc_url(hozio_sig_fix_url('both')); ?>" class="button button-primary">Fix both now</a>
+                            <?php if (!$sig['discourage_on']) : ?>
+                                <a href="<?php echo esc_url(hozio_sig_fix_url('discourage')); ?>" class="button">Only discourage search engines</a>
+                            <?php endif; ?>
+                            <?php if (!$sig['robots_blocks_all'] && $sig['robots_managed']) : ?>
+                                <a href="<?php echo esc_url(hozio_sig_fix_url('robots')); ?>" class="button">Only fix robots.txt</a>
+                            <?php endif; ?>
+                        <?php elseif ('production' === $sig['environment'] && $sig['discourage_on']) : ?>
+                            <a href="<?php echo esc_url(admin_url('options-reading.php')); ?>" class="button button-primary">Open Reading settings</a>
+                            <span style="font-size:12px;color:#57606a;">Hozio Pro will never change this automatically on a live site.</span>
+                        <?php endif; ?>
+                        <a href="<?php echo esc_url(hozio_sig_recheck_url()); ?>" class="button">Re-check now</a>
+                    </div>
+
+                    <?php if ('staging' === $sig['environment'] && (!$sig['robots_managed'] || ($sig['robots_exists'] && !is_writable($sig['robots_path'])))) : ?>
+                        <div style="margin-top:14px;">
+                            <p style="font-size:13px;margin:0 0 6px;"><strong>robots.txt cannot be written automatically here.</strong> Paste this in by hand:</p>
+                            <pre style="background:#fff;border:1px solid #d0d7de;border-radius:4px;padding:10px;margin:0;font-size:12px;">User-agent: *
+Disallow: /</pre>
+                        </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+
+                <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_staging_guard_enabled" value="1"
+                                   <?php checked($staging_guard_enabled, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">Staging Index Guard</div>
+                            <div class="hozio-toggle-description">
+                                Watches search-engine visibility and shows the warning banner. Turning this off disables
+                                the banner, the daily check and the Fix buttons on this site.
+                                <strong>Enabled by default.</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_staging_banner_public" value="1"
+                                   <?php checked($staging_banner_public, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">Show the banner to logged-out visitors</div>
+                            <div class="hozio-toggle-description">
+                                By default only logged-in administrators see the front-end banner, which keeps it out of
+                                any cached page. Turn this on to show it to everyone who visits the staging site.
+                                Never applies to a live site. <strong>Off by default.</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_staging_guard_all_red" value="1"
+                                   <?php checked($staging_guard_all_red, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">Treat every warning as critical</div>
+                            <div class="hozio-toggle-description">
+                                Normally a staging site that is protected by the noindex tag but still has a permissive
+                                robots.txt shows an orange banner, and only a genuinely indexable site shows red.
+                                Turn this on to make every warning red. <strong>Off by default.</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hozio-field">
+                    <label for="hozio_staging_guard_environment" style="display:block;font-weight:600;margin-bottom:6px;">Environment detection</label>
+                    <select name="hozio_staging_guard_environment" id="hozio_staging_guard_environment">
+                        <option value="auto" <?php selected($staging_guard_environment, 'auto'); ?>>Automatic (detect from the site URL)</option>
+                        <option value="staging" <?php selected($staging_guard_environment, 'staging'); ?>>Force: this is a staging site</option>
+                        <option value="production" <?php selected($staging_guard_environment, 'production'); ?>>Force: this is a live site</option>
+                    </select>
+                    <p class="description">
+                        Automatic treats any site whose URL contains <code>mystagingwebsite.com</code> as staging. Only
+                        override this for a staging site on a custom domain, or a live site that kept a staging URL.
+                    </p>
                 </div>
 
             </div>

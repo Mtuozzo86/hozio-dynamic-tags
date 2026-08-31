@@ -2,6 +2,52 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.17.0 (August 2026) ==
+
+= New Features =
+
+* Staging Index Guard. Catches staging sites that search engines are still
+  allowed to crawl or index, and shows a non-dismissible banner in wp-admin AND
+  on the front end with a one-click fix. A staging site is any site whose URL
+  contains "mystagingwebsite.com" (filterable, plus a manual override).
+
+  Two checks: "Discourage search engines" (the noindex tag, which is what
+  actually keeps pages out of the index) and robots.txt. Because every staging
+  site is a clone, robots.txt is normally a REAL file on disk copied from
+  production - the web server serves it and WordPress cannot override it - so
+  the fix writes the file, backs the old one up alongside it, and verifies the
+  result by reading it back. It also flags a robots.txt whose "Sitemap:" line
+  still points at the production domain.
+
+  Two severity levels so the warning keeps its meaning: red when the site is
+  genuinely indexable, orange when the noindex tag is protecting it but
+  robots.txt is still permissive. A setting forces everything to red.
+
+* Mirror guard for live sites. A PRODUCTION site set to "Discourage search
+  engines" - almost always a staging database pushed to production - gets its
+  own red banner. This is the more expensive version of the same mistake, and
+  nothing else on the site reports it. Hozio Pro never changes this setting
+  automatically on a live site; the banner links to the Reading settings.
+
+* New "Search Engine Visibility" panel in Hozio Pro Settings: current status,
+  Fix buttons, a "Re-check now" button that fetches the site's own robots.txt to
+  show what the world actually sees, an on/off switch, an option to show the
+  banner to logged-out visitors, and a manual environment override.
+
+= Notes =
+
+* Production safety: on a site that is neither staging nor mis-set to noindex,
+  the guard registers no hooks at all - the only code that runs is the
+  environment check and one autoloaded option read.
+
+* No self-requests during page loads. The per-request check is local only (one
+  option read plus one small file read, cached). The HTTP check runs on a button
+  click or the daily cron, behind a lock and a cache, never on the front end.
+
+* The banner renders on 'in_admin_header' at priority 1000 rather than as an
+  admin notice, because Hozio Pro clears all admin notices at priority 999 on
+  its own screens.
+
 == Version 4.16.1 (August 2026) ==
 
 = Fixes =
