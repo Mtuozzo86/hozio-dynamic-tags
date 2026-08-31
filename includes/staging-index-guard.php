@@ -347,7 +347,7 @@ add_action('update_option_blog_public', 'hozio_sig_flush_status');
  * Guarded three ways so it can never storm the site: refuses to run outside
  * admin/cron/WP-CLI, holds a 60-second lock, and caches the result.
  */
-function hozio_sig_remote_check($force = false) {
+function hozio_sig_remote_check($force = false, $bust = false) {
     $allowed = is_admin() || wp_doing_cron() || (defined('WP_CLI') && WP_CLI);
     if (!$allowed) {
         $cached = get_transient('hozio_sig_remote_result');
@@ -369,12 +369,19 @@ function hozio_sig_remote_check($force = false) {
 
     $url = home_url('/robots.txt');
 
-    $response = wp_remote_get($url, array(
+    // A cache one step behind will happily hand back the file we just replaced.
+    // Static servers ignore the query string but caches key on it, so this is
+    // what makes a verification fetch actually see the current file.
+    $request_url = $bust
+        ? add_query_arg('hozio-verify', time() . '-' . wp_rand(1000, 9999), $url)
+        : $url;
+
+    $response = wp_remote_get($request_url, array(
         'timeout'     => 8,
         'redirection' => 2,
         'sslverify'   => false, // staging certs are frequently self-signed
         'user-agent'  => 'HozioPro-StagingGuard/' . (defined('HOZIO_VERSION') ? HOZIO_VERSION : '1.0'),
-        'headers'     => array('Cache-Control' => 'no-cache'),
+        'headers'     => array('Cache-Control' => 'no-cache', 'Pragma' => 'no-cache'),
     ));
 
     delete_transient('hozio_sig_remote_lock');
@@ -498,16 +505,31 @@ function hozio_sig_fix_robots() {
         update_option('hozio_sig_last_backup', $backup, false);
     }
 
-    // Writing the right bytes into the wrong directory looks identical on disk.
-    // Fetching the URL is the only check that proves the fix actually landed.
-    delete_transient('hozio_sig_remote_result');
-    $after = hozio_sig_remote_check(true);
+    // Writing the right bytes into the wrong directory looks identical on disk,
+    // so the URL is the only thing that proves the fix landed. Give the cache a
+    // few seconds to catch up before believing a negative - a single immediate
+    // fetch reports failure on a fix that actually worked.
+    $attempts = (int) apply_filters('hozio_staging_verify_attempts', 3);
+    $delay    = (int) apply_filters('hozio_staging_verify_delay', 2);
+    $after    = array();
+
+    for ($attempt = 1; $attempt <= max(1, $attempts); $attempt++) {
+        if ($attempt > 1 && $delay > 0) {
+            sleep($delay);
+        }
+        delete_transient('hozio_sig_remote_result');
+        $after = hozio_sig_remote_check(true, true);
+        if (is_array($after) && !empty($after['ok']) && !empty($after['blocks_all'])) {
+            break;
+        }
+    }
+
+    if (is_array($after) && !empty($after['ok']) && !empty($after['blocks_all'])) {
+        return array(true, 'robots.txt now blocks all crawlers, confirmed by fetching ' . home_url('/robots.txt') . '.' . $note);
+    }
 
     if (is_array($after) && !empty($after['ok'])) {
-        if (empty($after['blocks_all'])) {
-            return array(false, 'Wrote ' . $path . ' and verified it on disk, but ' . home_url('/robots.txt') . ' still serves the old file - the web root is somewhere else. Set robots.txt by hand.' . $note);
-        }
-        return array(true, 'robots.txt now blocks all crawlers, confirmed by fetching ' . home_url('/robots.txt') . '.' . $note);
+        return array(false, 'Wrote ' . $path . ' and confirmed it on disk, but ' . home_url('/robots.txt') . ' was still serving the old file after ' . max(1, $attempts) . ' checks. That is usually just a cache that has not caught up - open the URL yourself in a minute, then use "Re-check now". The status below always reflects the live file. If it still shows the old one, the web root is somewhere else.' . $note);
     }
 
     return array(true, 'Wrote ' . $path . ', but the HTTP check could not run. Open ' . home_url('/robots.txt') . ' to confirm.' . $note);

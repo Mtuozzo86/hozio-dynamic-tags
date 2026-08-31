@@ -2,6 +2,23 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.17.2 (August 2026) ==
+
+= Fixes =
+
+* The Fix button no longer reports failure for a fix that worked. After writing
+  robots.txt it re-fetched the URL to prove the write landed, but did so
+  immediately - fast enough to be handed a cached copy of the file it had just
+  replaced. The result was a red "could not finish - set robots.txt by hand"
+  sitting directly above a green "correctly blocked", on a site where the fix
+  had in fact succeeded.
+
+  The verification now adds a cache-busting query string (static servers ignore
+  it, caches key on it) and retries up to three times a couple of seconds apart,
+  accepting the first check that confirms. When it still cannot confirm, the
+  message leads with the likely cause - a cache that has not caught up, re-check
+  in a minute - instead of telling you to go and edit the file by hand.
+
 == Version 4.17.1 (August 2026) ==
 
 = Fixes =
