@@ -985,9 +985,14 @@ function hozio_plugin_settings_page() {
                             <?php if (!$sig['robots_blocks_all'] && $sig['robots_managed']) : ?>
                                 <a href="<?php echo esc_url(hozio_sig_fix_url('robots')); ?>" class="button">Only fix robots.txt</a>
                             <?php endif; ?>
-                        <?php elseif ('production' === $sig['environment'] && $sig['discourage_on']) : ?>
-                            <a href="<?php echo esc_url(admin_url('options-reading.php')); ?>" class="button button-primary">Open Reading settings</a>
-                            <span style="font-size:12px;color:#57606a;">Hozio Pro will never change this automatically on a live site.</span>
+                        <?php elseif ('production' === $sig['environment'] && 'green' !== $sig['level']) : ?>
+                            <?php if ($sig['discourage_on']) : ?>
+                                <a href="<?php echo esc_url(admin_url('options-reading.php')); ?>" class="button button-primary">Open Reading settings</a>
+                            <?php endif; ?>
+                            <?php if (!empty($sig['robots_is_ours']) && true === $sig['robots_blocks_all']) : ?>
+                                <a href="<?php echo esc_url(hozio_sig_restore_url()); ?>" class="button button-primary">Restore previous robots.txt</a>
+                            <?php endif; ?>
+                            <span style="font-size:12px;color:#57606a;">Hozio Pro never changes search visibility automatically on a live site.</span>
                         <?php endif; ?>
                         <a href="<?php echo esc_url(hozio_sig_recheck_url()); ?>" class="button">Re-check now</a>
                     </div>

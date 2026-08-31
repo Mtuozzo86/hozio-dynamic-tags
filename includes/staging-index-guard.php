@@ -158,11 +158,15 @@ function hozio_sig_robots_path() {
  * a staging site needs; the provenance comment sits underneath where no crawler
  * cares about it.
  */
+function hozio_sig_marker() {
+    return '# Written by Hozio Pro (Staging Index Guard)';
+}
+
 function hozio_sig_expected_robots() {
     $content  = "User-agent: *\n";
     $content .= "Disallow: /\n";
     $content .= "\n";
-    $content .= "# Written by Hozio Pro (Staging Index Guard) on " . gmdate('Y-m-d H:i') . " UTC.\n";
+    $content .= hozio_sig_marker() . " on " . gmdate('Y-m-d H:i') . " UTC." . "\n";
     $content .= "# This is a staging site and must not be crawled or indexed.\n";
 
     return apply_filters('hozio_staging_robots_content', $content);
@@ -277,15 +281,23 @@ function hozio_sig_status($force = false) {
     }
 
     $foreign_sitemaps = hozio_sig_foreign_sitemaps($robots_body);
+    $robots_is_ours   = ('' !== $robots_body) && (false !== strpos($robots_body, hozio_sig_marker()));
 
     $issues = array();
     $level  = 'green';
 
     if ('production' === $environment) {
-        // Mirror guard: a live site must NOT be noindexed.
+        // Mirror guard. Every check is inverted on a live site: being blocked is
+        // the emergency, not being crawlable.
         if ($discourage_on) {
             $level    = 'red';
             $issues[] = 'This LIVE site is set to discourage search engines, so every page carries a noindex tag. Google will drop this site from results.';
+        }
+        if (true === $robots_blocks_all) {
+            $level    = 'red';
+            $issues[] = $robots_is_ours
+                ? 'robots.txt on this LIVE site blocks every search engine from the whole site. It is the staging file, carried over when this site went live.'
+                : 'robots.txt on this LIVE site blocks every search engine from the whole site.';
         }
     } else {
         if (!$discourage_on) {
@@ -320,6 +332,7 @@ function hozio_sig_status($force = false) {
         'robots_body'       => $robots_body,
         'robots_blocks_all' => $robots_blocks_all,
         'robots_source'     => $robots_source,
+        'robots_is_ours'    => $robots_is_ours,
         'root_candidates'   => hozio_sig_root_candidates(),
         'foreign_sitemaps'  => $foreign_sitemaps,
         'issues'            => $issues,
@@ -419,19 +432,23 @@ function hozio_sig_remote_check($force = false, $bust = false) {
     set_transient('hozio_sig_remote_result', $result, 12 * HOUR_IN_SECONDS);
     update_option('hozio_sig_last_remote_check', time(), false);
 
+    // Autoloaded, so the production guard can read it on any page load without
+    // a query of its own and without ever making an HTTP request there.
+    update_option('hozio_sig_robots_blocked', !empty($result['blocks_all']) ? '1' : '0', true);
+
     return $result;
 }
 
 function hozio_sig_daily_check() {
-    if (!hozio_sig_is_staging()) {
-        return;
-    }
     hozio_sig_flush_status();
-    hozio_sig_remote_check(true);
+    hozio_sig_remote_check(true, true);
 
     $status = hozio_sig_status(true);
     if ('green' !== $status['level'] && function_exists('hozio_log')) {
-        hozio_log('Staging site is still crawlable: ' . implode(' | ', $status['issues']), 'StagingGuard');
+        $label = ('production' === $status['environment'])
+            ? 'LIVE site is hidden from search engines: '
+            : 'Staging site is still crawlable: ';
+        hozio_log($label . implode(' | ', $status['issues']), 'StagingGuard');
     }
 }
 add_action('hozio_sig_daily_check', 'hozio_sig_daily_check');
@@ -533,6 +550,100 @@ function hozio_sig_fix_robots() {
     }
 
     return array(true, 'Wrote ' . $path . ', but the HTTP check could not run. Open ' . home_url('/robots.txt') . ' to confirm.' . $note);
+}
+
+/**
+ * Backups this guard has left next to robots.txt, oldest first.
+ */
+function hozio_sig_find_backups() {
+    $path = hozio_sig_robots_path();
+    if ('' === $path) {
+        return array();
+    }
+    $found = glob(trailingslashit(dirname($path)) . 'robots.txt.hozio-backup-*');
+    if (!is_array($found)) {
+        return array();
+    }
+    sort($found);
+
+    return $found;
+}
+
+/**
+ * Put back the robots.txt this guard replaced.
+ *
+ * This is the undo for a staging robots.txt that rode into production. It only
+ * touches a file carrying our own marker, so a hand-written robots.txt is never
+ * overwritten by it.
+ */
+function hozio_sig_restore_robots() {
+    $path = hozio_sig_robots_path();
+
+    if ('' === $path || !file_exists($path)) {
+        return array(false, 'There is no robots.txt here to restore over.');
+    }
+
+    $body = is_readable($path) ? (string) file_get_contents($path) : '';
+    if (false === strpos($body, hozio_sig_marker())) {
+        return array(false, 'This robots.txt was not written by Hozio Pro, so it will not be replaced. Edit ' . $path . ' by hand.');
+    }
+
+    $backups = hozio_sig_find_backups();
+    if (empty($backups)) {
+        return array(false, 'No Hozio Pro backup of robots.txt was found next to ' . $path . '. Edit it by hand.');
+    }
+
+    if (!is_writable($path)) {
+        return array(false, $path . ' is not writable by PHP. Restore it by hand.');
+    }
+
+    $backup = end($backups);
+    if (!copy($backup, $path)) {
+        return array(false, 'Restoring ' . basename($backup) . ' failed. Nothing was changed.');
+    }
+
+    clearstatcache(true, $path);
+    delete_transient('hozio_sig_remote_result');
+    hozio_sig_flush_status();
+    hozio_sig_remote_check(true, true);
+
+    return array(true, 'robots.txt restored from ' . basename($backup) . '. Check ' . home_url('/robots.txt') . ' to confirm.');
+}
+
+/**
+ * admin-post handler for the Restore button.
+ */
+function hozio_sig_handle_restore() {
+    if (!current_user_can('manage_options')) {
+        wp_die('You do not have permission to do this.', 'Hozio Pro', array('response' => 403));
+    }
+    check_admin_referer('hozio_sig_restore', 'hozio_sig_nonce');
+
+    list($ok, $msg) = hozio_sig_restore_robots();
+
+    if (function_exists('hozio_log')) {
+        hozio_log('robots.txt restore: ' . $msg, 'StagingGuard');
+    }
+
+    set_transient('hozio_sig_notice_' . get_current_user_id(), array(
+        'failed'   => !$ok,
+        'messages' => array($msg),
+    ), 5 * MINUTE_IN_SECONDS);
+
+    $back = wp_get_referer();
+    if (!$back) {
+        $back = admin_url('admin.php?page=hozio-plugin-settings');
+    }
+    wp_safe_redirect(add_query_arg('hozio_sig', $ok ? 'ok' : 'fail', $back));
+    exit;
+}
+
+function hozio_sig_restore_url() {
+    return wp_nonce_url(
+        admin_url('admin-post.php?action=hozio_sig_restore'),
+        'hozio_sig_restore',
+        'hozio_sig_nonce'
+    );
 }
 
 /**
@@ -672,10 +783,18 @@ function hozio_sig_banner_html($status, $context) {
                     Fix this now
                 </a>
             <?php elseif ('production' === $status['environment'] && current_user_can('manage_options')) : ?>
-                <a href="<?php echo esc_url(admin_url('options-reading.php')); ?>"
-                   style="background:#fff;color:<?php echo esc_attr($colors['edge']); ?>;padding:7px 18px;border-radius:3px;text-decoration:none;font-weight:700;white-space:nowrap;">
-                    Open Reading settings
-                </a>
+                <?php if (!empty($status['discourage_on'])) : ?>
+                    <a href="<?php echo esc_url(admin_url('options-reading.php')); ?>"
+                       style="background:#fff;color:<?php echo esc_attr($colors['edge']); ?>;padding:7px 18px;border-radius:3px;text-decoration:none;font-weight:700;white-space:nowrap;">
+                        Open Reading settings
+                    </a>
+                <?php endif; ?>
+                <?php if (!empty($status['robots_is_ours']) && true === $status['robots_blocks_all']) : ?>
+                    <a href="<?php echo esc_url(hozio_sig_restore_url()); ?>"
+                       style="background:#fff;color:<?php echo esc_attr($colors['edge']); ?>;padding:7px 18px;border-radius:3px;text-decoration:none;font-weight:700;white-space:nowrap;">
+                        Restore previous robots.txt
+                    </a>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>
@@ -713,8 +832,11 @@ function hozio_sig_render_front_banner() {
         return;
     }
 
-    $public_ok = ('1' === get_option('hozio_staging_banner_public', '0'));
-    if (!current_user_can('manage_options') && !$public_ok) {
+    $is_admin_user = current_user_can('manage_options');
+    $public_ok     = ('1' === get_option('hozio_staging_banner_public', '0'));
+
+    // Cheap exit for the overwhelming majority of front-end requests.
+    if (!$is_admin_user && !$public_ok) {
         return;
     }
 
@@ -723,8 +845,9 @@ function hozio_sig_render_front_banner() {
         return;
     }
 
-    // Production mirror guard is for admins only - never shown to visitors.
-    if ('production' === $status['environment'] && !current_user_can('manage_options')) {
+    // A LIVE site never shows this to a visitor, whatever the settings say.
+    // "Show the banner to logged-out visitors" applies to staging only.
+    if (!$is_admin_user && 'production' === $status['environment']) {
         return;
     }
 
@@ -751,7 +874,7 @@ function hozio_sig_admin_bar_node($bar) {
     $colors = hozio_sig_banner_colors($status['level']);
 
     if ('production' === $status['environment']) {
-        $label = 'LIVE SITE NOINDEXED';
+        $label = 'LIVE SITE HIDDEN FROM GOOGLE';
     } elseif ('red' === $status['level']) {
         $label = 'STAGING: INDEXABLE';
     } else {
@@ -789,6 +912,7 @@ function hozio_sig_init() {
     if (is_admin()) {
         add_action('admin_post_hozio_sig_fix', 'hozio_sig_handle_fix');
         add_action('admin_post_hozio_sig_recheck', 'hozio_sig_handle_recheck');
+        add_action('admin_post_hozio_sig_restore', 'hozio_sig_handle_restore');
     }
 
     if ('1' !== get_option('hozio_staging_guard_enabled', '1')) {
@@ -796,12 +920,20 @@ function hozio_sig_init() {
         return;
     }
 
-    if (!hozio_sig_is_staging()) {
-        // Not staging. Drop any cron a clone left behind, then register hooks
-        // ONLY for the mirror guard - a live site that is set to noindex.
-        hozio_sig_unschedule();
+    // The daily verification runs on live sites too now. A production site
+    // serving "Disallow: /" is as damaging as a staging site left wide open,
+    // and it is exactly what a staging-to-production move leaves behind.
+    if (!wp_next_scheduled('hozio_sig_daily_check')) {
+        wp_schedule_event(time() + HOUR_IN_SECONDS, 'daily', 'hozio_sig_daily_check');
+    }
 
-        if ('0' === (string) get_option('blog_public', '1')) {
+    if (!hozio_sig_is_staging()) {
+        // Both reads below are autoloaded options, so this costs nothing extra
+        // on a page load and never makes an HTTP request here.
+        $sig_noindex = ('0' === (string) get_option('blog_public', '1'));
+        $sig_blocked = ('1' === get_option('hozio_sig_robots_blocked', '0'));
+
+        if ($sig_noindex || $sig_blocked) {
             add_action('in_admin_header', 'hozio_sig_render_admin_banner', 1000);
             add_action('admin_bar_menu', 'hozio_sig_admin_bar_node', 999);
             add_action('wp_body_open', 'hozio_sig_render_front_banner', 1);
@@ -811,10 +943,6 @@ function hozio_sig_init() {
     }
 
     /* --- staging only, below this line --- */
-
-    if (!wp_next_scheduled('hozio_sig_daily_check')) {
-        wp_schedule_event(time() + HOUR_IN_SECONDS, 'daily', 'hozio_sig_daily_check');
-    }
 
     // Rendered at priority 1000 on in_admin_header, NOT as an admin_notice:
     // hozio_hide_third_party_notices() wipes all admin notices at priority 999

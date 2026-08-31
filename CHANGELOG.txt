@@ -2,6 +2,37 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.18.0 (August 2026) ==
+
+= New Features =
+
+* The live-site guard now checks robots.txt as well as the noindex setting.
+  Going live from staging carries BOTH across: the noindex tag comes with the
+  database, and the blocking robots.txt comes with the filesystem. Only the
+  first was being caught, so a site could launch with a robots.txt reading
+  "Disallow: /" and nothing anywhere would say so.
+
+  On a live site every check is inverted - being blocked is the emergency, not
+  being crawlable - and either problem now raises the red banner.
+
+* "Restore previous robots.txt" button. When the file on a live site is the one
+  this plugin wrote, the banner and the settings panel offer to put the previous
+  robots.txt back from the backup taken when it was replaced. It refuses to
+  touch a robots.txt that does not carry the plugin's own marker, so a
+  hand-written file is never overwritten.
+
+= Notes =
+
+* The banner is NEVER shown to logged-out visitors on a live site, whatever the
+  settings say. "Show the banner to logged-out visitors" applies to staging
+  only, and the live-site check now happens independently of that switch rather
+  than as a side effect of the order the conditions were evaluated in.
+
+* The daily verification now runs on live sites too, which is one HTTP request
+  to the site's own /robots.txt per day. Page loads are unaffected: the result
+  is stored in an autoloaded option, so the live-site guard reads it for free
+  and never makes a request of its own during a page load.
+
 == Version 4.17.2 (August 2026) ==
 
 = Fixes =
