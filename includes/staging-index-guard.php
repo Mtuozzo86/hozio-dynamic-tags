@@ -103,16 +103,54 @@ function hozio_sig_is_staging() {
  * ---------------------------------------------------------------------- */
 
 /**
- * Absolute path to the robots.txt we would manage, or '' when we must not
- * touch it (WordPress installed in a subdirectory - robots.txt has to live at
- * the domain root, which is outside this install).
+ * Directories that could be the web root, best guess first.
+ *
+ * ABSPATH is NOT reliable: on Pressable (and other hosts that keep WordPress
+ * core outside the docroot) robots.txt lives somewhere ABSPATH never points at,
+ * which made an earlier version of this guard miss the file completely.
+ */
+function hozio_sig_root_candidates() {
+    $roots = array();
+
+    if (!empty($_SERVER['DOCUMENT_ROOT'])) {
+        $roots[] = wp_unslash($_SERVER['DOCUMENT_ROOT']);
+    }
+    $roots[] = ABSPATH;
+    $roots[] = dirname(untrailingslashit(ABSPATH));
+
+    $clean = array();
+    foreach ($roots as $root) {
+        if (!is_string($root) || '' === trim($root)) {
+            continue;
+        }
+        $root = trailingslashit(wp_normalize_path($root));
+        if (!in_array($root, $clean, true) && is_dir($root)) {
+            $clean[] = $root;
+        }
+    }
+
+    return apply_filters('hozio_staging_root_candidates', $clean);
+}
+
+/**
+ * Where robots.txt actually is. An existing file wins; otherwise the first
+ * writable candidate is where we would create one. '' when nothing is usable.
  */
 function hozio_sig_robots_path() {
-    $path = wp_parse_url(site_url(), PHP_URL_PATH);
-    if (!empty($path) && '/' !== $path) {
-        return '';
+    $candidates = hozio_sig_root_candidates();
+
+    foreach ($candidates as $root) {
+        if (file_exists($root . 'robots.txt')) {
+            return $root . 'robots.txt';
+        }
     }
-    return trailingslashit(ABSPATH) . 'robots.txt';
+    foreach ($candidates as $root) {
+        if (is_writable($root)) {
+            return $root . 'robots.txt';
+        }
+    }
+
+    return empty($candidates) ? '' : $candidates[0] . 'robots.txt';
 }
 
 /**
@@ -212,20 +250,31 @@ function hozio_sig_status($force = false) {
     $environment   = hozio_sig_environment();
     $discourage_on = ('0' === (string) get_option('blog_public', '1'));
 
-    $robots_path   = hozio_sig_robots_path();
+    $robots_path    = hozio_sig_robots_path();
     $robots_managed = ('' !== $robots_path);
-    $robots_exists = $robots_managed && file_exists($robots_path);
-    $robots_body   = '';
+    $robots_exists  = $robots_managed && file_exists($robots_path);
 
-    if ($robots_exists && is_readable($robots_path)) {
-        $robots_body = (string) file_get_contents($robots_path);
+    // What the world actually gets is the only authority here. A file served by
+    // the web server never reaches PHP, and it does not have to live anywhere
+    // this install can see, so the filesystem is a fallback and nothing more.
+    $remote = get_transient('hozio_sig_remote_result');
+    if ((!is_array($remote) || empty($remote['ok'])) && is_admin() && !wp_doing_ajax()) {
+        $remote = hozio_sig_remote_check();
     }
 
-    // With no file on disk WordPress generates robots.txt itself, and that
-    // generated version already blocks everything when blog_public is 0.
-    $robots_blocks_all = $robots_exists
-        ? hozio_sig_robots_blocks_all($robots_body)
-        : $discourage_on;
+    $robots_body       = '';
+    $robots_blocks_all = null;   // null = not established yet
+    $robots_source     = 'unknown';
+
+    if (is_array($remote) && !empty($remote['ok'])) {
+        $robots_source     = 'live';
+        $robots_body       = isset($remote['body']) ? (string) $remote['body'] : '';
+        $robots_blocks_all = !empty($remote['blocks_all']);
+    } elseif ($robots_exists && is_readable($robots_path)) {
+        $robots_source     = 'file';
+        $robots_body       = (string) file_get_contents($robots_path);
+        $robots_blocks_all = hozio_sig_robots_blocks_all($robots_body);
+    }
 
     $foreign_sitemaps = hozio_sig_foreign_sitemaps($robots_body);
 
@@ -243,18 +292,18 @@ function hozio_sig_status($force = false) {
             $level    = 'red';
             $issues[] = 'Search engines are NOT discouraged. Pages are being served without a noindex tag and can be indexed.';
         }
-        if (!$robots_blocks_all) {
+        if (false === $robots_blocks_all) {
             $level    = ('red' === $level) ? 'red' : 'amber';
-            $issues[] = $robots_exists
-                ? 'robots.txt exists on disk and does not block crawlers (WordPress cannot override a real file).'
-                : 'robots.txt does not block crawlers.';
+            $issues[] = 'live' === $robots_source
+                ? 'robots.txt is being served to crawlers and does not block them.'
+                : 'robots.txt exists on disk and does not block crawlers.';
         }
         if (!empty($foreign_sitemaps)) {
             $level    = ('red' === $level) ? 'red' : 'amber';
             $issues[] = 'robots.txt points at a sitemap on another domain (' . implode(', ', $foreign_sitemaps) . ') - it was copied from production.';
         }
-        if (!$robots_managed) {
-            $issues[] = 'WordPress is installed in a subdirectory, so robots.txt sits outside this install and cannot be fixed automatically.';
+        if (null === $robots_blocks_all) {
+            $issues[] = 'robots.txt has not been checked yet. Use "Re-check now" on the Hozio Pro settings screen.';
         }
     }
 
@@ -270,6 +319,8 @@ function hozio_sig_status($force = false) {
         'robots_exists'     => $robots_exists,
         'robots_body'       => $robots_body,
         'robots_blocks_all' => $robots_blocks_all,
+        'robots_source'     => $robots_source,
+        'root_candidates'   => hozio_sig_root_candidates(),
         'foreign_sitemaps'  => $foreign_sitemaps,
         'issues'            => $issues,
         'level'             => $level,
@@ -404,47 +455,62 @@ function hozio_sig_fix_robots() {
     $path = hozio_sig_robots_path();
 
     if ('' === $path) {
-        return array(false, 'WordPress is installed in a subdirectory, so robots.txt lives outside this install. It has to be set by hand.');
+        return array(false, 'No usable web root was found, so robots.txt could not be written. Set it by hand.');
     }
 
-    $root    = trailingslashit(ABSPATH);
+    $dir     = trailingslashit(dirname($path));
     $content = hozio_sig_expected_robots();
     $backup  = '';
 
-    if (file_exists($path)) {
-        $current  = is_readable($path) ? (string) file_get_contents($path) : '';
-        $sitemaps = hozio_sig_foreign_sitemaps($current);
-        if (hozio_sig_robots_blocks_all($current) && empty($sitemaps)) {
+    // "Already correct" has to mean correct on the URL, not correct on disk.
+    $before = hozio_sig_remote_check(true);
+    if (is_array($before) && !empty($before['ok']) && !empty($before['blocks_all'])) {
+        $before_body = isset($before['body']) ? (string) $before['body'] : '';
+        if (!hozio_sig_foreign_sitemaps($before_body)) {
             return array(true, 'robots.txt already blocks all crawlers.');
         }
-        if (!is_writable($path)) {
-            return array(false, 'robots.txt exists but is not writable by PHP. Fix the file permissions, or paste the text below in by hand.');
-        }
-        $backup = $root . 'robots.txt.hozio-backup-' . gmdate('Ymd-His');
-        if (!copy($path, $backup)) {
-            return array(false, 'Could not back up the existing robots.txt, so nothing was changed.');
-        }
-    } elseif (!is_writable($root)) {
-        return array(false, 'The site root is not writable by PHP, so robots.txt could not be created. Paste the text below in by hand.');
     }
 
-    $written = file_put_contents($path, $content);
-    if (false === $written) {
-        return array(false, 'Writing robots.txt failed. Nothing was changed.');
+    if (file_exists($path)) {
+        if (!is_writable($path)) {
+            return array(false, 'robots.txt at ' . $path . ' is not writable by PHP. Fix the permissions, or paste the text below in by hand.');
+        }
+        $backup = $dir . 'robots.txt.hozio-backup-' . gmdate('Ymd-His');
+        if (!copy($path, $backup)) {
+            return array(false, 'Could not back up the existing robots.txt at ' . $path . ', so nothing was changed.');
+        }
+    } elseif (!is_writable($dir)) {
+        return array(false, $dir . ' is not writable by PHP, so robots.txt could not be created. Paste the text below in by hand.');
+    }
+
+    if (false === file_put_contents($path, $content)) {
+        return array(false, 'Writing ' . $path . ' failed. Nothing was changed.');
     }
 
     clearstatcache(true, $path);
-    $readback = (string) file_get_contents($path);
-    if (trim($readback) !== trim($content)) {
-        return array(false, 'robots.txt was written but read back different. Check it by hand.');
+    if (trim((string) file_get_contents($path)) !== trim($content)) {
+        return array(false, 'robots.txt was written but read back different. Check ' . $path . ' by hand.');
     }
+
+    $note = ('' !== $backup) ? ' The old file was saved as ' . basename($backup) . '.' : '';
 
     if ('' !== $backup) {
-        update_option('hozio_sig_last_backup', basename($backup), false);
-        return array(true, 'robots.txt now blocks all crawlers. The old file was saved as ' . basename($backup) . '.');
+        update_option('hozio_sig_last_backup', $backup, false);
     }
 
-    return array(true, 'robots.txt created and now blocks all crawlers.');
+    // Writing the right bytes into the wrong directory looks identical on disk.
+    // Fetching the URL is the only check that proves the fix actually landed.
+    delete_transient('hozio_sig_remote_result');
+    $after = hozio_sig_remote_check(true);
+
+    if (is_array($after) && !empty($after['ok'])) {
+        if (empty($after['blocks_all'])) {
+            return array(false, 'Wrote ' . $path . ' and verified it on disk, but ' . home_url('/robots.txt') . ' still serves the old file - the web root is somewhere else. Set robots.txt by hand.' . $note);
+        }
+        return array(true, 'robots.txt now blocks all crawlers, confirmed by fetching ' . home_url('/robots.txt') . '.' . $note);
+    }
+
+    return array(true, 'Wrote ' . $path . ', but the HTTP check could not run. Open ' . home_url('/robots.txt') . ' to confirm.' . $note);
 }
 
 /**

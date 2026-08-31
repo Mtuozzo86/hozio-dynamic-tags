@@ -2,6 +2,34 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.17.1 (August 2026) ==
+
+= Fixes =
+
+* Staging Index Guard missed robots.txt entirely on Pressable. The check looked
+  for the file at ABSPATH, but Pressable does not serve robots.txt from there.
+  Finding nothing, it fell back to assuming "no file means WordPress generates
+  it, and Discourage is on, so it must be blocking" and reported the site as
+  correctly blocked - on a site whose robots.txt plainly said "Allow: /".
+
+  The guessing is gone. The verdict now comes from actually fetching the site's
+  own /robots.txt, which is the only thing that reflects what crawlers get: a
+  file served by the web server never reaches PHP and does not have to live
+  anywhere this install can see. The filesystem is now a fallback, and when
+  neither source has answered yet the panel reports "unknown" instead of
+  claiming the site is fine.
+
+* robots.txt is now located by trying every plausible web root - DOCUMENT_ROOT,
+  ABSPATH, and the directory above ABSPATH - preferring wherever a file already
+  exists. The settings panel lists the directories it searched.
+
+* The Fix button now confirms its own work over HTTP. Writing the correct bytes
+  into the wrong directory looks identical on disk, so after writing it re-fetches
+  /robots.txt: if the URL still serves the old file it reports FAILURE and says
+  the web root is elsewhere, rather than reporting a success that did not happen.
+  Backups are also written next to the file being replaced rather than always at
+  ABSPATH.
+
 == Version 4.17.0 (August 2026) ==
 
 = New Features =
