@@ -2,6 +2,40 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.19.3 (August 2026) ==
+
+= Fixes =
+
+* Dev URL Guard ignored most of the rows it found. A live site reported 716 rows
+  containing a dev domain, rewrote none of them, and named only 138 as
+  unrewritable - leaving around 577 rows walked past in silence, every run.
+
+  Three compounding faults, all now fixed:
+
+  1. Hostname discovery only recognised a name that appeared after "//". A
+     hostname stored on its own, with no scheme in front of it, was never
+     discovered at all.
+  2. Discovery sampled 25 rows per table. A site carrying a SECOND build
+     hostname - which is normal, since a site passes through more than one build
+     environment - would never see it if the sample happened to miss it.
+  3. The repair only rewrote hostnames from that discovered list, while the SQL
+     that selects rows matches on the pattern ("hoziodev", "mystagingwebsite").
+     So any row holding an undiscovered hostname was selected by the search and
+     then skipped by the repair, without being rewritten or reported.
+
+  The repair now reads each row on its own terms: it finds the build hostnames
+  present in that value and rewrites all of them, whether or not the scan
+  discovered them. Discovery itself now recognises a bare hostname and samples
+  far more rows.
+
+* Nothing can be silently passed over any more. A row that the search selects and
+  the repair does not change is now always counted and shown, because that check
+  tests the same patterns the SQL uses instead of a list of known hostnames.
+
+* Undo now restores each row to the hostname it actually had. With more than one
+  build hostname on a site, every row was previously put back to whichever was
+  first in the list.
+
 == Version 4.19.2 (August 2026) ==
 
 = Fixes =

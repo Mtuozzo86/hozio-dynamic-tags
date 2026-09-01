@@ -60,35 +60,96 @@ function hozio_sug_target_scheme() {
 }
 
 /**
- * Rewrite every mention of a dev host inside one string.
+ * Every hostname in this text that belongs to a build environment.
  *
- * Deliberately regex-based rather than a str_replace/strtr table, for two
- * reasons that a table gets wrong:
+ * Matches a dotted hostname anywhere, with or WITHOUT a scheme in front of it.
+ * An earlier version only looked behind "//", which meant a bare hostname was
+ * never discovered, and a site carrying a second build hostname had most of its
+ * rows silently ignored.
+ */
+function hozio_sug_find_hosts($text) {
+    $found = array();
+    if (!is_string($text) || '' === $text) {
+        return $found;
+    }
+
+    // Hostnames appear with escaped slashes inside JSON, so normalise first.
+    $text = str_replace(chr(92) . '/', '/', $text);
+
+    $re = '#(?<![A-Za-z0-9.\-])((?:[A-Za-z0-9\-]+\.)+[A-Za-z0-9\-]+)(?![A-Za-z0-9\-])#';
+    if (preg_match_all($re, $text, $matches)) {
+        foreach ($matches[1] as $host) {
+            $host = rtrim(strtolower($host), '.');
+            foreach (hozio_sug_patterns() as $pattern) {
+                if (false !== stripos($host, $pattern)) {
+                    $found[$host] = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    return array_keys($found);
+}
+
+/**
+ * Does this text mention a build environment at all?
  *
- *  1. CASE. The SQL that finds these rows uses LIKE, which MySQL evaluates
- *     case-insensitively. A case-sensitive replacement therefore matches fewer
- *     rows than the search did, and the repair reports "found 718, rewrote 0".
- *  2. BARE HOSTNAMES. The host does not always sit behind "https://" or "//".
- *     It turns up on its own in stored settings, and a table keyed on
- *     "https://host" never sees those.
+ * Deliberately tests the PATTERNS, not a list of known hostnames. The SQL that
+ * selects rows uses the same patterns, so this cannot disagree with it - which
+ * is what let rows be found by the search and then silently ignored by the
+ * repair.
+ */
+function hozio_sug_mentions_dev($text) {
+    if (!is_string($text) || '' === $text) {
+        return false;
+    }
+    foreach (hozio_sug_patterns() as $pattern) {
+        if (false !== stripos($text, $pattern)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Rewrite every build hostname in one string.
  *
- * The bare-host rule carries boundaries on both sides so that a longer hostname
- * which merely contains this one is left alone.
+ * The hostnames are taken from the text itself, not only from the list the scan
+ * discovered. Discovery samples a handful of rows, so it can easily miss a
+ * second build hostname - and a row holding an undiscovered name would match the
+ * search, fail a known-host check, and disappear without being rewritten or
+ * reported. Reading each row on its own terms removes that whole class of bug.
+ *
+ * Matching is case-insensitive to agree with SQL LIKE, and every rule carries
+ * boundaries so a longer hostname that merely contains a shorter one is safe.
  */
 function hozio_sug_rewrite_text($text, $hosts, $new_host, $scheme, &$changed) {
     if (!is_string($text) || '' === $text) {
         return $text;
     }
 
-    $bs = chr(92); // one backslash
-
-    foreach ((array) $hosts as $old_host) {
-        $old_host = (string) $old_host;
-        if ('' === $old_host || 0 === strcasecmp($old_host, $new_host)) {
-            continue;
+    $candidates = array();
+    foreach (array_merge((array) $hosts, hozio_sug_find_hosts($text)) as $host) {
+        $host = strtolower(trim((string) $host));
+        if ('' !== $host && 0 !== strcasecmp($host, $new_host)) {
+            $candidates[$host] = true;
         }
+    }
+    if (empty($candidates)) {
+        return $text;
+    }
 
-        $tail  = '(?![A-Za-z0-9\-])';
+    // Longest first, so a hostname is never partly rewritten by a shorter one
+    // that happens to be a substring of it.
+    $candidates = array_keys($candidates);
+    usort($candidates, function ($a, $b) { return strlen($b) - strlen($a); });
+
+    $bs   = chr(92); // one backslash
+    $tail = '(?![A-Za-z0-9\-])';
+
+    foreach ($candidates as $old_host) {
         $rules = array();
 
         // Scheme-carrying forms first, so http:// is normalised to the live
@@ -129,23 +190,6 @@ function hozio_sug_rewrite_text($text, $hosts, $new_host, $scheme, &$changed) {
     }
 
     return $text;
-}
-
-/**
- * Does this string mention any of these hosts at all? Case-insensitive, so it
- * agrees with the SQL that found the row.
- */
-function hozio_sug_mentions_host($text, $hosts) {
-    if (!is_string($text) || '' === $text) {
-        return false;
-    }
-    foreach ((array) $hosts as $host) {
-        if ('' !== $host && false !== stripos($text, (string) $host)) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 /* -------------------------------------------------------------------------
@@ -407,7 +451,9 @@ function hozio_sug_scan() {
 
             // Sample a few rows to learn which dev hostnames are actually in use.
             $cols = '`' . implode('`, `', array_map(function ($c) { return str_replace('`', '', $c); }, $spec['cols'])) . '`';
-            $rows = $wpdb->get_results('SELECT ' . $cols . ' FROM `' . $safe . '` WHERE ' . $where . ' LIMIT 25', ARRAY_A);
+            // Sample generously: a site can carry more than one build hostname and
+            // a small sample will simply never see the second one.
+            $rows = $wpdb->get_results('SELECT ' . $cols . ' FROM `' . $safe . '` WHERE ' . $where . ' LIMIT 200', ARRAY_A);
             foreach ((array) $rows as $row) {
                 foreach ((array) $row as $value) {
                     foreach (hozio_sug_find_hosts((string) $value) as $host) {
@@ -433,33 +479,6 @@ function hozio_sug_scan() {
     delete_transient('hozio_sug_lock');
 
     return $report;
-}
-
-/**
- * Pull dev hostnames out of a blob of text.
- */
-function hozio_sug_find_hosts($text) {
-    $found = array();
-    if ('' === $text) {
-        return $found;
-    }
-
-    // Hostnames may appear with escaped slashes inside JSON, so normalise first.
-    $text = str_replace(chr(92) . '/', '/', $text);
-
-    if (preg_match_all('#//([a-z0-9\-\._]+)#i', $text, $matches)) {
-        foreach ($matches[1] as $host) {
-            $host = rtrim(strtolower($host), '.');
-            foreach (hozio_sug_patterns() as $pattern) {
-                if (false !== stripos($host, $pattern)) {
-                    $found[$host] = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    return array_keys($found);
 }
 
 function hozio_sug_report() {
@@ -610,7 +629,7 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
                         // Record an example: an invisible mismatch between what
                         // the search finds and what the repair can act on is
                         // exactly how this silently does nothing.
-                        if (hozio_sug_mentions_host($value, $hosts)) {
+                        if (hozio_sug_mentions_dev($value)) {
                             $stuck++;
                             if (count($stuck_eg) < 5) {
                                 $stuck_eg[] = array(
@@ -635,9 +654,20 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
                     }
 
                     if ('apply' === $mode) {
+                        // Remember which hostname THIS row carried. A site can
+                        // have more than one build host, and undo has to put
+                        // each row back to its own, not to whichever happened
+                        // to be first in the list.
+                        $row_hosts = hozio_sug_find_hosts($value);
                         $ok = $wpdb->update($table, array($col => $new), array($pk => $id));
                         if (false !== $ok) {
-                            $touched[] = array('t' => $table, 'p' => $pk, 'i' => $id, 'c' => $col);
+                            $touched[] = array(
+                                't' => $table,
+                                'p' => $pk,
+                                'i' => $id,
+                                'c' => $col,
+                                'h' => $row_hosts,
+                            );
                         }
                     }
                 }
@@ -710,8 +740,8 @@ function hozio_sug_undo() {
     $new_host  = (string) $undo['new_host'];
     $scheme    = !empty($undo['scheme']) ? $undo['scheme'] : 'https';
 
-    // The same rewrite, backwards. Only the recorded rows are touched.
-    $ctx = array('hosts' => array($new_host), 'new' => reset($old_hosts), 'scheme' => $scheme);
+    // The same rewrite, backwards, per row. Only recorded rows are touched.
+    $fallback = reset($old_hosts);
 
     $restored = 0;
     foreach ((array) $undo['rows'] as $row) {
@@ -729,6 +759,10 @@ function hozio_sug_undo() {
         if (!is_string($value) || '' === $value) {
             continue;
         }
+
+        // Each row goes back to the hostname it actually had.
+        $original = (!empty($row['h']) && is_array($row['h'])) ? reset($row['h']) : $fallback;
+        $ctx      = array('hosts' => array($new_host), 'new' => $original, 'scheme' => $scheme);
 
         $changed = false;
         $back    = hozio_sug_replace_deep($value, $ctx, $changed);
