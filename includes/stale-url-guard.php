@@ -60,24 +60,92 @@ function hozio_sug_target_scheme() {
 }
 
 /**
- * Every textual form one host takes inside WordPress content, mapped to its
- * replacement.
+ * Rewrite every mention of a dev host inside one string.
  *
- * Replacing "//host" last catches protocol-relative URLs and any scheme not
- * handled above. The backslash-escaped forms are how JSON-encoded builder data
- * (Elementor and friends) stores a URL.
+ * Deliberately regex-based rather than a str_replace/strtr table, for two
+ * reasons that a table gets wrong:
+ *
+ *  1. CASE. The SQL that finds these rows uses LIKE, which MySQL evaluates
+ *     case-insensitively. A case-sensitive replacement therefore matches fewer
+ *     rows than the search did, and the repair reports "found 718, rewrote 0".
+ *  2. BARE HOSTNAMES. The host does not always sit behind "https://" or "//".
+ *     It turns up on its own in stored settings, and a table keyed on
+ *     "https://host" never sees those.
+ *
+ * The bare-host rule carries boundaries on both sides so that a longer hostname
+ * which merely contains this one is left alone.
  */
-function hozio_sug_replacement_pairs($old_host, $new_host, $scheme = 'https') {
-    $bs = chr(92); // a single backslash
+function hozio_sug_rewrite_text($text, $hosts, $new_host, $scheme, &$changed) {
+    if (!is_string($text) || '' === $text) {
+        return $text;
+    }
 
-    return array(
-        'https://' . $old_host          => $scheme . '://' . $new_host,
-        'http://' . $old_host           => $scheme . '://' . $new_host,
-        'https:' . $bs . '/' . $bs . '/' . $old_host => $scheme . ':' . $bs . '/' . $bs . '/' . $new_host,
-        'http:' . $bs . '/' . $bs . '/' . $old_host  => $scheme . ':' . $bs . '/' . $bs . '/' . $new_host,
-        '//' . $old_host                => '//' . $new_host,
-        $bs . '/' . $bs . '/' . $old_host => $bs . '/' . $bs . '/' . $new_host,
-    );
+    $bs = chr(92); // one backslash
+
+    foreach ((array) $hosts as $old_host) {
+        $old_host = (string) $old_host;
+        if ('' === $old_host || 0 === strcasecmp($old_host, $new_host)) {
+            continue;
+        }
+
+        $tail  = '(?![A-Za-z0-9\-])';
+        $rules = array();
+
+        // Scheme-carrying forms first, so http:// is normalised to the live
+        // scheme on the way through. The escaped variants are how JSON-encoded
+        // builder data stores a URL.
+        foreach (array('https', 'http') as $found_scheme) {
+            $rules[] = array(
+                preg_quote($found_scheme . ':' . $bs . '/' . $bs . '/' . $old_host, '#') . $tail,
+                $scheme . ':' . $bs . '/' . $bs . '/' . $new_host,
+            );
+            $rules[] = array(
+                preg_quote($found_scheme . '://' . $old_host, '#') . $tail,
+                $scheme . '://' . $new_host,
+            );
+        }
+
+        // Protocol-relative.
+        $rules[] = array(preg_quote($bs . '/' . $bs . '/' . $old_host, '#') . $tail, $bs . '/' . $bs . '/' . $new_host);
+        $rules[] = array(preg_quote('//' . $old_host, '#') . $tail, '//' . $new_host);
+
+        // Anything left: the hostname on its own.
+        $rules[] = array('(?<![A-Za-z0-9.\-])' . preg_quote($old_host, '#') . $tail, $new_host);
+
+        foreach ($rules as $rule) {
+            list($pattern, $replacement) = $rule;
+            // A callback keeps backslashes and dollar signs in $replacement
+            // literal, which preg_replace would otherwise interpret.
+            $out = preg_replace_callback(
+                '#' . $pattern . '#i',
+                function () use ($replacement) { return $replacement; },
+                $text
+            );
+            if (null !== $out && $out !== $text) {
+                $changed = true;
+                $text    = $out;
+            }
+        }
+    }
+
+    return $text;
+}
+
+/**
+ * Does this string mention any of these hosts at all? Case-insensitive, so it
+ * agrees with the SQL that found the row.
+ */
+function hozio_sug_mentions_host($text, $hosts) {
+    if (!is_string($text) || '' === $text) {
+        return false;
+    }
+    foreach ((array) $hosts as $host) {
+        if ('' !== $host && false !== stripos($text, (string) $host)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /* -------------------------------------------------------------------------
@@ -95,7 +163,7 @@ function hozio_sug_replacement_pairs($old_host, $new_host, $scheme = 'https') {
  *
  * Returns the new value. $changed is set true if anything was actually replaced.
  */
-function hozio_sug_replace_deep($value, $pairs, &$changed, $depth = 0) {
+function hozio_sug_replace_deep($value, $ctx, &$changed, $depth = 0) {
     if ($depth > 20) {
         return $value; // pathological nesting - leave it alone
     }
@@ -104,21 +172,17 @@ function hozio_sug_replace_deep($value, $pairs, &$changed, $depth = 0) {
         if (function_exists('is_serialized') && is_serialized($value, false)) {
             $unpacked = @unserialize($value);
             if (false !== $unpacked || 'b:0;' === $value) {
-                $walked = hozio_sug_replace_deep($unpacked, $pairs, $changed, $depth + 1);
+                $walked = hozio_sug_replace_deep($unpacked, $ctx, $changed, $depth + 1);
                 return serialize($walked);
             }
         }
-        $new = strtr($value, $pairs);
-        if ($new !== $value) {
-            $changed = true;
-        }
-        return $new;
+        return hozio_sug_rewrite_text($value, $ctx['hosts'], $ctx['new'], $ctx['scheme'], $changed);
     }
 
     if (is_array($value)) {
         $out = array();
         foreach ($value as $k => $v) {
-            $out[$k] = hozio_sug_replace_deep($v, $pairs, $changed, $depth + 1);
+            $out[$k] = hozio_sug_replace_deep($v, $ctx, $changed, $depth + 1);
         }
         return $out;
     }
@@ -130,7 +194,7 @@ function hozio_sug_replace_deep($value, $pairs, &$changed, $depth = 0) {
         }
         $out = clone $value;
         foreach (get_object_vars($value) as $k => $v) {
-            $out->$k = hozio_sug_replace_deep($v, $pairs, $changed, $depth + 1);
+            $out->$k = hozio_sug_replace_deep($v, $ctx, $changed, $depth + 1);
         }
         return $out;
     }
@@ -456,14 +520,13 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
         }
     }
 
-    $pairs = array();
-    foreach ($hosts as $host) {
-        $pairs = array_merge($pairs, hozio_sug_replacement_pairs($host, $new_host, $scheme));
-    }
+    $ctx = array('hosts' => $hosts, 'new' => $new_host, 'scheme' => $scheme);
 
     $started  = microtime(true);
     $touched  = array();
     $skipped  = 0;
+    $stuck    = 0;          // matched the search but nothing to rewrite
+    $stuck_eg = array();
     $rows_hit = 0;
     $samples  = array();
     $finished = true;
@@ -518,8 +581,22 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
                     }
 
                     $changed = false;
-                    $new     = hozio_sug_replace_deep($value, $pairs, $changed);
+                    $new     = hozio_sug_replace_deep($value, $ctx, $changed);
                     if (!$changed || $new === $value) {
+                        // The row matched the search but produced no rewrite.
+                        // Record an example: an invisible mismatch between what
+                        // the search finds and what the repair can act on is
+                        // exactly how this silently does nothing.
+                        if (hozio_sug_mentions_host($value, $hosts)) {
+                            $stuck++;
+                            if (count($stuck_eg) < 5) {
+                                $stuck_eg[] = array(
+                                    'table' => $table,
+                                    'col'   => $col,
+                                    'text'  => hozio_sug_snippet($value, $hosts),
+                                );
+                            }
+                        }
                         continue;
                     }
 
@@ -570,6 +647,8 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
         'rows'      => $rows_hit,
         'applied'   => count($touched),
         'skipped'   => $skipped,
+        'stuck'     => $stuck,
+        'stuck_eg'  => $stuck_eg,
         'samples'   => $samples,
         'finished'  => $finished,
         'old_hosts' => $hosts,
@@ -608,13 +687,8 @@ function hozio_sug_undo() {
     $new_host  = (string) $undo['new_host'];
     $scheme    = !empty($undo['scheme']) ? $undo['scheme'] : 'https';
 
-    // The same replacement, backwards. Only the recorded rows are touched.
-    $pairs = array();
-    foreach ($old_hosts as $host) {
-        foreach (hozio_sug_replacement_pairs($new_host, $host, $scheme) as $from => $to) {
-            $pairs[$from] = $to;
-        }
-    }
+    // The same rewrite, backwards. Only the recorded rows are touched.
+    $ctx = array('hosts' => array($new_host), 'new' => reset($old_hosts), 'scheme' => $scheme);
 
     $restored = 0;
     foreach ((array) $undo['rows'] as $row) {
@@ -634,7 +708,7 @@ function hozio_sug_undo() {
         }
 
         $changed = false;
-        $back    = hozio_sug_replace_deep($value, $pairs, $changed);
+        $back    = hozio_sug_replace_deep($value, $ctx, $changed);
         if ($changed && $back !== $value) {
             if (false !== $wpdb->update($table, array($col => $back), array($pk => $row['i']))) {
                 $restored++;
@@ -713,6 +787,9 @@ function hozio_sug_handle_fix() {
     }
 
     $msg = 'Rewrote ' . (int) $result['applied'] . ' rows to ' . $result['new_host'] . '.';
+    if (!empty($result['stuck'])) {
+        $msg .= ' ' . (int) $result['stuck'] . ' rows mention the dev domain but contain no rewritable URL - use Preview to see them.';
+    }
     if (!$result['finished']) {
         $msg .= ' There is more to do - press Fix again to continue.';
     }

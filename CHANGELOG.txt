@@ -2,6 +2,30 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.19.1 (August 2026) ==
+
+= Fixes =
+
+* Dev URL Guard found rows it could not rewrite, and said nothing useful about
+  it. On a real site it reported "718 database rows still point at a dev domain"
+  and then "Rewrote 0 rows" every time the button was pressed.
+
+  The search and the repair disagreed. Rows are found with SQL LIKE, which MySQL
+  evaluates case-INsensitively and which matches the hostname anywhere in the
+  value. The repair used a case-SENSITIVE replacement table keyed on
+  "https://host", "http://host" and "//host". So a row containing the hostname
+  in different capitalisation, or on its own without a scheme in front of it,
+  was counted by the search and then skipped by the repair - for ever, however
+  many times the button was pressed.
+
+  The repair now matches case-insensitively and also rewrites a bare hostname,
+  with a boundary on each side so a longer hostname that merely contains the old
+  one is left alone.
+
+* When a row still cannot be rewritten, the repair now says so and the preview
+  shows examples of the text it could not handle, instead of reporting a silent
+  zero.
+
 == Version 4.19.0 (August 2026) ==
 
 = New Features =
