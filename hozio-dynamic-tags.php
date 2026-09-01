@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.19.5
+Version:         4.20.0
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -22,7 +22,7 @@ Text Domain:     hozio-dynamic-tags
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.19.5');
+define('HOZIO_VERSION', '4.20.0');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -64,6 +64,7 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/faq-schema.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/acf-shortcodes.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/staging-index-guard.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/stale-url-guard.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/robots-template.php';
 
 // Hub integration files (defensive loading — file_exists prevents fatal errors on partial updates)
 $hozio_hub_includes = [

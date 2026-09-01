@@ -2,6 +2,43 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.20.0 (September 2026) ==
+
+= New Features =
+
+* Live robots.txt Template. Every live site should serve the standard Hozio
+  robots.txt with the Sitemap line pointing at its own domain. The plugin now
+  watches whether the file being served matches, and warns when it does not.
+
+  The domain in the Sitemap line comes from the WordPress Site Address
+  verbatim, so a www site gets www and a bare-domain site does not - never
+  guessed. A served Sitemap in the wrong form is called out by name in both
+  directions, and one pointing at a different domain entirely (the file a
+  clone carries in) is flagged as carried over.
+
+  NOTHING is written automatically. The daily check only evaluates; every
+  write happens from a button an administrator clicked. The warning banner
+  carries no fix action - it links to the settings section (with an anchor,
+  so it lands on the section, not the top of the page), plus a direct link to
+  view the live file.
+
+* robots.txt editor in Hozio Pro settings. View the file, edit it, and save -
+  with a backup taken first and the write verified over HTTP with cache-busted
+  retries. Saving your own version makes THAT the expected content, so a
+  deliberate customisation is never nagged for differing from the template.
+  "Apply standard template" writes the standard file and goes back to
+  comparing against it.
+
+= Notes =
+
+* Comparison ignores comments, blank lines, line endings and directive case -
+  only differences a crawler would act on count. The banner shows to logged-in
+  administrators only, and stands down whenever the Staging Index Guard's
+  blocked-site emergency banner is up, so two bars never argue.
+
+* The dev-URL banner and admin-bar links now land on their section of the
+  settings page instead of the top.
+
 == Version 4.19.5 (August 2026) ==
 
 = Changes =

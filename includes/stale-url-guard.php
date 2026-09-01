@@ -962,7 +962,7 @@ function hozio_sug_banner_html($report, $context) {
                 Search engines are being told your pages live there.
             </span>
             <?php if (current_user_can('manage_options')) : ?>
-                <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-plugin-settings')); ?>"
+                <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-plugin-settings') . '#hozio-dev-urls'); ?>"
                    style="background:#fff;color:#7d0d0a;padding:7px 18px;border-radius:3px;text-decoration:none;font-weight:700;white-space:nowrap;">
                     Review and fix
                 </a>
@@ -1027,7 +1027,7 @@ function hozio_sug_admin_bar_node($bar) {
     $bar->add_node(array(
         'id'    => 'hozio-sug',
         'title' => '<span style="display:inline-block;background:#b3140f;color:#fff;font-weight:700;padding:0 9px;border-radius:3px;">DEV URLS ON LIVE SITE</span>',
-        'href'  => admin_url('admin.php?page=hozio-plugin-settings'),
+        'href'  => admin_url('admin.php?page=hozio-plugin-settings') . '#hozio-dev-urls',
         'meta'  => array('title' => (int) $report['rewritable'] . ' rows still point at a dev domain'),
     ));
 }

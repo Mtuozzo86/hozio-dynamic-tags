@@ -46,6 +46,11 @@ function hozio_plugin_settings_register() {
         'sanitize_callback' => 'rest_sanitize_boolean'
     ]);
 
+    register_setting('hozio_plugin_settings', 'hozio_rt_enabled', [
+        'type' => 'boolean',
+        'default' => true,
+        'sanitize_callback' => 'rest_sanitize_boolean'
+    ]);
     register_setting('hozio_plugin_settings', 'hozio_sug_enabled', [
         'type' => 'boolean',
         'default' => true,
@@ -451,6 +456,7 @@ function hozio_plugin_settings_save() {
 
     // Save Dev URL Guard settings
     update_option('hozio_sug_enabled', isset($_POST['hozio_sug_enabled']) ? '1' : '0');
+    update_option('hozio_rt_enabled', isset($_POST['hozio_rt_enabled']) ? '1' : '0');
     $sug_mode = isset($_POST['hozio_sug_www_mode'])
         ? sanitize_key(wp_unslash($_POST['hozio_sug_www_mode']))
         : 'home';
@@ -634,6 +640,7 @@ function hozio_plugin_settings_page() {
     $staging_guard_environment  = get_option('hozio_staging_guard_environment', 'auto');
     $sug_enabled                = get_option('hozio_sug_enabled', '1');
     $sug_www_mode               = get_option('hozio_sug_www_mode', 'home');
+    $rt_enabled                 = get_option('hozio_rt_enabled', '1');
     $auto_update_all_plugins    = get_option('hozio_auto_update_all_plugins', '1');
     $auto_update_force          = get_option('hozio_auto_update_force', '0');
     $auto_update_exclude        = get_option('hozio_auto_update_exclude', '');
@@ -879,7 +886,7 @@ function hozio_plugin_settings_page() {
             </div>
 
             <!-- Search Engine Visibility Section -->
-            <div class="hozio-section">
+            <div class="hozio-section" id="hozio-search-visibility">
                 <h2 class="hozio-section-title">Search Engine Visibility</h2>
                 <p class="hozio-section-description">
                     Watches whether this site can be crawled and indexed. On a <strong>staging</strong> site it warns when
@@ -1085,6 +1092,26 @@ Disallow: /</pre>
                 </div>
 
                 <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_rt_enabled" value="1"
+                                   <?php checked($rt_enabled, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">Live robots.txt Template</div>
+                            <div class="hozio-toggle-description">
+                                On a live site, watches whether the robots.txt being served matches the standard Hozio
+                                template (or your own saved version), including the Sitemap domain and its www form.
+                                Warns when it does not; never changes the file on its own. View and edit it in the
+                                <a href="#hozio-robots-editor">Live robots.txt section</a> below.
+                                <strong>Enabled by default.</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hozio-field">
                     <label for="hozio_staging_guard_environment" style="display:block;font-weight:600;margin-bottom:6px;">Environment detection</label>
                     <select name="hozio_staging_guard_environment" id="hozio_staging_guard_environment">
                         <option value="auto" <?php selected($staging_guard_environment, 'auto'); ?>>Automatic (detect from the site URL)</option>
@@ -1100,7 +1127,7 @@ Disallow: /</pre>
             </div>
 
             <!-- Dev URLs on a Live Site -->
-            <div class="hozio-section">
+            <div class="hozio-section" id="hozio-dev-urls">
                 <h2 class="hozio-section-title">Dev URLs on a Live Site</h2>
                 <p class="hozio-section-description">
                     After a site goes live it should not contain links pointing back at the dev or staging domain it
@@ -1626,6 +1653,100 @@ Disallow: /</pre>
                 <button type="submit" class="button button-primary button-large">Save Settings</button>
             </div>
         </form>
+
+            <!-- Live robots.txt: view / edit / apply template (own form - it must not nest inside the settings form) -->
+            <div class="hozio-section" id="hozio-robots-editor">
+                <h2 class="hozio-section-title">Live robots.txt</h2>
+                <p class="hozio-section-description">
+                    The file crawlers are served at
+                    <a href="<?php echo esc_url(home_url('/robots.txt')); ?>" target="_blank" rel="noopener"><?php echo esc_html(wp_parse_url(home_url(), PHP_URL_HOST)); ?>/robots.txt</a>.
+                    Nothing is ever changed automatically &mdash; the buttons below are the only thing that writes.
+                </p>
+
+                <?php
+                $rt_is_staging = function_exists('hozio_sig_is_staging') && hozio_sig_is_staging();
+                if (!$rt_is_staging && function_exists('hozio_rt_evaluate')) {
+                    hozio_rt_evaluate();
+                }
+                $rt_status = get_option('hozio_rt_status', '');
+                $rt_detail = get_option('hozio_rt_detail', array());
+
+                $rt_notice_key = 'hozio_rt_notice_' . get_current_user_id();
+                $rt_notice = get_transient($rt_notice_key);
+                if ($rt_notice) { delete_transient($rt_notice_key); }
+
+                $rt_path = function_exists('hozio_sig_robots_path') ? hozio_sig_robots_path() : '';
+                $rt_disk = ('' !== $rt_path && file_exists($rt_path) && is_readable($rt_path)) ? (string) file_get_contents($rt_path) : '';
+                if ('' !== trim($rt_disk)) {
+                    $rt_prefill = $rt_disk;
+                } elseif (!empty($rt_detail['served'])) {
+                    $rt_prefill = (string) $rt_detail['served'];
+                } else {
+                    $rt_prefill = function_exists('hozio_rt_template') ? hozio_rt_template() : '';
+                }
+                ?>
+
+                <?php if ($rt_notice && !empty($rt_notice['message'])) : ?>
+                    <div style="margin:0 0 16px;padding:12px 14px;border-radius:4px;border:1px solid <?php echo empty($rt_notice['failed']) ? '#aceebb' : '#f5b8b3'; ?>;background:<?php echo empty($rt_notice['failed']) ? '#dafbe1' : '#ffe9e7'; ?>;color:<?php echo empty($rt_notice['failed']) ? '#116329' : '#7d0d0a'; ?>;">
+                        <?php echo esc_html($rt_notice['message']); ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($rt_is_staging) : ?>
+                    <div style="border:1px solid #d0d7de;background:#f6f8fa;border-radius:5px;padding:14px 16px;font-size:13px;">
+                        <strong>This is a staging site.</strong> Staging blocks all crawlers (handled by the Staging Index
+                        Guard above), so the live template does not apply here and these controls are switched off.
+                    </div>
+                <?php else : ?>
+
+                    <div style="border:1px solid <?php echo 'ok' === $rt_status ? '#aceebb' : (in_array($rt_status, array('mismatch', 'sitemap'), true) ? '#f5b8b3' : '#d0d7de'); ?>;background:<?php echo 'ok' === $rt_status ? '#dafbe1' : (in_array($rt_status, array('mismatch', 'sitemap'), true) ? '#ffe9e7' : '#f6f8fa'); ?>;border-radius:5px;padding:12px 16px;margin-bottom:14px;font-size:13px;">
+                        <strong>
+                            <?php
+                            if ('ok' === $rt_status) {
+                                echo 'The live robots.txt matches.';
+                            } elseif (in_array($rt_status, array('mismatch', 'sitemap'), true)) {
+                                echo 'The live robots.txt needs attention.';
+                            } else {
+                                echo 'Not checked yet.';
+                            }
+                            ?>
+                        </strong>
+                        <?php if (!empty($rt_detail['message'])) : ?>
+                            <div style="margin-top:4px;"><?php echo esc_html($rt_detail['message']); ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($rt_detail['checked_at'])) : ?>
+                            <div style="margin-top:4px;color:#57606a;">Last checked <?php echo esc_html(human_time_diff($rt_detail['checked_at'])); ?> ago.</div>
+                        <?php endif; ?>
+                    </div>
+
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                        <input type="hidden" name="action" value="hozio_rt_save">
+                        <?php wp_nonce_field('hozio_rt_save', 'hozio_rt_nonce'); ?>
+                        <textarea name="hozio_rt_content" rows="18" spellcheck="false"
+                                  style="width:100%;font:12px/1.5 Menlo,Consolas,monospace;border:1px solid #d0d7de;border-radius:4px;padding:10px;box-sizing:border-box;"><?php echo esc_textarea($rt_prefill); ?></textarea>
+                        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                            <button type="submit" class="button button-primary"
+                                    onclick="return confirm('Write this content to robots.txt? A backup of the current file is kept.');">
+                                Save robots.txt
+                            </button>
+                            <a href="<?php echo esc_url(hozio_rt_action_url('apply')); ?>" class="button"
+                               onclick="return confirm('Replace robots.txt with the standard Hozio template for this domain? A backup of the current file is kept.');">
+                                Apply standard template
+                            </a>
+                            <a href="<?php echo esc_url(hozio_rt_action_url('recheck')); ?>" class="button">Re-check now</a>
+                            <a href="<?php echo esc_url(home_url('/robots.txt')); ?>" target="_blank" rel="noopener" style="margin-left:auto;">View live file &rarr;</a>
+                        </div>
+                    </form>
+
+                    <p style="font-size:12px;color:#57606a;margin:12px 0 0;">
+                        Saving a version of your own makes that the expected content &mdash; the warning compares against
+                        what you saved, not the template, so a deliberate customisation is never nagged about.
+                        &ldquo;Apply standard template&rdquo; goes back to comparing against the standard.
+                    </p>
+
+                <?php endif; ?>
+            </div>
+
         </div><!-- /.hozio-main-col -->
 
         <!-- ── RIGHT: sidebar ───────────────────────────────────────── -->
