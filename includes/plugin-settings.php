@@ -1186,16 +1186,43 @@ Disallow: /</pre>
                             <?php endif; ?>
                         </table>
 
-                        <?php if (!empty($sug_preview['stuck_eg'])) : ?>
+                        <?php
+                        $sug_leftovers = array();
+                        if (!empty($sug_preview['stuck_eg'])) {
+                            foreach ((array) $sug_preview['stuck_eg'] as $sug_x) {
+                                $sug_x['why'] = 'mentions the dev domain but holds no rewritable URL';
+                                $sug_leftovers[] = $sug_x;
+                            }
+                        }
+                        if (!empty($sug_preview['unsafe_eg'])) {
+                            foreach ((array) $sug_preview['unsafe_eg'] as $sug_x) {
+                                $sug_x['why'] = 'stored data could not be safely rewritten';
+                                $sug_leftovers[] = $sug_x;
+                            }
+                        }
+                        ?>
+                        <?php if (!empty($sug_leftovers)) : ?>
                             <div style="margin-top:14px;">
                                 <div style="font-weight:700;font-size:13px;margin-bottom:6px;">
-                                    <?php echo esc_html((int) $sug_preview['stuck']); ?> rows mention the dev domain but hold no rewritable URL.
-                                    This is what they contain:
+                                    Rows the repair will leave alone, and why. If a row is <em>supposed</em> to hold the old
+                                    address &mdash; a log, a history, a record of where the site came from &mdash; ignore it and
+                                    it stops being counted.
                                 </div>
-                                <?php foreach ($sug_preview['stuck_eg'] as $sug_x) : ?>
+                                <?php foreach ($sug_leftovers as $sug_x) : ?>
                                     <div style="background:#fff;border:1px solid #f5d8a8;border-radius:4px;padding:8px;margin-bottom:6px;font-size:11px;font-family:Menlo,Consolas,monospace;word-break:break-all;">
-                                        <div style="color:#57606a;"><?php echo esc_html($sug_x['table'] . ' &middot; ' . $sug_x['col']); ?></div>
-                                        <div><?php echo esc_html($sug_x['text']); ?></div>
+                                        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+                                            <div style="color:#1f2328;font-weight:700;">
+                                                <?php echo esc_html($sug_x['table']); ?> #<?php echo esc_html($sug_x['pk']); ?>
+                                                <?php if (!empty($sug_x['label'])) : ?>
+                                                    &mdash; <?php echo esc_html($sug_x['label']); ?>
+                                                <?php endif; ?>
+                                            </div>
+                                            <a href="<?php echo esc_url(hozio_sug_ignore_url($sug_x['table'], $sug_x['pk'])); ?>"
+                                               style="white-space:nowrap;font-family:inherit;"
+                                               onclick="return confirm('Stop counting this row as a problem?');">Ignore this row</a>
+                                        </div>
+                                        <div style="color:#7d4a00;margin:2px 0;"><?php echo esc_html($sug_x['why']); ?></div>
+                                        <div style="color:#57606a;"><?php echo esc_html($sug_x['text']); ?></div>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
@@ -1230,6 +1257,18 @@ Disallow: /</pre>
                                 </a>
                             <?php endif; ?>
                         </div>
+
+                        <?php
+                        $sug_ign = function_exists('hozio_sug_ignored') ? hozio_sug_ignored() : array();
+                        $sug_ign_n = 0;
+                        foreach ($sug_ign as $sug_ign_rows) { $sug_ign_n += count((array) $sug_ign_rows); }
+                        ?>
+                        <?php if ($sug_ign_n > 0) : ?>
+                            <p style="font-size:12px;color:#57606a;margin:12px 0 0;">
+                                <?php echo esc_html($sug_ign_n); ?> row<?php echo 1 === $sug_ign_n ? '' : 's'; ?> deliberately ignored.
+                                <a href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=hozio_sug_unignore'), 'hozio_sug_unignore', 'hozio_sug_nonce')); ?>">Stop ignoring them</a>
+                            </p>
+                        <?php endif; ?>
 
                         <p style="font-size:12px;color:#57606a;margin:12px 0 0;">
                             Scanning reads every row of several database tables, so it runs only when you press a button

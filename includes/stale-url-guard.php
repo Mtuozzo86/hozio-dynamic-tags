@@ -326,12 +326,14 @@ function hozio_sug_targets() {
         . " AND `option_name` NOT LIKE '\_transient\_hozio\_s%'"
         . " AND `option_name` NOT LIKE '\_transient\_timeout\_hozio\_s%'";
 
+    // 'label' columns identify a row to a human in the preview. A count of
+    // leftovers is useless without knowing WHICH option or meta key they are.
     $targets = array(
-        $wpdb->posts    => array('pk' => 'ID',         'cols' => array('post_content', 'post_excerpt', 'post_title')),
-        $wpdb->postmeta => array('pk' => 'meta_id',    'cols' => array('meta_value')),
-        $wpdb->options  => array('pk' => 'option_id',  'cols' => array('option_value'), 'exclude' => $skip_options),
-        $wpdb->termmeta => array('pk' => 'meta_id',    'cols' => array('meta_value')),
-        $wpdb->comments => array('pk' => 'comment_ID', 'cols' => array('comment_content')),
+        $wpdb->posts    => array('pk' => 'ID',         'cols' => array('post_content', 'post_excerpt', 'post_title'), 'label' => array('post_type', 'post_title')),
+        $wpdb->postmeta => array('pk' => 'meta_id',    'cols' => array('meta_value'),     'label' => array('post_id', 'meta_key')),
+        $wpdb->options  => array('pk' => 'option_id',  'cols' => array('option_value'),   'label' => array('option_name'), 'exclude' => $skip_options),
+        $wpdb->termmeta => array('pk' => 'meta_id',    'cols' => array('meta_value'),     'label' => array('term_id', 'meta_key')),
+        $wpdb->comments => array('pk' => 'comment_ID', 'cols' => array('comment_content'), 'label' => array('comment_post_ID')),
     );
 
     // Plugins that keep their own cache of every page's address. These are the
@@ -363,14 +365,42 @@ function hozio_sug_targets() {
         if (empty($cols) || !in_array($spec['pk'], $present, true)) {
             continue;
         }
+        $labels = isset($spec['label']) ? array_values(array_intersect((array) $spec['label'], $present)) : array();
         $clean[$table] = array(
             'pk'      => $spec['pk'],
             'cols'    => $cols,
+            'label'   => $labels,
             'exclude' => isset($spec['exclude']) ? $spec['exclude'] : '',
         );
     }
 
     return $clean;
+}
+
+/**
+ * Rows the site owner has told us to leave alone: table => list of primary keys.
+ *
+ * Some rows are SUPPOSED to hold old hostnames - an audit log recording where a
+ * site came from, a migration plugin's history, a lineage record. Rewriting
+ * those would falsify them, and counting them for ever means the guard can
+ * never honestly reach zero. So they can be dismissed, row by row, visibly.
+ */
+function hozio_sug_ignored() {
+    $list = get_option('hozio_sug_ignored', array());
+    return is_array($list) ? $list : array();
+}
+
+function hozio_sug_ignore_clause($table, $pk) {
+    $ignored = hozio_sug_ignored();
+    if (empty($ignored[$table]) || !is_array($ignored[$table])) {
+        return '';
+    }
+    $ids = array_values(array_unique(array_map('intval', $ignored[$table])));
+    if (empty($ids)) {
+        return '';
+    }
+
+    return ' AND `' . str_replace('`', '', $pk) . '` NOT IN (' . implode(',', $ids) . ')';
 }
 
 /**
@@ -414,7 +444,7 @@ function hozio_sug_any_hits() {
 
     foreach (hozio_sug_targets() as $table => $spec) {
         $sql = 'SELECT 1 FROM `' . str_replace('`', '', $table) . '` WHERE '
-             . hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '') . ' LIMIT 1';
+             . hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '') . hozio_sug_ignore_clause($table, $spec['pk']) . ' LIMIT 1';
         if ($wpdb->get_var($sql)) {
             return true;
         }
@@ -442,7 +472,7 @@ function hozio_sug_scan() {
 
     foreach (hozio_sug_targets() as $table => $spec) {
         $safe  = str_replace('`', '', $table);
-        $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '');
+        $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '') . hozio_sug_ignore_clause($table, $spec['pk']);
 
         $count = (int) $wpdb->get_var('SELECT COUNT(*) FROM `' . $safe . '` WHERE ' . $where);
         if ($count > 0) {
@@ -549,9 +579,10 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
     if ('' !== $old_host) {
         $hosts = array($old_host);
     }
-    if (empty($hosts)) {
-        return array('ok' => false, 'message' => 'No dev hostname has been identified yet. Run a scan first.');
-    }
+    // No bail-out when the scan found no hostname. Each row discovers its own
+    // hostnames now, and the rows that hold a dev pattern WITHOUT a hostname
+    // still need to be surfaced - refusing to run here would hide exactly the
+    // leftovers a site owner needs to see.
 
     $new_host = hozio_sug_target_host();
     $scheme   = hozio_sug_target_scheme();
@@ -564,11 +595,12 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
 
     $ctx = array('hosts' => $hosts, 'new' => $new_host, 'scheme' => $scheme);
 
-    $started  = microtime(true);
-    $touched  = array();
-    $skipped  = 0;
-    $stuck    = 0;          // matched the search but nothing to rewrite
-    $stuck_eg = array();
+    $started   = microtime(true);
+    $touched   = array();
+    $skipped   = 0;
+    $unsafe_eg = array();   // serialised data we refuse to touch
+    $stuck     = 0;         // matched the search but nothing to rewrite
+    $stuck_eg  = array();
     $rows_hit = 0;
     $samples  = array();
     $finished = true;
@@ -576,8 +608,10 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
     foreach (hozio_sug_targets() as $table => $spec) {
         $safe  = str_replace('`', '', $table);
         $pk    = str_replace('`', '', $spec['pk']);
-        $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '');
+        $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '') . hozio_sug_ignore_clause($table, $spec['pk']);
         $cols  = array_map(function ($c) { return str_replace('`', '', $c); }, $spec['cols']);
+        $lbls  = isset($spec['label']) ? array_map(function ($c) { return str_replace('`', '', $c); }, $spec['label']) : array();
+        $fetch = array_values(array_unique(array_merge($cols, $lbls)));
 
         // Keyset pagination, NOT offset. A row that matches the search but that
         // we cannot rewrite - unreadable serialised data, or a hostname in a
@@ -592,7 +626,7 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
                 break 2;
             }
 
-            $select = '`' . $pk . '`, `' . implode('`, `', $cols) . '`';
+            $select = '`' . $pk . '`, `' . implode('`, `', $fetch) . '`';
             // NOT wrapped in $wpdb->prepare(): $where already came from prepare
             // and contains real % characters from the LIKE patterns, which a
             // second prepare would try to read as placeholders. The cursor is
@@ -619,6 +653,15 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
                     }
                     if (hozio_sug_is_unsafe_row($value)) {
                         $skipped++;
+                        if (count($unsafe_eg) < 5) {
+                            $unsafe_eg[] = array(
+                                'table' => $table,
+                                'pk'    => $id,
+                                'col'   => $col,
+                                'label' => hozio_sug_row_label($row, $lbls),
+                                'text'  => hozio_sug_snippet($value, $hosts),
+                            );
+                        }
                         continue;
                     }
 
@@ -634,7 +677,9 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
                             if (count($stuck_eg) < 5) {
                                 $stuck_eg[] = array(
                                     'table' => $table,
+                                    'pk'    => $id,
                                     'col'   => $col,
+                                    'label' => hozio_sug_row_label($row, $lbls),
                                     'text'  => hozio_sug_snippet($value, $hosts),
                                 );
                             }
@@ -702,11 +747,27 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
         'skipped'   => $skipped,
         'stuck'     => $stuck,
         'stuck_eg'  => $stuck_eg,
+        'unsafe_eg' => $unsafe_eg,
         'samples'   => $samples,
         'finished'  => $finished,
         'old_hosts' => $hosts,
         'new_host'  => $new_host,
     );
+}
+
+/**
+ * Whatever tells a person what this row IS: the option name, the meta key and
+ * post it belongs to, and so on.
+ */
+function hozio_sug_row_label($row, $label_cols) {
+    $bits = array();
+    foreach ((array) $label_cols as $c) {
+        if (isset($row[$c]) && '' !== (string) $row[$c]) {
+            $bits[] = $c . ': ' . substr((string) $row[$c], 0, 80);
+        }
+    }
+
+    return implode(' / ', $bits);
 }
 
 /**
@@ -851,13 +912,66 @@ function hozio_sug_handle_fix() {
         $msg .= ' There is more to do - press Fix again to continue.';
     }
     if ($result['skipped'] > 0) {
-        $msg .= ' ' . (int) $result['skipped'] . ' rows were skipped because their stored data could not be safely rewritten.';
+        $msg .= ' ' . (int) $result['skipped'] . ' rows were skipped because their stored data could not be safely rewritten - use Preview to see which.';
     }
     $after = hozio_sug_report();
     $msg .= ' Remaining rows with dev URLs: ' . (int) (isset($after['total_rows']) ? $after['total_rows'] : 0) . '.';
 
     hozio_sug_notice(false, array($msg));
     hozio_sug_bounce(true);
+}
+
+function hozio_sug_handle_ignore() {
+    hozio_sug_guard_request('hozio_sug_ignore');
+
+    $table = isset($_GET['t']) ? sanitize_text_field(wp_unslash($_GET['t'])) : '';
+    $pk    = isset($_GET['i']) ? (int) $_GET['i'] : 0;
+
+    // Only a table this guard actually scans, and only a real row id.
+    $targets = hozio_sug_targets();
+    if ('' === $table || !isset($targets[$table]) || $pk <= 0) {
+        hozio_sug_notice(true, array('That row could not be identified, so nothing was ignored.'));
+        hozio_sug_bounce(false);
+    }
+
+    $ignored = hozio_sug_ignored();
+    if (!isset($ignored[$table]) || !is_array($ignored[$table])) {
+        $ignored[$table] = array();
+    }
+    if (!in_array($pk, $ignored[$table], true)) {
+        $ignored[$table][] = $pk;
+    }
+    update_option('hozio_sug_ignored', $ignored, false);
+
+    if (function_exists('hozio_log')) {
+        hozio_log('Ignoring ' . $table . ' row ' . $pk . ' in dev-URL scans', 'StaleUrlGuard');
+    }
+
+    delete_transient('hozio_sug_lock');
+    $report = hozio_sug_scan();
+    hozio_sug_notice(false, array(
+        'Row ignored. Remaining rows with dev URLs: ' . (int) $report['total_rows'] . '.',
+    ));
+    hozio_sug_bounce(true);
+}
+
+function hozio_sug_handle_unignore() {
+    hozio_sug_guard_request('hozio_sug_unignore');
+    delete_option('hozio_sug_ignored');
+    delete_transient('hozio_sug_lock');
+    $report = hozio_sug_scan();
+    hozio_sug_notice(false, array(
+        'Ignore list cleared. Rows with dev URLs: ' . (int) $report['total_rows'] . '.',
+    ));
+    hozio_sug_bounce(true);
+}
+
+function hozio_sug_ignore_url($table, $pk) {
+    return wp_nonce_url(
+        admin_url('admin-post.php?action=hozio_sug_ignore&t=' . rawurlencode($table) . '&i=' . (int) $pk),
+        'hozio_sug_ignore',
+        'hozio_sug_nonce'
+    );
 }
 
 function hozio_sug_handle_undo() {
@@ -974,6 +1088,8 @@ function hozio_sug_init() {
         add_action('admin_post_hozio_sug_preview', 'hozio_sug_handle_preview');
         add_action('admin_post_hozio_sug_fix', 'hozio_sug_handle_fix');
         add_action('admin_post_hozio_sug_undo', 'hozio_sug_handle_undo');
+        add_action('admin_post_hozio_sug_ignore', 'hozio_sug_handle_ignore');
+        add_action('admin_post_hozio_sug_unignore', 'hozio_sug_handle_unignore');
     }
 
     if ('1' !== get_option('hozio_sug_enabled', '1')) {

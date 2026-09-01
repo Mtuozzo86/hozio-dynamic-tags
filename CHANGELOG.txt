@@ -2,6 +2,35 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.19.4 (August 2026) ==
+
+= New Features =
+
+* Dev URL Guard can now reach zero honestly. Some rows are SUPPOSED to hold an
+  old hostname - a log, a history, a record of where the site was cloned from.
+  Rewriting those would falsify them, and counting them for ever meant the
+  guard could never report a clean site. Each leftover row now carries an
+  "Ignore this row" link; ignored rows drop out of the count and the repair, the
+  panel says how many are ignored, and one link clears the list.
+
+* Every leftover row is now identified, not just counted: the table, the row
+  id, and what it is - the option name, or the meta key and the post it belongs
+  to - alongside the text it contains and the reason it was left alone. This
+  covers both kinds of leftover: rows that mention a dev domain without holding
+  a rewritable hostname, and rows whose stored data cannot be safely rewritten.
+  Previously the second kind was counted and never shown at all.
+
+= Fixes =
+
+* The repair refused to run when the scan had not identified a hostname, which
+  hid exactly the rows a site owner needs to see once only non-hostname
+  leftovers remain. Each row discovers its own hostnames now, so that bail-out
+  was both unnecessary and harmful; it is gone.
+
+* Removed a dependency on the mbstring PHP extension in the new row labels. It is
+  not guaranteed on every host, and would have produced a fatal error on the
+  settings screen where it is missing.
+
 == Version 4.19.3 (August 2026) ==
 
 = Fixes =
