@@ -2,6 +2,53 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.19.0 (August 2026) ==
+
+= New Features =
+
+* Dev URL Guard. After a site goes live it should not contain links pointing
+  back at the dev or staging domain it was built on. This finds them and can
+  rewrite them to the live address. Any host containing "hoziodev" or
+  "mystagingwebsite" counts as a build domain.
+
+  It searches everywhere WordPress stores text - posts, post meta, options, term
+  meta, comments, and the tables SEO plugins use to cache each page's address -
+  and reports the count per table, so it is obvious whether the problem is in
+  page content or in a plugin's stored data. The old hostname is identified
+  automatically; if a site somehow has more than one, all of them are listed.
+
+  The repair is serialisation-safe. Much of WordPress is stored as serialised
+  arrays where every string carries its own byte length, and a plain
+  find-and-replace changes the text but not the length, corrupting the row -
+  widgets disappear, theme settings reset, builder pages render blank. Values are
+  unpacked, walked, and repacked instead. Rows whose stored data cannot be read
+  back safely are skipped and counted rather than guessed at.
+
+  Every repair is preceded by a preview that changes nothing, and is undoable
+  from the same screen afterwards.
+
+* "Rewrite links to" setting: match the Site Address (recommended), force www.,
+  or force no www. The recommended option uses WordPress' own Site Address
+  exactly. The other two exist for a site whose Site Address is itself wrong -
+  picking a form the site does not actually serve just puts a redirect on every
+  internal link.
+
+= Notes =
+
+* Runs on live sites only. On a dev or staging site the guard registers nothing
+  at all, and the repair refuses to run - those URLs are correct there.
+
+* Never scans during a page load. The banner is driven by a single autoloaded
+  option; the database scan happens on a button press or once a day in the
+  background, behind a lock.
+
+* The repair walks the primary key upwards rather than using OFFSET. A row that
+  matches the search but cannot be rewritten still matches on the next pass, and
+  with offset-based paging that makes the repair loop forever.
+
+* Dev domains ("hoziodev") now count as staging for the Staging Index Guard too,
+  so dev sites get the same noindex protection staging sites already had.
+
 == Version 4.18.0 (August 2026) ==
 
 = New Features =

@@ -46,6 +46,17 @@ function hozio_plugin_settings_register() {
         'sanitize_callback' => 'rest_sanitize_boolean'
     ]);
 
+    register_setting('hozio_plugin_settings', 'hozio_sug_enabled', [
+        'type' => 'boolean',
+        'default' => true,
+        'sanitize_callback' => 'rest_sanitize_boolean'
+    ]);
+    register_setting('hozio_plugin_settings', 'hozio_sug_www_mode', [
+        'type' => 'string',
+        'default' => 'home',
+        'sanitize_callback' => 'sanitize_key'
+    ]);
+
     register_setting('hozio_plugin_settings', 'hozio_staging_guard_enabled', [
         'type' => 'boolean',
         'default' => true,
@@ -438,6 +449,16 @@ function hozio_plugin_settings_save() {
         hozio_sig_flush_status();
     }
 
+    // Save Dev URL Guard settings
+    update_option('hozio_sug_enabled', isset($_POST['hozio_sug_enabled']) ? '1' : '0');
+    $sug_mode = isset($_POST['hozio_sug_www_mode'])
+        ? sanitize_key(wp_unslash($_POST['hozio_sug_www_mode']))
+        : 'home';
+    if (!in_array($sug_mode, ['home', 'www', 'nowww'], true)) {
+        $sug_mode = 'home';
+    }
+    update_option('hozio_sug_www_mode', $sug_mode);
+
     // Save fleet plugin auto-update settings
     $auto_update_all = isset($_POST['hozio_auto_update_all_plugins']) ? '1' : '0';
     update_option('hozio_auto_update_all_plugins', $auto_update_all);
@@ -611,6 +632,8 @@ function hozio_plugin_settings_page() {
     $staging_banner_public      = get_option('hozio_staging_banner_public', '0');
     $staging_guard_all_red      = get_option('hozio_staging_guard_all_red', '0');
     $staging_guard_environment  = get_option('hozio_staging_guard_environment', 'auto');
+    $sug_enabled                = get_option('hozio_sug_enabled', '1');
+    $sug_www_mode               = get_option('hozio_sug_www_mode', 'home');
     $auto_update_all_plugins    = get_option('hozio_auto_update_all_plugins', '1');
     $auto_update_force          = get_option('hozio_auto_update_force', '0');
     $auto_update_exclude        = get_option('hozio_auto_update_exclude', '');
@@ -1071,6 +1094,166 @@ Disallow: /</pre>
                     <p class="description">
                         Automatic treats any site whose URL contains <code>mystagingwebsite.com</code> as staging. Only
                         override this for a staging site on a custom domain, or a live site that kept a staging URL.
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Dev URLs on a Live Site -->
+            <div class="hozio-section">
+                <h2 class="hozio-section-title">Dev URLs on a Live Site</h2>
+                <p class="hozio-section-description">
+                    After a site goes live it should not contain links pointing back at the dev or staging domain it
+                    was built on. This finds them and can rewrite them to the live address. It does nothing at all on a
+                    dev or staging site, where those links are correct.
+                </p>
+
+                <?php
+                $sug_live   = function_exists('hozio_sug_is_live') ? hozio_sug_is_live() : false;
+                $sug_report = function_exists('hozio_sug_report') ? hozio_sug_report() : array();
+                $sug_rows   = isset($sug_report['total_rows']) ? (int) $sug_report['total_rows'] : 0;
+                $sug_seen   = !empty($sug_report['scanned_at']);
+
+                $sug_notice_key = 'hozio_sug_notice_' . get_current_user_id();
+                $sug_notice = get_transient($sug_notice_key);
+                if ($sug_notice) { delete_transient($sug_notice_key); }
+
+                $sug_prev_key = 'hozio_sug_preview_' . get_current_user_id();
+                $sug_preview = get_transient($sug_prev_key);
+                if ($sug_preview) { delete_transient($sug_prev_key); }
+
+                $sug_undo = get_option('hozio_sug_undo', array());
+                ?>
+
+                <?php if ($sug_notice && !empty($sug_notice['messages'])) : ?>
+                    <div style="margin:0 0 16px;padding:12px 14px;border-radius:4px;border:1px solid <?php echo empty($sug_notice['failed']) ? '#aceebb' : '#f5b8b3'; ?>;background:<?php echo empty($sug_notice['failed']) ? '#dafbe1' : '#ffe9e7'; ?>;color:<?php echo empty($sug_notice['failed']) ? '#116329' : '#7d0d0a'; ?>;">
+                        <?php foreach ($sug_notice['messages'] as $sug_msg) : ?>
+                            <div><?php echo esc_html($sug_msg); ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if (!$sug_live) : ?>
+                    <div style="border:1px solid #d0d7de;background:#f6f8fa;border-radius:5px;padding:14px 16px;margin-bottom:18px;font-size:13px;">
+                        <strong>This is a dev or staging site.</strong> Dev URLs belong here, so this check is switched
+                        off and the repair will refuse to run.
+                    </div>
+                <?php else : ?>
+
+                    <div style="border:1px solid <?php echo $sug_rows > 0 ? '#f5b8b3' : ($sug_seen ? '#aceebb' : '#d0d7de'); ?>;background:<?php echo $sug_rows > 0 ? '#ffe9e7' : ($sug_seen ? '#dafbe1' : '#f6f8fa'); ?>;border-radius:5px;padding:14px 16px;margin-bottom:18px;">
+                        <div style="font-weight:700;font-size:14px;margin-bottom:10px;color:<?php echo $sug_rows > 0 ? '#7d0d0a' : ($sug_seen ? '#116329' : '#57606a'); ?>;">
+                            <?php
+                            if (!$sug_seen) {
+                                echo 'Not scanned yet.';
+                            } elseif ($sug_rows > 0) {
+                                echo esc_html($sug_rows) . ' database rows still point at a dev domain.';
+                            } else {
+                                echo 'No dev URLs found on this site.';
+                            }
+                            ?>
+                        </div>
+
+                        <table style="border-collapse:collapse;font-size:13px;color:#1f2328;">
+                            <tr>
+                                <td style="padding:3px 18px 3px 0;color:#57606a;">Live address</td>
+                                <td style="padding:3px 0;font-weight:600;"><?php echo esc_html(home_url()); ?></td>
+                            </tr>
+                            <tr>
+                                <td style="padding:3px 18px 3px 0;color:#57606a;">Links will be rewritten to</td>
+                                <td style="padding:3px 0;font-weight:600;"><?php echo esc_html(hozio_sug_target_scheme() . '://' . hozio_sug_target_host()); ?></td>
+                            </tr>
+                            <?php if ($sug_seen) : ?>
+                                <tr>
+                                    <td style="padding:3px 18px 3px 0;color:#57606a;">Last scan</td>
+                                    <td style="padding:3px 0;font-weight:600;"><?php echo esc_html(human_time_diff($sug_report['scanned_at'])); ?> ago</td>
+                                </tr>
+                            <?php endif; ?>
+                            <?php if (!empty($sug_report['hosts'])) : ?>
+                                <tr>
+                                    <td style="padding:3px 18px 3px 0;color:#57606a;">Dev domains found</td>
+                                    <td style="padding:3px 0;font-weight:600;"><?php echo esc_html(implode(', ', (array) $sug_report['hosts'])); ?></td>
+                                </tr>
+                            <?php endif; ?>
+                            <?php if (!empty($sug_report['tables'])) : ?>
+                                <tr>
+                                    <td style="padding:3px 18px 3px 0;color:#57606a;vertical-align:top;">Where they are</td>
+                                    <td style="padding:3px 0;font-weight:600;">
+                                        <?php foreach ((array) $sug_report['tables'] as $sug_t => $sug_c) : ?>
+                                            <div><?php echo esc_html($sug_t); ?>: <?php echo esc_html($sug_c); ?> rows</div>
+                                        <?php endforeach; ?>
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
+                        </table>
+
+                        <?php if (!empty($sug_preview['samples'])) : ?>
+                            <div style="margin-top:14px;">
+                                <div style="font-weight:700;font-size:13px;margin-bottom:6px;">Preview &mdash; nothing has been changed:</div>
+                                <?php foreach ($sug_preview['samples'] as $sug_s) : ?>
+                                    <div style="background:#fff;border:1px solid #d0d7de;border-radius:4px;padding:8px;margin-bottom:6px;font-size:11px;font-family:Menlo,Consolas,monospace;word-break:break-all;">
+                                        <div style="color:#57606a;"><?php echo esc_html($sug_s['table'] . ' &middot; ' . $sug_s['col']); ?></div>
+                                        <div style="color:#7d0d0a;">- <?php echo esc_html($sug_s['before']); ?></div>
+                                        <div style="color:#116329;">+ <?php echo esc_html($sug_s['after']); ?></div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+
+                        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                            <a href="<?php echo esc_url(hozio_sug_url('scan')); ?>" class="button">Scan now</a>
+                            <?php if ($sug_rows > 0) : ?>
+                                <a href="<?php echo esc_url(hozio_sug_url('preview')); ?>" class="button">Preview changes</a>
+                                <a href="<?php echo esc_url(hozio_sug_url('fix')); ?>" class="button button-primary"
+                                   onclick="return confirm('This rewrites <?php echo esc_js($sug_rows); ?> database rows. It can be undone from this screen. Continue?');">
+                                    Fix now
+                                </a>
+                            <?php endif; ?>
+                            <?php if (!empty($sug_undo['rows'])) : ?>
+                                <a href="<?php echo esc_url(hozio_sug_url('undo')); ?>" class="button"
+                                   onclick="return confirm('This puts the previous dev URLs back. Continue?');">
+                                    Undo last fix (<?php echo esc_html(count($sug_undo['rows'])); ?> rows)
+                                </a>
+                            <?php endif; ?>
+                        </div>
+
+                        <p style="font-size:12px;color:#57606a;margin:12px 0 0;">
+                            Scanning reads every row of several database tables, so it runs only when you press a button
+                            or once a day in the background &mdash; never while somebody is loading a page.
+                        </p>
+                    </div>
+
+                <?php endif; ?>
+
+                <div class="hozio-field">
+                    <div class="hozio-toggle-wrapper">
+                        <label class="hozio-toggle-switch">
+                            <input type="checkbox" name="hozio_sug_enabled" value="1"
+                                   <?php checked($sug_enabled, '1'); ?>>
+                            <span class="hozio-toggle-slider"></span>
+                        </label>
+                        <div class="hozio-toggle-label">
+                            <div class="hozio-toggle-title">Dev URL Guard</div>
+                            <div class="hozio-toggle-description">
+                                Watches a live site for links back to the dev or staging domain it was built on, and
+                                shows a warning banner in the admin and to logged-in administrators on the front end.
+                                <strong>Enabled by default.</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hozio-field">
+                    <label for="hozio_sug_www_mode" style="display:block;font-weight:600;margin-bottom:6px;">Rewrite links to</label>
+                    <select name="hozio_sug_www_mode" id="hozio_sug_www_mode">
+                        <option value="home" <?php selected($sug_www_mode, 'home'); ?>>Match the site address (recommended)</option>
+                        <option value="www" <?php selected($sug_www_mode, 'www'); ?>>Force www.</option>
+                        <option value="nowww" <?php selected($sug_www_mode, 'nowww'); ?>>Force no www.</option>
+                    </select>
+                    <p class="description">
+                        Recommended matches WordPress' own Site Address exactly, currently
+                        <code><?php echo esc_html(hozio_sug_target_scheme() . '://' . (string) wp_parse_url(home_url(), PHP_URL_HOST)); ?></code>.
+                        Choosing a different form only makes sense if the Site Address itself is wrong &mdash; otherwise
+                        every internal link picks up a redirect, which is the problem you are trying to remove.
                     </p>
                 </div>
 

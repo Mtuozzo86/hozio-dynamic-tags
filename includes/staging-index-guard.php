@@ -37,7 +37,7 @@ if (!defined('ABSPATH')) {
  * be added without a code change.
  */
 function hozio_sig_staging_patterns() {
-    return apply_filters('hozio_staging_host_patterns', array('mystagingwebsite.com'));
+    return apply_filters('hozio_staging_host_patterns', array('mystagingwebsite.com', 'hoziodev'));
 }
 
 /**
