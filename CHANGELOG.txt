@@ -2,6 +2,31 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.19.5 (August 2026) ==
+
+= Changes =
+
+* The Dev URL Guard's number is now "rows that can be fixed", and it reaches
+  zero on its own. A row that merely mentions a dev domain without holding a
+  web address, or whose stored data belongs to a plugin that is no longer
+  installed and cannot be safely read, is not a link. It is no longer counted,
+  it no longer turns the banner on, and nobody has to dismiss it by hand.
+
+  Those rows are still listed on the settings screen, for information only:
+  which table and row, what the row is (option name, or meta key and post), a
+  plain-English reason it was left alone, and the text it holds. So the count
+  can be zero while the list explains exactly why a few rows were skipped.
+
+* The manual "Ignore this row" list from 4.19.4 is removed. Nothing should need
+  a human to click past it; the guard works out for itself what is and is not a
+  link.
+
+* Hozio Pro's own Hub state and update-history options are excluded from the
+  scan, alongside the guard's own bookkeeping. They are records, not links.
+
+* Scan and Fix messages now report rows needing a fix, and say separately how
+  many rows were listed for information.
+
 == Version 4.19.4 (August 2026) ==
 
 = New Features =

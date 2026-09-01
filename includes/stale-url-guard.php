@@ -323,6 +323,9 @@ function hozio_sug_targets() {
     // the guard would keep manufacturing rows that match its own search.
     $skip_options = "`option_name` NOT LIKE 'hozio\_sug\_%'"
         . " AND `option_name` NOT LIKE 'hozio\_sig\_%'"
+        . " AND `option_name` NOT LIKE 'hozio\_hub\_%'"
+        . " AND `option_name` NOT LIKE 'hozio\_auto\_update\_history'"
+        . " AND `option_name` NOT LIKE 'hozio\_version\_history'"
         . " AND `option_name` NOT LIKE '\_transient\_hozio\_s%'"
         . " AND `option_name` NOT LIKE '\_transient\_timeout\_hozio\_s%'";
 
@@ -378,32 +381,6 @@ function hozio_sug_targets() {
 }
 
 /**
- * Rows the site owner has told us to leave alone: table => list of primary keys.
- *
- * Some rows are SUPPOSED to hold old hostnames - an audit log recording where a
- * site came from, a migration plugin's history, a lineage record. Rewriting
- * those would falsify them, and counting them for ever means the guard can
- * never honestly reach zero. So they can be dismissed, row by row, visibly.
- */
-function hozio_sug_ignored() {
-    $list = get_option('hozio_sug_ignored', array());
-    return is_array($list) ? $list : array();
-}
-
-function hozio_sug_ignore_clause($table, $pk) {
-    $ignored = hozio_sug_ignored();
-    if (empty($ignored[$table]) || !is_array($ignored[$table])) {
-        return '';
-    }
-    $ids = array_values(array_unique(array_map('intval', $ignored[$table])));
-    if (empty($ids)) {
-        return '';
-    }
-
-    return ' AND `' . str_replace('`', '', $pk) . '` NOT IN (' . implode(',', $ids) . ')';
-}
-
-/**
  * The WHERE fragment matching any stale pattern in any of the given columns.
  */
 function hozio_sug_where($cols, $exclude = '') {
@@ -444,7 +421,7 @@ function hozio_sug_any_hits() {
 
     foreach (hozio_sug_targets() as $table => $spec) {
         $sql = 'SELECT 1 FROM `' . str_replace('`', '', $table) . '` WHERE '
-             . hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '') . hozio_sug_ignore_clause($table, $spec['pk']) . ' LIMIT 1';
+             . hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '') . ' LIMIT 1';
         if ($wpdb->get_var($sql)) {
             return true;
         }
@@ -472,7 +449,7 @@ function hozio_sug_scan() {
 
     foreach (hozio_sug_targets() as $table => $spec) {
         $safe  = str_replace('`', '', $table);
-        $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '') . hozio_sug_ignore_clause($table, $spec['pk']);
+        $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '');
 
         $count = (int) $wpdb->get_var('SELECT COUNT(*) FROM `' . $safe . '` WHERE ' . $where);
         if ($count > 0) {
@@ -496,16 +473,46 @@ function hozio_sug_scan() {
 
     arsort($hosts);
 
+    // The number that matters is how many rows the repair can actually
+    // rewrite. A row that merely mentions a dev domain without holding a web
+    // address, or whose stored data cannot be read back, is not a link and is
+    // not counted - it is listed for information and nothing more. This is
+    // what lets the count reach zero when everything is genuinely fixed,
+    // without anyone having to dismiss rows by hand.
+    $rewritable = $total;
+    $leftovers  = array();
+    $finished   = true;
+    if ($total > 0) {
+        $dry = hozio_sug_run('dry');
+        if (!empty($dry['ok'])) {
+            $finished = !empty($dry['finished']);
+            if ($finished) {
+                $rewritable = (int) $dry['rows'];
+            }
+            foreach ((array) $dry['stuck_eg'] as $x) {
+                $x['why'] = 'mentions the dev domain, but not as a web address - nothing to rewrite';
+                $leftovers[] = $x;
+            }
+            foreach ((array) $dry['unsafe_eg'] as $x) {
+                $x['why'] = 'stored data from a plugin that is no longer installed - cannot be safely rewritten, and nothing reads it';
+                $leftovers[] = $x;
+            }
+        }
+    }
+
     $report = array(
         'scanned_at' => time(),
         'total_rows' => $total,
+        'rewritable' => $rewritable,
+        'leftovers'  => $leftovers,
+        'finished'   => $finished,
         'tables'     => $tables,
         'hosts'      => array_keys($hosts),
         'target'     => hozio_sug_target_scheme() . '://' . hozio_sug_target_host(),
     );
 
     update_option('hozio_sug_report', $report, false);
-    update_option('hozio_sug_found', $total > 0 ? '1' : '0', true);
+    update_option('hozio_sug_found', $rewritable > 0 ? '1' : '0', true);
     delete_transient('hozio_sug_lock');
 
     return $report;
@@ -521,9 +528,9 @@ function hozio_sug_daily_scan() {
         return;
     }
     $report = hozio_sug_scan();
-    if (!empty($report['total_rows']) && function_exists('hozio_log')) {
+    if (!empty($report['rewritable']) && function_exists('hozio_log')) {
         hozio_log(
-            'Live site still contains ' . (int) $report['total_rows'] . ' rows with dev URLs (' . implode(', ', (array) $report['hosts']) . ')',
+            'Live site still contains ' . (int) $report['rewritable'] . ' rows with dev URLs (' . implode(', ', (array) $report['hosts']) . ')',
             'StaleUrlGuard'
         );
     }
@@ -608,7 +615,7 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
     foreach (hozio_sug_targets() as $table => $spec) {
         $safe  = str_replace('`', '', $table);
         $pk    = str_replace('`', '', $spec['pk']);
-        $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '') . hozio_sug_ignore_clause($table, $spec['pk']);
+        $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '');
         $cols  = array_map(function ($c) { return str_replace('`', '', $c); }, $spec['cols']);
         $lbls  = isset($spec['label']) ? array_map(function ($c) { return str_replace('`', '', $c); }, $spec['label']) : array();
         $fetch = array_values(array_unique(array_merge($cols, $lbls)));
@@ -878,7 +885,7 @@ function hozio_sug_handle_scan() {
     delete_transient('hozio_sug_lock');
     $report = hozio_sug_scan();
     hozio_sug_notice(false, array(
-        'Scan finished: ' . (int) $report['total_rows'] . ' rows contain a dev URL.',
+        'Scan finished: ' . (int) $report['rewritable'] . ' rows need fixing.',
     ));
     hozio_sug_bounce(true);
 }
@@ -904,74 +911,21 @@ function hozio_sug_handle_fix() {
         hozio_sug_bounce(false);
     }
 
+    $after     = hozio_sug_report();
+    $remaining = (int) (isset($after['rewritable']) ? $after['rewritable'] : 0);
+    $info      = (int) (isset($after['total_rows']) ? $after['total_rows'] : 0) - $remaining;
+
     $msg = 'Rewrote ' . (int) $result['applied'] . ' rows to ' . $result['new_host'] . '.';
-    if (!empty($result['stuck'])) {
-        $msg .= ' ' . (int) $result['stuck'] . ' rows mention the dev domain but contain no rewritable URL - use Preview to see them.';
-    }
     if (!$result['finished']) {
         $msg .= ' There is more to do - press Fix again to continue.';
     }
-    if ($result['skipped'] > 0) {
-        $msg .= ' ' . (int) $result['skipped'] . ' rows were skipped because their stored data could not be safely rewritten - use Preview to see which.';
+    $msg .= ' Rows still needing a fix: ' . $remaining . '.';
+    if ($info > 0) {
+        $msg .= ' (' . $info . ' other rows mention a dev domain but are not links - listed below for information, not counted.)';
     }
-    $after = hozio_sug_report();
-    $msg .= ' Remaining rows with dev URLs: ' . (int) (isset($after['total_rows']) ? $after['total_rows'] : 0) . '.';
 
     hozio_sug_notice(false, array($msg));
     hozio_sug_bounce(true);
-}
-
-function hozio_sug_handle_ignore() {
-    hozio_sug_guard_request('hozio_sug_ignore');
-
-    $table = isset($_GET['t']) ? sanitize_text_field(wp_unslash($_GET['t'])) : '';
-    $pk    = isset($_GET['i']) ? (int) $_GET['i'] : 0;
-
-    // Only a table this guard actually scans, and only a real row id.
-    $targets = hozio_sug_targets();
-    if ('' === $table || !isset($targets[$table]) || $pk <= 0) {
-        hozio_sug_notice(true, array('That row could not be identified, so nothing was ignored.'));
-        hozio_sug_bounce(false);
-    }
-
-    $ignored = hozio_sug_ignored();
-    if (!isset($ignored[$table]) || !is_array($ignored[$table])) {
-        $ignored[$table] = array();
-    }
-    if (!in_array($pk, $ignored[$table], true)) {
-        $ignored[$table][] = $pk;
-    }
-    update_option('hozio_sug_ignored', $ignored, false);
-
-    if (function_exists('hozio_log')) {
-        hozio_log('Ignoring ' . $table . ' row ' . $pk . ' in dev-URL scans', 'StaleUrlGuard');
-    }
-
-    delete_transient('hozio_sug_lock');
-    $report = hozio_sug_scan();
-    hozio_sug_notice(false, array(
-        'Row ignored. Remaining rows with dev URLs: ' . (int) $report['total_rows'] . '.',
-    ));
-    hozio_sug_bounce(true);
-}
-
-function hozio_sug_handle_unignore() {
-    hozio_sug_guard_request('hozio_sug_unignore');
-    delete_option('hozio_sug_ignored');
-    delete_transient('hozio_sug_lock');
-    $report = hozio_sug_scan();
-    hozio_sug_notice(false, array(
-        'Ignore list cleared. Rows with dev URLs: ' . (int) $report['total_rows'] . '.',
-    ));
-    hozio_sug_bounce(true);
-}
-
-function hozio_sug_ignore_url($table, $pk) {
-    return wp_nonce_url(
-        admin_url('admin-post.php?action=hozio_sug_ignore&t=' . rawurlencode($table) . '&i=' . (int) $pk),
-        'hozio_sug_ignore',
-        'hozio_sug_nonce'
-    );
 }
 
 function hozio_sug_handle_undo() {
@@ -994,7 +948,7 @@ function hozio_sug_url($action) {
  * ---------------------------------------------------------------------- */
 
 function hozio_sug_banner_html($report, $context) {
-    $count = (int) (isset($report['total_rows']) ? $report['total_rows'] : 0);
+    $count = (int) (isset($report['rewritable']) ? $report['rewritable'] : (isset($report['total_rows']) ? $report['total_rows'] : 0));
     $hosts = !empty($report['hosts']) ? implode(', ', (array) $report['hosts']) : 'a dev domain';
     $fixed = ('admin' === $context) ? 'position:relative;' : 'position:fixed;top:0;left:0;right:0;';
 
@@ -1021,7 +975,7 @@ function hozio_sug_banner_html($report, $context) {
 
 function hozio_sug_render_admin_banner() {
     $report = hozio_sug_report();
-    if (empty($report['total_rows'])) {
+    if (empty($report['rewritable'])) {
         return;
     }
     echo hozio_sug_banner_html($report, 'admin'); // phpcs:ignore WordPress.Security.EscapeOutput
@@ -1052,7 +1006,7 @@ function hozio_sug_render_front_banner() {
     }
 
     $report = hozio_sug_report();
-    if (empty($report['total_rows'])) {
+    if (empty($report['rewritable'])) {
         return;
     }
 
@@ -1067,14 +1021,14 @@ function hozio_sug_admin_bar_node($bar) {
         return;
     }
     $report = hozio_sug_report();
-    if (empty($report['total_rows'])) {
+    if (empty($report['rewritable'])) {
         return;
     }
     $bar->add_node(array(
         'id'    => 'hozio-sug',
         'title' => '<span style="display:inline-block;background:#b3140f;color:#fff;font-weight:700;padding:0 9px;border-radius:3px;">DEV URLS ON LIVE SITE</span>',
         'href'  => admin_url('admin.php?page=hozio-plugin-settings'),
-        'meta'  => array('title' => (int) $report['total_rows'] . ' rows still point at a dev domain'),
+        'meta'  => array('title' => (int) $report['rewritable'] . ' rows still point at a dev domain'),
     ));
 }
 
@@ -1088,8 +1042,6 @@ function hozio_sug_init() {
         add_action('admin_post_hozio_sug_preview', 'hozio_sug_handle_preview');
         add_action('admin_post_hozio_sug_fix', 'hozio_sug_handle_fix');
         add_action('admin_post_hozio_sug_undo', 'hozio_sug_handle_undo');
-        add_action('admin_post_hozio_sug_ignore', 'hozio_sug_handle_ignore');
-        add_action('admin_post_hozio_sug_unignore', 'hozio_sug_handle_unignore');
     }
 
     if ('1' !== get_option('hozio_sug_enabled', '1')) {
