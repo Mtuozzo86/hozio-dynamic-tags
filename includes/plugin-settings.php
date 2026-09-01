@@ -1186,6 +1186,21 @@ Disallow: /</pre>
                             <?php endif; ?>
                         </table>
 
+                        <?php if (!empty($sug_preview['stuck_eg'])) : ?>
+                            <div style="margin-top:14px;">
+                                <div style="font-weight:700;font-size:13px;margin-bottom:6px;">
+                                    <?php echo esc_html((int) $sug_preview['stuck']); ?> rows mention the dev domain but hold no rewritable URL.
+                                    This is what they contain:
+                                </div>
+                                <?php foreach ($sug_preview['stuck_eg'] as $sug_x) : ?>
+                                    <div style="background:#fff;border:1px solid #f5d8a8;border-radius:4px;padding:8px;margin-bottom:6px;font-size:11px;font-family:Menlo,Consolas,monospace;word-break:break-all;">
+                                        <div style="color:#57606a;"><?php echo esc_html($sug_x['table'] . ' &middot; ' . $sug_x['col']); ?></div>
+                                        <div><?php echo esc_html($sug_x['text']); ?></div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+
                         <?php if (!empty($sug_preview['samples'])) : ?>
                             <div style="margin-top:14px;">
                                 <div style="font-weight:700;font-size:13px;margin-bottom:6px;">Preview &mdash; nothing has been changed:</div>

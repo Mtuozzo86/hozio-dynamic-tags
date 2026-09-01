@@ -272,10 +272,20 @@ function hozio_sug_table_columns($table) {
 function hozio_sug_targets() {
     global $wpdb;
 
+    // This guard's own bookkeeping legitimately stores the dev hostname - the
+    // scan report records which host it found, and the undo record has to
+    // remember what to put back. Rewriting those destroys the undo record, and
+    // because every scan rewrites the report, the count could never reach zero:
+    // the guard would keep manufacturing rows that match its own search.
+    $skip_options = "`option_name` NOT LIKE 'hozio\_sug\_%'"
+        . " AND `option_name` NOT LIKE 'hozio\_sig\_%'"
+        . " AND `option_name` NOT LIKE '\_transient\_hozio\_s%'"
+        . " AND `option_name` NOT LIKE '\_transient\_timeout\_hozio\_s%'";
+
     $targets = array(
         $wpdb->posts    => array('pk' => 'ID',         'cols' => array('post_content', 'post_excerpt', 'post_title')),
         $wpdb->postmeta => array('pk' => 'meta_id',    'cols' => array('meta_value')),
-        $wpdb->options  => array('pk' => 'option_id',  'cols' => array('option_value')),
+        $wpdb->options  => array('pk' => 'option_id',  'cols' => array('option_value'), 'exclude' => $skip_options),
         $wpdb->termmeta => array('pk' => 'meta_id',    'cols' => array('meta_value')),
         $wpdb->comments => array('pk' => 'comment_ID', 'cols' => array('comment_content')),
     );
@@ -309,7 +319,11 @@ function hozio_sug_targets() {
         if (empty($cols) || !in_array($spec['pk'], $present, true)) {
             continue;
         }
-        $clean[$table] = array('pk' => $spec['pk'], 'cols' => $cols);
+        $clean[$table] = array(
+            'pk'      => $spec['pk'],
+            'cols'    => $cols,
+            'exclude' => isset($spec['exclude']) ? $spec['exclude'] : '',
+        );
     }
 
     return $clean;
@@ -318,7 +332,7 @@ function hozio_sug_targets() {
 /**
  * The WHERE fragment matching any stale pattern in any of the given columns.
  */
-function hozio_sug_where($cols) {
+function hozio_sug_where($cols, $exclude = '') {
     global $wpdb;
 
     $bits = array();
@@ -331,7 +345,16 @@ function hozio_sug_where($cols) {
         }
     }
 
-    return empty($bits) ? '1=0' : '(' . implode(' OR ', $bits) . ')';
+    if (empty($bits)) {
+        return '1=0';
+    }
+
+    $where = '(' . implode(' OR ', $bits) . ')';
+    if ('' !== $exclude) {
+        $where .= ' AND (' . $exclude . ')';
+    }
+
+    return $where;
 }
 
 /* -------------------------------------------------------------------------
@@ -347,7 +370,7 @@ function hozio_sug_any_hits() {
 
     foreach (hozio_sug_targets() as $table => $spec) {
         $sql = 'SELECT 1 FROM `' . str_replace('`', '', $table) . '` WHERE '
-             . hozio_sug_where($spec['cols']) . ' LIMIT 1';
+             . hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '') . ' LIMIT 1';
         if ($wpdb->get_var($sql)) {
             return true;
         }
@@ -375,7 +398,7 @@ function hozio_sug_scan() {
 
     foreach (hozio_sug_targets() as $table => $spec) {
         $safe  = str_replace('`', '', $table);
-        $where = hozio_sug_where($spec['cols']);
+        $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '');
 
         $count = (int) $wpdb->get_var('SELECT COUNT(*) FROM `' . $safe . '` WHERE ' . $where);
         if ($count > 0) {
@@ -534,7 +557,7 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
     foreach (hozio_sug_targets() as $table => $spec) {
         $safe  = str_replace('`', '', $table);
         $pk    = str_replace('`', '', $spec['pk']);
-        $where = hozio_sug_where($spec['cols']);
+        $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '');
         $cols  = array_map(function ($c) { return str_replace('`', '', $c); }, $spec['cols']);
 
         // Keyset pagination, NOT offset. A row that matches the search but that

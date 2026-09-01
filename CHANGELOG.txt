@@ -2,6 +2,26 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.19.2 (August 2026) ==
+
+= Fixes =
+
+* Dev URL Guard was finding, and rewriting, its own bookkeeping. The scan report
+  records which dev hostname it found, and the undo record has to remember what
+  to put back - so both legitimately contain the dev domain, and the guard was
+  treating them as damage to repair.
+
+  Two consequences, both bad. Rewriting the undo record destroyed the ability to
+  undo. And because every scan rewrites the report, the guard kept manufacturing
+  rows that matched its own search, so the count could never reach zero no matter
+  how many times the repair ran.
+
+  Its own options are now excluded from the search and from the repair.
+
+* The preview now shows examples of rows it cannot rewrite. The count was
+  reported in 4.19.1 but the examples were collected and never displayed, so
+  there was no way to see what those rows actually held.
+
 == Version 4.19.1 (August 2026) ==
 
 = Fixes =
