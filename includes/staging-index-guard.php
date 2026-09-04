@@ -48,15 +48,35 @@ function hozio_sig_staging_patterns() {
  * and can be spoofed, so it may turn the guard ON for a request, never off.
  */
 function hozio_sig_environment() {
-    static $env = null;
-    if (null !== $env) {
-        return $env;
+    $decision = hozio_sig_environment_decision();
+
+    return $decision['environment'];
+}
+
+/**
+ * The environment AND how it was decided, so the settings screen can say why
+ * rather than leaving a surprising verdict unexplained.
+ *
+ * Keys: environment ('staging'|'production'), reason (human sentence),
+ * wp_type_says_dev (bool - WP_ENVIRONMENT_TYPE claims non-production),
+ * contradiction (bool - the site URL is a real domain but WP_ENVIRONMENT_TYPE
+ * still says otherwise).
+ */
+function hozio_sig_environment_decision() {
+    static $decision = null;
+    if (null !== $decision) {
+        return $decision;
     }
 
     $override = get_option('hozio_staging_guard_environment', 'auto');
     if ('staging' === $override || 'production' === $override) {
-        $env = $override;
-        return $env;
+        $decision = array(
+            'environment'      => $override,
+            'reason'           => 'Environment detection is set to "Force: ' . $override . '" in these settings.',
+            'wp_type_says_dev' => false,
+            'contradiction'    => false,
+        );
+        return $decision;
     }
 
     $patterns = hozio_sig_staging_patterns();
@@ -75,23 +95,51 @@ function hozio_sig_environment() {
         }
         foreach ($patterns as $pattern) {
             if (false !== stripos($host, $pattern)) {
-                $env = 'staging';
-                return $env;
+                $decision = array(
+                    'environment'      => 'staging',
+                    'reason'           => 'The site address (' . $host . ') contains "' . $pattern . '".',
+                    'wp_type_says_dev' => false,
+                    'contradiction'    => false,
+                );
+                return $decision;
             }
         }
     }
 
-    // WordPress' own environment type, when the host or wp-config sets it.
+    // WordPress' own environment type is a HINT, not the verdict.
+    //
+    // It comes from WP_ENVIRONMENT_TYPE in wp-config or the environment, and
+    // it survives a staging-to-live transfer: copy the files or the database
+    // across and a genuinely live site goes on claiming to be staging. Acting
+    // on that alone once treated a live site as staging, which puts a
+    // "Disallow: /" button in front of a site that must never be blocked.
+    //
+    // Every staging site in this fleet is identifiable from its address, and
+    // the address cannot lie about itself, so the address decides. A dev site
+    // on a custom domain is handled by the manual override.
+    $wp_type_says_dev = false;
     if (function_exists('wp_get_environment_type')) {
-        $type = wp_get_environment_type();
-        if (in_array($type, array('staging', 'development', 'local'), true)) {
-            $env = 'staging';
-            return $env;
-        }
+        $wp_type_says_dev = in_array(wp_get_environment_type(), array('staging', 'development', 'local'), true);
     }
 
-    $env = 'production';
-    return $env;
+    $host = (string) wp_parse_url(home_url(), PHP_URL_HOST);
+    $decision = array(
+        'environment'      => 'production',
+        'reason'           => 'The site address (' . $host . ') is a live domain - it contains no build-environment name.',
+        'wp_type_says_dev' => $wp_type_says_dev,
+        'contradiction'    => $wp_type_says_dev,
+    );
+
+    return $decision;
+}
+
+/**
+ * One sentence explaining the environment verdict.
+ */
+function hozio_sig_environment_reason() {
+    $decision = hozio_sig_environment_decision();
+
+    return $decision['reason'];
 }
 
 function hozio_sig_is_staging() {

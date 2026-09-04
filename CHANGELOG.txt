@@ -2,6 +2,35 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.20.1 (September 2026) ==
+
+= Fixes =
+
+* A live site could be detected as staging after a staging-to-live transfer.
+  WordPress' own environment setting (WP_ENVIRONMENT_TYPE, which Pressable
+  sets) travels with the files and the database, so a genuinely live site kept
+  claiming to be staging - and the guard believed it.
+
+  That is the dangerous direction: a site treated as staging is offered a
+  "Disallow: /" robots.txt, which is exactly what a live site must never have.
+
+  The site address now decides. Every build environment in this fleet is
+  identifiable from its address, and an address cannot lie about itself, so a
+  live domain is production even when WP_ENVIRONMENT_TYPE disagrees. A dev site
+  on a custom domain is still handled by the manual override, which continues
+  to win over everything.
+
+* The settings screen now shows WHY the environment was decided - the address
+  that matched, or the manual override - so a surprising verdict is never
+  unexplained again. When WP_ENVIRONMENT_TYPE contradicts a live address, the
+  panel says so and points at wp-config.php, since that stale value is worth
+  clearing at the source.
+
+= Changes =
+
+* Spacing under the Save Settings button, which sat too close to the Live
+  robots.txt section below it.
+
 == Version 4.20.0 (September 2026) ==
 
 = New Features =

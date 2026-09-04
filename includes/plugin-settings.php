@@ -949,6 +949,12 @@ function hozio_plugin_settings_page() {
                             </td>
                         </tr>
                         <tr>
+                            <td style="padding:3px 18px 3px 0;color:#57606a;vertical-align:top;">Detected because</td>
+                            <td style="padding:3px 0;font-weight:400;color:#57606a;">
+                                <?php echo esc_html(function_exists('hozio_sig_environment_reason') ? hozio_sig_environment_reason() : ''); ?>
+                            </td>
+                        </tr>
+                        <tr>
                             <td style="padding:3px 18px 3px 0;color:#57606a;">Discourage search engines</td>
                             <td style="padding:3px 0;font-weight:600;"><?php echo $sig['discourage_on'] ? 'On (noindex tag is being sent)' : 'Off (pages are indexable)'; ?></td>
                         </tr>
@@ -997,6 +1003,19 @@ function hozio_plugin_settings_page() {
                         </tr>
                         <?php endif; ?>
                     </table>
+
+                    <?php
+                    $sig_decision = function_exists('hozio_sig_environment_decision') ? hozio_sig_environment_decision() : array();
+                    ?>
+                    <?php if (!empty($sig_decision['contradiction'])) : ?>
+                        <div style="margin-top:12px;padding:10px 12px;border:1px solid #f5d8a8;background:#fff4e0;border-radius:4px;font-size:13px;color:#1f2328;">
+                            <strong>Note:</strong> WordPress' own environment setting on this site still says
+                            &ldquo;<?php echo esc_html(wp_get_environment_type()); ?>&rdquo;, but the site address is a live
+                            domain. That setting travels with a staging-to-live transfer, so it is stale here and is being
+                            ignored &mdash; the address decides. To clear it properly, remove
+                            <code>WP_ENVIRONMENT_TYPE</code> from <code>wp-config.php</code> on this site.
+                        </div>
+                    <?php endif; ?>
 
                     <?php if (!empty($sig['issues'])) : ?>
                         <ul style="margin:12px 0 0;padding-left:18px;font-size:13px;color:#1f2328;">
@@ -1649,13 +1668,13 @@ Disallow: /</pre>
                 </div>
             </div>
 
-            <div class="hozio-submit-wrapper">
+            <div class="hozio-submit-wrapper" style="margin-bottom:28px;">
                 <button type="submit" class="button button-primary button-large">Save Settings</button>
             </div>
         </form>
 
             <!-- Live robots.txt: view / edit / apply template (own form - it must not nest inside the settings form) -->
-            <div class="hozio-section" id="hozio-robots-editor">
+            <div class="hozio-section" id="hozio-robots-editor" style="margin-top:28px;">
                 <h2 class="hozio-section-title">Live robots.txt</h2>
                 <p class="hozio-section-description">
                     The file crawlers are served at
