@@ -430,11 +430,15 @@ function hozio_rt_settings_url() {
 function hozio_rt_banner_html($context) {
     $detail  = get_option('hozio_rt_detail', array());
     $message = !empty($detail['message']) ? (string) $detail['message'] : 'The robots.txt being served does not match what it should say.';
+    // Sits just BELOW the WordPress toolbar (z-index 99999). The toolbar's
+    // drop-down menus are children of it and share its stacking context, so a
+    // banner above 99999 covers every menu the moment one opens. High enough to
+    // clear ordinary page content, low enough that the toolbar always wins.
     $fixed   = ('admin' === $context) ? 'position:relative;' : 'position:fixed;';
 
     ob_start();
     ?>
-    <div id="hozio-rt-bar" style="<?php echo esc_attr($fixed); ?>z-index:2147483638;background:#b3140f;border-bottom:3px solid #7d0d0a;color:#fff;padding:12px 16px;font:600 13px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.25);">
+    <div id="hozio-rt-bar" style="<?php echo esc_attr($fixed); ?>z-index:99988;background:#b3140f;border-bottom:3px solid #7d0d0a;color:#fff;padding:12px 16px;font:600 13px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.25);">
         <div style="max-width:1400px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
             <span style="font-size:15px;font-weight:800;letter-spacing:.03em;white-space:nowrap;">ROBOTS.TXT NEEDS ATTENTION</span>
             <span style="font-weight:400;flex:1 1 320px;min-width:0;"><?php echo esc_html($message); ?></span>

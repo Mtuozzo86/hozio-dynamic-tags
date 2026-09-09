@@ -2,6 +2,24 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.20.4 (September 2026) ==
+
+= Fixes =
+
+* WordPress toolbar drop-down menus opened BEHIND the warning banner. The
+  banner sat at the very top of the stacking order (z-index 2147483640), and
+  the toolbar's menus are children of the toolbar itself, which WordPress puts
+  at 99999 - so any menu that dropped past the toolbar was painted underneath
+  the banner and could not be used.
+
+  All three banners now sit just below the toolbar (99990, 99989, 99988):
+  still above ordinary page content, but low enough that the toolbar and its
+  menus always win.
+
+  The same fault would have covered wp-admin's own modal windows, which sit at
+  160000 - the media library picker among them. That is fixed by the same
+  change.
+
 == Version 4.20.3 (September 2026) ==
 
 = Fixes =
