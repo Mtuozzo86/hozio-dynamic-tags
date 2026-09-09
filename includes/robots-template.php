@@ -430,7 +430,7 @@ function hozio_rt_settings_url() {
 function hozio_rt_banner_html($context) {
     $detail  = get_option('hozio_rt_detail', array());
     $message = !empty($detail['message']) ? (string) $detail['message'] : 'The robots.txt being served does not match what it should say.';
-    $fixed   = ('admin' === $context) ? 'position:relative;' : 'position:fixed;top:0;left:0;right:0;';
+    $fixed   = ('admin' === $context) ? 'position:relative;' : 'position:fixed;';
 
     ob_start();
     ?>
@@ -483,7 +483,21 @@ function hozio_rt_render_front_banner() {
 
     $GLOBALS['hozio_rt_front_done'] = true;
 
-    echo '<style>#hozio-rt-bar{top:0}.admin-bar #hozio-rt-bar{top:32px}@media screen and (max-width:782px){.admin-bar #hozio-rt-bar{top:46px}}</style>';
+    // The bar's placement lives here, NOT in the element's inline style. An
+    // inline declaration beats any stylesheet rule that is not !important, so
+    // an inline "top:0" made every offset below unreachable and the bar sat on
+    // top of the WordPress toolbar.
+    //
+    // The offset is decided in PHP rather than by a body class: a theme that
+    // forgets body_class() never gets "admin-bar", and an administrator who has
+    // turned the toolbar off in their profile needs no offset at all.
+    $bar_offset = is_admin_bar_showing() ? 32 : 0;
+    $bar_css    = '#hozio-rt-bar{left:0;right:0;top:' . (int) $bar_offset . 'px}';
+    if ($bar_offset) {
+        // WordPress makes its own toolbar 46px tall below 782px wide.
+        $bar_css .= '@media screen and (max-width:782px){#hozio-rt-bar{top:46px}}';
+    }
+    echo '<style>' . $bar_css . '</style>'; // phpcs:ignore WordPress.Security.EscapeOutput
     echo hozio_rt_banner_html('front'); // phpcs:ignore WordPress.Security.EscapeOutput
 }
 

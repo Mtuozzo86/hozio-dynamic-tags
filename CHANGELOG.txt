@@ -2,6 +2,25 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.20.2 (September 2026) ==
+
+= Fixes =
+
+* The red warning banner covered the WordPress toolbar on the front end. All
+  three banners - staging index, dev URLs and robots.txt - sat over the admin
+  bar for every logged-in administrator instead of below it.
+
+  The offset was written as a stylesheet rule while the element carried
+  "top:0" in its own inline style attribute. An inline declaration beats any
+  stylesheet rule that is not marked !important, so the offset could never
+  apply and the bar was pinned to the top of the window.
+
+  Placement now lives entirely in the stylesheet, and the offset is worked out
+  in PHP from whether the toolbar is actually showing - rather than relying on
+  the "admin-bar" class, which a theme that forgets body_class() never adds.
+  An administrator who has switched the toolbar off in their profile correctly
+  gets no offset at all, and the 46px toolbar below 782px wide is handled.
+
 == Version 4.20.1 (September 2026) ==
 
 = Fixes =
