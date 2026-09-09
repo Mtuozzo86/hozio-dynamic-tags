@@ -2,6 +2,47 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.20.3 (September 2026) ==
+
+= Fixes =
+
+* An uploaded file whose NAME contains a dev domain could have been rewritten,
+  breaking the attachment. A filename like
+  "screencapture-2-hoziodev-2024-11-13.jpg" reads as a hostname - labels of
+  letters, digits and hyphens ending in ".jpg" - so the repair treated it as a
+  link and would have replaced the filename with the live domain, orphaning the
+  image.
+
+  A build pattern must now be a WHOLE label of the name, which is what a real
+  build host always looks like (18.hoziodev.com,
+  client.mystagingwebsite.com). A pattern buried inside one label, as it is in
+  a filename, is no longer a hostname.
+
+* The Dev URL count said rows needed fixing when none did, and Fix could not
+  clear it. Every scan made three passes over each table - a COUNT, a 200-row
+  sample for hostnames, then a full evaluation walk. On a large site that
+  overran the time budget, and an unfinished pass fell back to assuming every
+  row it had found was fixable.
+
+  On hozio.com, whose only matches were four uploaded filenames, that produced
+  "4 database rows still point at a dev domain" above "0 rows are not counted"
+  listing four rows, with a Fix button that ran for a long time and changed
+  nothing.
+
+  The scan is now a single pass: it counts each row, decides whether the repair
+  could rewrite it, and collects hostnames, all in one walk. Roughly a third of
+  the database work, and the counts are exact.
+
+* An unfinished pass no longer invents work. It reports only what it actually
+  examined, says plainly on the settings screen that it stopped early, and
+  leaves the warning banner keyed to what is known rather than assumed.
+
+* The time budget now adapts to the site's own PHP execution limit instead of a
+  fixed 20 seconds, leaving headroom so a long pass never dies mid-request.
+
+* A row left alone because the dev name sits in an uploaded file's name now says
+  exactly that, rather than the generic "not a web address".
+
 == Version 4.20.2 (September 2026) ==
 
 = Fixes =

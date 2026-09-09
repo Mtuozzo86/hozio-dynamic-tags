@@ -1159,7 +1159,8 @@ Disallow: /</pre>
                 $sug_report = function_exists('hozio_sug_report') ? hozio_sug_report() : array();
                 $sug_total  = isset($sug_report['total_rows']) ? (int) $sug_report['total_rows'] : 0;
                 $sug_rows   = isset($sug_report['rewritable']) ? (int) $sug_report['rewritable'] : $sug_total;
-                $sug_info   = max(0, $sug_total - $sug_rows);
+                $sug_info   = isset($sug_report['unfixable']) ? (int) $sug_report['unfixable'] : max(0, $sug_total - $sug_rows);
+                $sug_done   = !isset($sug_report['finished']) || !empty($sug_report['finished']);
                 $sug_left   = !empty($sug_report['leftovers']) ? (array) $sug_report['leftovers'] : array();
                 $sug_seen   = !empty($sug_report['scanned_at']);
 
@@ -1266,6 +1267,14 @@ Disallow: /</pre>
                                         <div style="color:#116329;">+ <?php echo esc_html($sug_s['after']); ?></div>
                                     </div>
                                 <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if (!$sug_done) : ?>
+                            <div style="margin-top:12px;padding:10px 12px;border:1px solid #f5d8a8;background:#fff4e0;border-radius:4px;font-size:13px;color:#1f2328;">
+                                <strong>This scan stopped early.</strong> It ran out of time before reaching the end of
+                                the database, so the numbers above cover only what it managed to check. Press
+                                &ldquo;Scan now&rdquo; to carry on.
                             </div>
                         <?php endif; ?>
 

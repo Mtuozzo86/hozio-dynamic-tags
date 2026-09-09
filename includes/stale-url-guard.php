@@ -80,16 +80,55 @@ function hozio_sug_find_hosts($text) {
     if (preg_match_all($re, $text, $matches)) {
         foreach ($matches[1] as $host) {
             $host = rtrim(strtolower($host), '.');
-            foreach (hozio_sug_patterns() as $pattern) {
-                if (false !== stripos($host, $pattern)) {
-                    $found[$host] = true;
-                    break;
-                }
+            if (hozio_sug_is_dev_host($host)) {
+                $found[$host] = true;
             }
         }
     }
 
     return array_keys($found);
+}
+
+/**
+ * Is this dotted name actually a build hostname?
+ *
+ * The pattern has to be a WHOLE label of the name, not a fragment inside one.
+ * Without that rule an uploaded file called
+ * "screencapture-2-hoziodev-2024-11-13.jpg" reads as a hostname - labels of
+ * letters, digits and hyphens ending in ".jpg" - and the repair would rewrite
+ * the filename into a domain, breaking the attachment it belongs to.
+ *
+ * A real build host always carries the pattern as its own label:
+ * 18.hoziodev.com, lisacaputorealtor.mystagingwebsite.com.
+ */
+function hozio_sug_is_dev_host($host) {
+    $host = strtolower(trim((string) $host, '.'));
+    if ('' === $host || false === strpos($host, '.')) {
+        return false;
+    }
+
+    $labels = explode('.', $host);
+
+    foreach (hozio_sug_patterns() as $pattern) {
+        $pattern = strtolower(trim((string) $pattern, '.'));
+        if ('' === $pattern) {
+            continue;
+        }
+
+        if (false !== strpos($pattern, '.')) {
+            // A pattern that is itself dotted matches the name or its suffix.
+            if ($host === $pattern || substr($host, -strlen('.' . $pattern)) === '.' . $pattern) {
+                return true;
+            }
+            continue;
+        }
+
+        if (in_array($pattern, $labels, true)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -431,10 +470,44 @@ function hozio_sug_any_hits() {
 }
 
 /**
- * Full scan: per-table counts and the distinct dev hostnames involved.
+ * How long one pass may run before it stops and reports itself unfinished.
+ *
+ * Kept safely under PHP's own limit so a big site never dies mid-request.
+ */
+function hozio_sug_budget() {
+    $max = (int) ini_get('max_execution_time');
+    if ($max <= 0) {
+        return 25; // no limit (cron / CLI)
+    }
+
+    return max(8, min(25, $max - 10));
+}
+
+/**
+ * Why a row that mentions a dev domain still cannot be rewritten.
+ */
+function hozio_sug_why_stuck($value) {
+    if (false !== stripos((string) $value, 'wp-content/uploads')) {
+        return 'the dev name is part of an uploaded file\'s name, not a web address - renaming it would break the file';
+    }
+
+    return 'mentions the dev domain, but not as a web address - nothing to rewrite';
+}
+
+/**
+ * Walk every matching row ONCE: count it, work out whether the repair could
+ * rewrite it, and collect the dev hostnames it contains.
+ *
+ * This used to be three passes over each table - a COUNT, a 200-row sample for
+ * hostnames, then a full evaluation walk. On a large site that overran the time
+ * budget, and an unfinished pass fell back to assuming every row found was
+ * fixable. A site whose only matches were four uploaded FILENAMES containing
+ * "hoziodev" was told four rows needed fixing, offered a Fix button that could
+ * not do anything, and never went quiet. One pass is both faster and exact.
+ *
  * Never call this on a page load.
  */
-function hozio_sug_scan() {
+function hozio_sug_scan($budget = 0) {
     global $wpdb;
 
     if (get_transient('hozio_sug_lock')) {
@@ -443,67 +516,140 @@ function hozio_sug_scan() {
     }
     set_transient('hozio_sug_lock', 1, 5 * MINUTE_IN_SECONDS);
 
-    $tables = array();
-    $hosts  = array();
-    $total  = 0;
+    if (0 === $budget) {
+        $budget = hozio_sug_budget();
+    }
+
+    $new_host = hozio_sug_target_host();
+    $scheme   = hozio_sug_target_scheme();
+    $needles  = hozio_sug_patterns();
+
+    $tables     = array();
+    $hosts      = array();
+    $leftovers  = array();
+    $total      = 0;
+    $rewritable = 0;
+    $unfixable  = 0;
+    $finished   = true;
+    $started    = microtime(true);
 
     foreach (hozio_sug_targets() as $table => $spec) {
+        if (!$finished) {
+            break;
+        }
+
         $safe  = str_replace('`', '', $table);
+        $pk    = str_replace('`', '', $spec['pk']);
         $where = hozio_sug_where($spec['cols'], isset($spec['exclude']) ? $spec['exclude'] : '');
+        $cols  = array_map(function ($c) { return str_replace('`', '', $c); }, $spec['cols']);
+        $lbls  = isset($spec['label']) ? array_map(function ($c) { return str_replace('`', '', $c); }, $spec['label']) : array();
+        $fetch = array_values(array_unique(array_merge($cols, $lbls)));
 
-        $count = (int) $wpdb->get_var('SELECT COUNT(*) FROM `' . $safe . '` WHERE ' . $where);
-        if ($count > 0) {
-            $tables[$table] = $count;
-            $total += $count;
+        $seen     = 0;
+        $after_id = 0;
 
-            // Sample a few rows to learn which dev hostnames are actually in use.
-            $cols = '`' . implode('`, `', array_map(function ($c) { return str_replace('`', '', $c); }, $spec['cols'])) . '`';
-            // Sample generously: a site can carry more than one build hostname and
-            // a small sample will simply never see the second one.
-            $rows = $wpdb->get_results('SELECT ' . $cols . ' FROM `' . $safe . '` WHERE ' . $where . ' LIMIT 200', ARRAY_A);
-            foreach ((array) $rows as $row) {
-                foreach ((array) $row as $value) {
-                    foreach (hozio_sug_find_hosts((string) $value) as $host) {
-                        $hosts[$host] = isset($hosts[$host]) ? $hosts[$host] + 1 : 1;
+        while (true) {
+            if ((microtime(true) - $started) > $budget) {
+                $finished = false;
+                break;
+            }
+
+            // Keyset paging: a row we cannot rewrite still matches next time,
+            // so the cursor must only ever move forwards.
+            $select = '`' . $pk . '`, `' . implode('`, `', $fetch) . '`';
+            $rows   = $wpdb->get_results(
+                'SELECT ' . $select . ' FROM `' . $safe . '` WHERE ' . $where
+                . ' AND `' . $pk . '` > ' . (int) $after_id
+                . ' ORDER BY `' . $pk . '` ASC LIMIT 100',
+                ARRAY_A
+            );
+            if (empty($rows)) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                $id = isset($row[$pk]) ? $row[$pk] : 0;
+                if ((int) $id > $after_id) {
+                    $after_id = (int) $id;
+                }
+
+                $seen++;
+                $total++;
+
+                $row_fixable = false;
+                $eg          = null;
+
+                foreach ($cols as $col) {
+                    $value = isset($row[$col]) ? $row[$col] : null;
+                    if (!is_string($value) || '' === $value) {
+                        continue;
+                    }
+
+                    foreach (hozio_sug_find_hosts($value) as $found_host) {
+                        $hosts[$found_host] = isset($hosts[$found_host]) ? $hosts[$found_host] + 1 : 1;
+                    }
+
+                    if (hozio_sug_is_unsafe_row($value)) {
+                        if (null === $eg) {
+                            $eg = array(
+                                'col'  => $col,
+                                'why'  => 'stored data from a plugin that is no longer installed - cannot be safely rewritten, and nothing reads it',
+                                'text' => hozio_sug_snippet($value, $needles),
+                            );
+                        }
+                        continue;
+                    }
+
+                    $changed = false;
+                    hozio_sug_replace_deep(
+                        $value,
+                        array('hosts' => array(), 'new' => $new_host, 'scheme' => $scheme),
+                        $changed
+                    );
+                    if ($changed) {
+                        $row_fixable = true;
+                        break;
+                    }
+
+                    if (null === $eg && hozio_sug_mentions_dev($value)) {
+                        $eg = array(
+                            'col'  => $col,
+                            'why'  => hozio_sug_why_stuck($value),
+                            'text' => hozio_sug_snippet($value, $needles),
+                        );
+                    }
+                }
+
+                if ($row_fixable) {
+                    $rewritable++;
+                } else {
+                    $unfixable++;
+                    if (null !== $eg && count($leftovers) < 12) {
+                        $leftovers[] = array(
+                            'table' => $table,
+                            'pk'    => $id,
+                            'col'   => $eg['col'],
+                            'label' => hozio_sug_row_label($row, $lbls),
+                            'why'   => $eg['why'],
+                            'text'  => $eg['text'],
+                        );
                     }
                 }
             }
+        }
+
+        if ($seen > 0) {
+            $tables[$table] = $seen;
         }
     }
 
     arsort($hosts);
 
-    // The number that matters is how many rows the repair can actually
-    // rewrite. A row that merely mentions a dev domain without holding a web
-    // address, or whose stored data cannot be read back, is not a link and is
-    // not counted - it is listed for information and nothing more. This is
-    // what lets the count reach zero when everything is genuinely fixed,
-    // without anyone having to dismiss rows by hand.
-    $rewritable = $total;
-    $leftovers  = array();
-    $finished   = true;
-    if ($total > 0) {
-        $dry = hozio_sug_run('dry');
-        if (!empty($dry['ok'])) {
-            $finished = !empty($dry['finished']);
-            if ($finished) {
-                $rewritable = (int) $dry['rows'];
-            }
-            foreach ((array) $dry['stuck_eg'] as $x) {
-                $x['why'] = 'mentions the dev domain, but not as a web address - nothing to rewrite';
-                $leftovers[] = $x;
-            }
-            foreach ((array) $dry['unsafe_eg'] as $x) {
-                $x['why'] = 'stored data from a plugin that is no longer installed - cannot be safely rewritten, and nothing reads it';
-                $leftovers[] = $x;
-            }
-        }
-    }
-
     $report = array(
         'scanned_at' => time(),
         'total_rows' => $total,
         'rewritable' => $rewritable,
+        'unfixable'  => $unfixable,
         'leftovers'  => $leftovers,
         'finished'   => $finished,
         'tables'     => $tables,
@@ -512,7 +658,12 @@ function hozio_sug_scan() {
     );
 
     update_option('hozio_sug_report', $report, false);
+
+    // The banner reflects what is KNOWN to need fixing. An unfinished pass is
+    // reported in the panel rather than guessed at - assuming unexamined rows
+    // are broken is what kept a clean site permanently red.
     update_option('hozio_sug_found', $rewritable > 0 ? '1' : '0', true);
+
     delete_transient('hozio_sug_lock');
 
     return $report;
@@ -573,8 +724,12 @@ function hozio_sug_is_live() {
  * replacement backwards over exactly those rows, which keeps content and any
  * credentials sitting in wp_options out of a backup file.
  */
-function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 20) {
+function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 0) {
     global $wpdb;
+
+    if (0 === $budget) {
+        $budget = hozio_sug_budget();
+    }
 
     if (!hozio_sug_is_live()) {
         return array('ok' => false, 'message' => 'This is a dev or staging site. Dev URLs belong here, so nothing was changed.');
