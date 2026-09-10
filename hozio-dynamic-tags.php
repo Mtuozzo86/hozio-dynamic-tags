@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.20.4
+Version:         4.20.5
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -22,7 +22,7 @@ Text Domain:     hozio-dynamic-tags
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.20.4');
+define('HOZIO_VERSION', '4.20.5');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -762,10 +762,102 @@ function hozio_icon_list_strip_u_tags( $content, $widget ) {
 // script, or style block. Conservative by design — the > regex excludes
 // chars preceded by spaces/alphanumerics to avoid false positives on
 // normal closing tags.
+//
+// This runs at priority 20, AFTER do_shortcode and after Elementor injects
+// its builder output at priority 9, so it sees fully rendered markup —
+// including any <script> a shortcode or page builder emitted. Inline
+// JavaScript is full of characters the > rule matches: `=>`, `->` and `)>`
+// all qualify, and a single escaped character is a SyntaxError that kills the
+// whole script silently. On angeloakspetcrematory.com that broke Gravity
+// Forms' AJAX bootstrap, so every Continue button span forever. <script>,
+// <style> and HTML comments are therefore exempt.
+//
+// The exemption is applied by matching those blocks as a leading ALTERNATIVE
+// in the same pattern, not by splitting the content up first. That
+// distinction matters: both regexes below use lookbehind and lookahead, and
+// splitting would evaluate them against segment edges instead of the real
+// neighbouring characters — silently changing the result for prose that sits
+// next to a block. ")><script>" is the case that proves it: the old code left
+// that > alone because a < follows it, and a split-based fix would escape it.
+// Matching over the whole string keeps every lookaround seeing exactly what
+// it saw before, so prose behaviour is unchanged.
 add_filter( 'the_content', 'hozio_escape_stray_angle_brackets', 20 );
+
+/**
+ * True when the content holds an opening <script or <style with no matching
+ * close. Neither element nests, so comparing counts is enough to spot it.
+ * A partial block cannot be located reliably, so the caller leaves the
+ * content alone rather than guessing where it ends.
+ *
+ * @param string $content
+ * @return bool
+ */
+function hozio_has_unclosed_script_or_style( $content ) {
+    foreach ( array( 'script', 'style' ) as $tag ) {
+        $opens  = preg_match_all( '/<' . $tag . '\b/i', $content );
+        $closes = preg_match_all( '/<\/' . $tag . '\b/i', $content );
+        if ( $opens !== $closes ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * One escape pass over the whole string.
+ *
+ * Returns the input untouched when the regex engine fails — preg_replace_callback
+ * returns null on a backtrack limit, and the previous code passed that null
+ * straight back as the post content, blanking the post.
+ *
+ * @param string $content
+ * @param string $pattern     Body of the pattern, without delimiters.
+ * @param string $replacement Entity to substitute for the bare bracket.
+ * @return string
+ */
+function hozio_escape_angle_pass( $content, $pattern, $replacement ) {
+    $result = preg_replace_callback(
+        '/' . $pattern . '/',
+        function ( $m ) use ( $replacement ) {
+            // Group 1 is only set when the exempt-block alternative matched;
+            // hand those back byte for byte.
+            if ( isset( $m[1] ) && '' !== $m[1] ) {
+                return $m[1];
+            }
+
+            return $replacement;
+        },
+        $content
+    );
+
+    return ( null === $result ) ? $content : $result;
+}
+
 function hozio_escape_stray_angle_brackets( $content ) {
-    $content = preg_replace( '/(?<![="\'\w])<(?![\/a-zA-Z!?\-])/', '&lt;', $content );
-    $content = preg_replace( '/(?<![a-zA-Z0-9"\'\/\s])>(?!\s*<)/', '&gt;', $content );
+    // Escape hatch for a site that needs this off entirely.
+    if ( ! apply_filters( 'hozio_angle_bracket_fix_enabled', true ) ) {
+        return $content;
+    }
+    if ( ! is_string( $content ) || '' === $content ) {
+        return $content;
+    }
+    // Neither regex can match without one of these two characters present.
+    if ( false === strpos( $content, '<' ) && false === strpos( $content, '>' ) ) {
+        return $content;
+    }
+    if ( hozio_has_unclosed_script_or_style( $content ) ) {
+        return $content;
+    }
+
+    // Consumed whole and returned verbatim, so the scan resumes past the block
+    // and nothing inside one is ever examined by the rules below.
+    $blocks = '(?is:(<script\b.*?<\/script>|<style\b.*?<\/style>|<!--.*?-->))';
+
+    // The two rules themselves are unchanged, and still run in this order.
+    $content = hozio_escape_angle_pass( $content, $blocks . '|(?<![="\'\w])<(?![\/a-zA-Z!?\-])', '&lt;' );
+    $content = hozio_escape_angle_pass( $content, $blocks . '|(?<![a-zA-Z0-9"\'\/\s])>(?!\s*<)', '&gt;' );
+
     return $content;
 }
 

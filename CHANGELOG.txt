@@ -2,6 +2,54 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.20.5 (September 2026) ==
+
+= Fixes =
+
+* Inline JavaScript in post content was being corrupted, silently breaking any
+  script in the page. The stray-angle-bracket filter ran over the whole
+  rendered post with no exemption for <script>, <style> or HTML comments, so
+  every "=>", "->" and ")>" inside a script became "=&gt;", "-&gt;", ")&gt;".
+  One escaped character is a SyntaxError, and the whole script dies without a
+  word in the page.
+
+  On angeloakspetcrematory.com that killed Gravity Forms' AJAX bootstrap and
+  its iframe response handler: the submission lock never released and every
+  Continue and Save button showed an endless spinner.
+
+  The filter runs at priority 20 - after do_shortcode, and after Elementor
+  injects builder output at priority 9 - so it saw every script the page
+  produced, which is why the reach was so wide.
+
+  <script>, <style> and HTML comments are now exempt and come back byte for
+  byte. Content with an unclosed <script> or <style> is left completely
+  untouched, because a partial block cannot be located reliably.
+
+= Notes =
+
+* Prose behaviour is unchanged, and that is verified rather than assumed: the
+  two rules are byte-identical to the previous ones and a differential test
+  compares the new function against the old across 40,050 inputs - real
+  markup, prose, entities, shortcodes and randomised fuzzing - asserting
+  byte-identical output on every one. 18,052 of those are cases where the
+  rules actually change something.
+
+* The exemption is applied by matching the exempt blocks as an alternative
+  within the same pattern, NOT by splitting the content first. Both rules use
+  lookbehind and lookahead, and splitting evaluates them against segment edges
+  instead of the real neighbouring characters. ")><script>" is the proof: the
+  old code left that ">" alone because a "<" follows it, and a split-based fix
+  escapes it. Matching over the whole string keeps every lookaround seeing
+  what it saw before.
+
+* Added guards the old version lacked: a non-string (or null) is returned
+  untouched, and a regex-engine failure now returns the content rather than
+  the null preg_replace hands back on failure - which the old code passed
+  straight through as the post content.
+
+* New 'hozio_angle_bracket_fix_enabled' filter turns the whole thing off for a
+  site that needs it off.
+
 == Version 4.20.4 (September 2026) ==
 
 = Fixes =
