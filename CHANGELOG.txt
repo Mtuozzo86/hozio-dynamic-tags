@@ -2,6 +2,56 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.20.6 (September 2026) ==
+
+= Fixes =
+
+* Dev URL Guard: "Fix now" disconnected ACF fields on Elementor sites. Elementor
+  stores every dynamic tag's settings URL-encoded, so a link inside one reads
+  "https%3A%2F%2Fsite.mystagingwebsite.com". The "2F" of the last %2F runs
+  straight into the hostname, and the scan read "2fsite.mystagingwebsite.com"
+  as the hostname - which is why the panel listed domains starting with "2f".
+  The repair then replaced the "2F" along with the name, leaving "%5C%www..."
+  behind. That is not valid encoding: Elementor could no longer decode the
+  tag, dropped its settings, and the ACF field key went with them.
+
+  A hostname can no longer begin inside an escape sequence. It may begin right
+  after a complete one - %2F, %252F (encoded twice), the JSON escape backslash-u003e, \x2F, \n, \r, \t -
+  and URL-encoded links get their own rule that changes only the scheme and
+  host, keeping every escape byte for byte.
+
+* Rows already damaged by an earlier "Fix now" are found and repaired. The old
+  repair left one exact signature - an encoded slash or backslash, a bare %,
+  then the live hostname - which no encoder ever writes. The scan counts these
+  rows (the panel shows them as "Broken by an earlier fix") and "Fix now" puts
+  the missing "2F" back. Nothing is written until the button is pressed.
+  Damage that cannot be reconstructed with certainty is left alone.
+
+* Reports and undo records written by earlier versions can hold "2f..."
+  hostnames. They are cleaned before use, so Undo can never write a hostname
+  that did not exist.
+
+* After a fix or undo that changed rows, Elementor's CSS and element cache is
+  cleared (the same as Tools > Regenerate CSS & Data), so background images
+  and other generated output stop loading from the dev domain.
+
+= Notes =
+
+* Verified against millermarineservices.com's real data (read-only dry run):
+  all 26 affected _elementor_data rows rewritten in memory, zero dev hosts
+  left, zero broken documents, zero dynamic tags altered or undecodable.
+
+* A differential test runs the new discovery and rewrite against the shipped
+  4.20.5 code over 218 inputs with no escape next to a hostname: output is
+  byte-identical on every one. Everything else about the guard behaves exactly
+  as before.
+
+* Damage round-trip test: text broken by the real 4.20.5 code, then repaired
+  by 4.20.6, equals a clean 4.20.6 fix of the original - across www and bare
+  live hosts, hosts that begin with hex letters (bestroofing, cafedeluxe),
+  JSON-inside-URL-encoded values and double encoding. One accepted difference:
+  a damaged http:// link is repaired but keeps "http".
+
 == Version 4.20.5 (September 2026) ==
 
 = Fixes =

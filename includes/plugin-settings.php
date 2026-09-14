@@ -1224,6 +1224,16 @@ Disallow: /</pre>
                                     <td style="padding:3px 0;font-weight:600;"><?php echo esc_html(implode(', ', (array) $sug_report['hosts'])); ?></td>
                                 </tr>
                             <?php endif; ?>
+                            <?php if (!empty($sug_report['damaged'])) : ?>
+                                <tr>
+                                    <td style="padding:3px 18px 3px 0;color:#57606a;vertical-align:top;">Broken by an earlier fix</td>
+                                    <td style="padding:3px 0;font-weight:600;color:#7d0d0a;">
+                                        <?php echo esc_html((int) $sug_report['damaged']); ?> of these rows hold links a version before 4.20.6 damaged.
+                                        Elementor cannot read them, so dynamic tags (ACF fields) on those pages may be disconnected.
+                                        Fix now repairs them.
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
                             <?php if (!empty($sug_report['tables'])) : ?>
                                 <tr>
                                     <td style="padding:3px 18px 3px 0;color:#57606a;vertical-align:top;">Where they are</td>

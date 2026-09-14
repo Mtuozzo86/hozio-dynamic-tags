@@ -76,7 +76,7 @@ function hozio_sug_find_hosts($text) {
     // Hostnames appear with escaped slashes inside JSON, so normalise first.
     $text = str_replace(chr(92) . '/', '/', $text);
 
-    $re = '#(?<![A-Za-z0-9.\-])((?:[A-Za-z0-9\-]+\.)+[A-Za-z0-9\-]+)(?![A-Za-z0-9\-])#';
+    $re = '#' . hozio_sug_host_start() . '((?:[A-Za-z0-9\-]+\.)+[A-Za-z0-9\-]+)(?![A-Za-z0-9\-])#';
     if (preg_match_all($re, $text, $matches)) {
         foreach ($matches[1] as $host) {
             $host = rtrim(strtolower($host), '.');
@@ -129,6 +129,127 @@ function hozio_sug_is_dev_host($host) {
     }
 
     return false;
+}
+
+/**
+ * Where a hostname is allowed to BEGIN, as a regex fragment.
+ *
+ * An escape sequence ends in letters and digits, which are also what hostnames
+ * are made of. Elementor stores every dynamic tag's settings URL-encoded, so a
+ * link inside one reads "https%3A%2F%2Fsite.mystagingwebsite.com": the "2F" of
+ * the last %2F runs straight into the hostname. Treating only non-hostname
+ * characters as a boundary made "2fsite.mystagingwebsite.com" the hostname, and
+ * the repair then replaced the "2F" along with it. What was left - "%5C%www..."
+ * - is not valid encoding, Elementor could no longer decode the tag, and it
+ * silently dropped the tag's settings: ACF fields came unhooked from their
+ * widgets.
+ *
+ * So a hostname may start where the previous character cannot be part of one,
+ * and never directly after a bare % or backslash (that is the middle of an
+ * escape). It MAY start right after a complete escape: %2F, %252F (encoded
+ * twice), \u003e, \x2F, and the JSON escapes \n, \r and \t.
+ */
+function hozio_sug_host_start() {
+    return '(?:'
+        . '(?<![A-Za-z0-9.%\\\\\-])'
+        . '|(?<=%[0-9A-Fa-f]{2})(?!(?<=%25)[0-9A-Fa-f]{2})'
+        . '|(?<=%25[0-9A-Fa-f]{2})'
+        . '|(?<=\\\\u[0-9A-Fa-f]{4})'
+        . '|(?<=\\\\x[0-9A-Fa-f]{2})'
+        . '|(?<=\\\\[nrt])'
+        . ')';
+}
+
+/**
+ * Tidy a hostname recorded by an earlier version.
+ *
+ * Reports and undo records written before 4.20.6 can hold "2fsite.mystagingwebsite.com"
+ * - an escape fragment read as part of the name. Putting that back on undo would
+ * write a hostname that never existed. The prefix is only removed when what is
+ * left is itself a build hostname.
+ */
+function hozio_sug_clean_host($host) {
+    $host = strtolower(trim((string) $host, " \t."));
+    if (preg_match('/^(?:25)*2f(.+)$/', $host, $m) && hozio_sug_is_dev_host($m[1])) {
+        return $m[1];
+    }
+
+    return $host;
+}
+
+/**
+ * The live hostname with and without "www.", or nothing on a build site.
+ */
+function hozio_sug_live_bare_host() {
+    $host = strtolower((string) wp_parse_url(home_url(), PHP_URL_HOST));
+    $bare = preg_replace('/^www\./', '', $host);
+    if ('' === $bare || hozio_sug_is_dev_host($bare)) {
+        return '';
+    }
+
+    return $bare;
+}
+
+/**
+ * Search strings that find rows an earlier version damaged: the live hostname
+ * glued straight onto a bare %. Valid encoding never produces that.
+ */
+function hozio_sug_damage_needles() {
+    $bare = hozio_sug_live_bare_host();
+    if ('' === $bare) {
+        return array();
+    }
+
+    return array('%' . $bare, '%www.' . $bare);
+}
+
+/**
+ * Regex for the damage versions up to 4.20.5 left behind, or '' when there is
+ * no live hostname to look for.
+ *
+ * The old repair turned "%2F%2Fdev-host" into "%2F%live-host" and
+ * "%5C%2F%5C%2Fdev-host" into "%5C%2F%5C%live-host" - it removed exactly the
+ * "2F" of the final escape ("252F" when the text was encoded twice). A % that
+ * follows an encoded slash or backslash and runs straight into the live
+ * hostname can only be that damage: no encoder writes a bare % there. Anything
+ * less certain is left alone.
+ */
+function hozio_sug_damage_pattern() {
+    $bare = hozio_sug_live_bare_host();
+    if ('' === $bare) {
+        return '';
+    }
+
+    // The host must end there: "live.com.au" or "live.company" is somebody else.
+    return '#%((?:25)?)(2F|5C)%(?=(?:www\.)?' . preg_quote($bare, '#') . '(?![A-Za-z0-9\-]|\.[A-Za-z0-9]))#i';
+}
+
+/**
+ * Put back the "2F" an earlier version removed. See hozio_sug_damage_pattern().
+ */
+function hozio_sug_repair_text($text, $pattern, &$changed) {
+    if (!is_string($text) || '' === $text || '' === (string) $pattern || false === strpos($text, '%')) {
+        return $text;
+    }
+
+    $out = preg_replace_callback(
+        $pattern,
+        function ($m) {
+            // Match the case of the escape in front, so the repair reads like
+            // the encoder that wrote the rest of the string.
+            $last  = substr($m[2], -1);
+            $slash = (strtolower($last) === $last) ? '2f' : '2F';
+            return $m[0] . $m[1] . $slash;
+        },
+        $text
+    );
+
+    if (null !== $out && $out !== $text) {
+        $changed = true;
+        return $out;
+    }
+
+    return $text;
 }
 
 /**
@@ -185,8 +306,9 @@ function hozio_sug_rewrite_text($text, $hosts, $new_host, $scheme, &$changed) {
     $candidates = array_keys($candidates);
     usort($candidates, function ($a, $b) { return strlen($b) - strlen($a); });
 
-    $bs   = chr(92); // one backslash
-    $tail = '(?![A-Za-z0-9\-])';
+    $bs    = chr(92); // one backslash
+    $tail  = '(?![A-Za-z0-9\-])';
+    $start = hozio_sug_host_start();
 
     foreach ($candidates as $old_host) {
         $rules = array();
@@ -205,12 +327,22 @@ function hozio_sug_rewrite_text($text, $hosts, $new_host, $scheme, &$changed) {
             );
         }
 
+        // URL-encoded, as Elementor stores dynamic tag settings:
+        // https%3A%2F%2Fhost, or https%3A%5C%2F%5C%2Fhost when the value was
+        // JSON before it was encoded. Only the scheme and host change; the
+        // escapes are kept byte for byte.
+        $rules[] = array(
+            $start . 'https?(%3A(?:%5C)?%2F(?:%5C)?%2F)' . preg_quote($old_host, '#') . $tail,
+            function ($m) use ($scheme, $new_host) { return $scheme . $m[1] . $new_host; },
+        );
+
         // Protocol-relative.
         $rules[] = array(preg_quote($bs . '/' . $bs . '/' . $old_host, '#') . $tail, $bs . '/' . $bs . '/' . $new_host);
         $rules[] = array(preg_quote('//' . $old_host, '#') . $tail, '//' . $new_host);
 
-        // Anything left: the hostname on its own.
-        $rules[] = array('(?<![A-Za-z0-9.\-])' . preg_quote($old_host, '#') . $tail, $new_host);
+        // Anything left: the hostname on its own - including after an escape
+        // such as %2F, which is where the encoded forms without a scheme land.
+        $rules[] = array($start . preg_quote($old_host, '#') . $tail, $new_host);
 
         foreach ($rules as $rule) {
             list($pattern, $replacement) = $rule;
@@ -218,7 +350,7 @@ function hozio_sug_rewrite_text($text, $hosts, $new_host, $scheme, &$changed) {
             // literal, which preg_replace would otherwise interpret.
             $out = preg_replace_callback(
                 '#' . $pattern . '#i',
-                function () use ($replacement) { return $replacement; },
+                ($replacement instanceof Closure) ? $replacement : function () use ($replacement) { return $replacement; },
                 $text
             );
             if (null !== $out && $out !== $text) {
@@ -259,7 +391,11 @@ function hozio_sug_replace_deep($value, $ctx, &$changed, $depth = 0) {
                 return serialize($walked);
             }
         }
-        return hozio_sug_rewrite_text($value, $ctx['hosts'], $ctx['new'], $ctx['scheme'], $changed);
+        $value = hozio_sug_rewrite_text($value, $ctx['hosts'], $ctx['new'], $ctx['scheme'], $changed);
+        if (!empty($ctx['damage'])) {
+            $value = hozio_sug_repair_text($value, $ctx['damage'], $changed);
+        }
+        return $value;
     }
 
     if (is_array($value)) {
@@ -425,9 +561,13 @@ function hozio_sug_targets() {
 function hozio_sug_where($cols, $exclude = '') {
     global $wpdb;
 
+    // The damage needles bring back rows an earlier version broke, so the
+    // repair can reach them even once no dev hostname is left in the row.
+    $needles = array_merge(hozio_sug_patterns(), hozio_sug_damage_needles());
+
     $bits = array();
     foreach ($cols as $col) {
-        foreach (hozio_sug_patterns() as $pattern) {
+        foreach ($needles as $pattern) {
             $bits[] = $wpdb->prepare(
                 '`' . str_replace('`', '', $col) . '` LIKE %s',
                 '%' . $wpdb->esc_like($pattern) . '%'
@@ -523,6 +663,8 @@ function hozio_sug_scan($budget = 0) {
     $new_host = hozio_sug_target_host();
     $scheme   = hozio_sug_target_scheme();
     $needles  = hozio_sug_patterns();
+    $damage   = hozio_sug_damage_pattern();
+    $ctx      = array('hosts' => array(), 'new' => $new_host, 'scheme' => $scheme, 'damage' => $damage);
 
     $tables     = array();
     $hosts      = array();
@@ -530,6 +672,7 @@ function hozio_sug_scan($budget = 0) {
     $total      = 0;
     $rewritable = 0;
     $unfixable  = 0;
+    $damaged    = 0;
     $finished   = true;
     $started    = microtime(true);
 
@@ -573,16 +716,28 @@ function hozio_sug_scan($budget = 0) {
                     $after_id = (int) $id;
                 }
 
-                $seen++;
-                $total++;
-
-                $row_fixable = false;
-                $eg          = null;
+                $row_fixable  = false;
+                $row_damaged  = false;
+                $row_relevant = false;
+                $eg           = null;
 
                 foreach ($cols as $col) {
                     $value = isset($row[$col]) ? $row[$col] : null;
                     if (!is_string($value) || '' === $value) {
                         continue;
+                    }
+
+                    // A damage needle can match text that is not damage at all.
+                    // Such a row is neither a dev URL nor broken, so it is not
+                    // counted anywhere.
+                    $mentions = hozio_sug_mentions_dev($value);
+                    $broken   = '' !== $damage && preg_match($damage, $value);
+                    if (!$mentions && !$broken) {
+                        continue;
+                    }
+                    $row_relevant = true;
+                    if ($broken) {
+                        $row_damaged = true;
                     }
 
                     foreach (hozio_sug_find_hosts($value) as $found_host) {
@@ -600,18 +755,18 @@ function hozio_sug_scan($budget = 0) {
                         continue;
                     }
 
-                    $changed = false;
-                    hozio_sug_replace_deep(
-                        $value,
-                        array('hosts' => array(), 'new' => $new_host, 'scheme' => $scheme),
-                        $changed
-                    );
-                    if ($changed) {
-                        $row_fixable = true;
-                        break;
+                    if ($row_fixable) {
+                        continue; // already known; still read for hostnames and damage
                     }
 
-                    if (null === $eg && hozio_sug_mentions_dev($value)) {
+                    $changed = false;
+                    hozio_sug_replace_deep($value, $ctx, $changed);
+                    if ($changed) {
+                        $row_fixable = true;
+                        continue;
+                    }
+
+                    if (null === $eg && $mentions) {
                         $eg = array(
                             'col'  => $col,
                             'why'  => hozio_sug_why_stuck($value),
@@ -620,8 +775,17 @@ function hozio_sug_scan($budget = 0) {
                     }
                 }
 
+                if (!$row_relevant) {
+                    continue;
+                }
+                $seen++;
+                $total++;
+
                 if ($row_fixable) {
                     $rewritable++;
+                    if ($row_damaged) {
+                        $damaged++;
+                    }
                 } else {
                     $unfixable++;
                     if (null !== $eg && count($leftovers) < 12) {
@@ -650,6 +814,7 @@ function hozio_sug_scan($budget = 0) {
         'total_rows' => $total,
         'rewritable' => $rewritable,
         'unfixable'  => $unfixable,
+        'damaged'    => $damaged,
         'leftovers'  => $leftovers,
         'finished'   => $finished,
         'tables'     => $tables,
@@ -741,6 +906,8 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 0) {
     if ('' !== $old_host) {
         $hosts = array($old_host);
     }
+    // A report written before 4.20.6 can list "2fsite.mystagingwebsite.com".
+    $hosts = array_values(array_unique(array_filter(array_map('hozio_sug_clean_host', $hosts))));
     // No bail-out when the scan found no hostname. Each row discovers its own
     // hostnames now, and the rows that hold a dev pattern WITHOUT a hostname
     // still need to be surfaced - refusing to run here would hide exactly the
@@ -755,7 +922,9 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 0) {
         }
     }
 
-    $ctx = array('hosts' => $hosts, 'new' => $new_host, 'scheme' => $scheme);
+    $damage       = hozio_sug_damage_pattern();
+    $ctx          = array('hosts' => $hosts, 'new' => $new_host, 'scheme' => $scheme, 'damage' => $damage);
+    $snip_needles = array_merge($hosts, hozio_sug_damage_needles());
 
     $started   = microtime(true);
     $touched   = array();
@@ -813,6 +982,11 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 0) {
                     if (!is_string($value) || '' === $value) {
                         continue;
                     }
+                    // Same test the scan uses: a damage needle alone can match
+                    // text that is not damage, and that is none of our business.
+                    if (!hozio_sug_mentions_dev($value) && !('' !== $damage && preg_match($damage, $value))) {
+                        continue;
+                    }
                     if (hozio_sug_is_unsafe_row($value)) {
                         $skipped++;
                         if (count($unsafe_eg) < 5) {
@@ -855,7 +1029,7 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 0) {
                         $samples[] = array(
                             'table' => $table,
                             'col'   => $col,
-                            'before' => hozio_sug_snippet($value, $hosts),
+                            'before' => hozio_sug_snippet($value, $snip_needles),
                             'after'  => hozio_sug_snippet($new, array($new_host)),
                         );
                     }
@@ -893,6 +1067,9 @@ function hozio_sug_run($mode = 'dry', $old_host = '', $budget = 0) {
         ), false);
 
         wp_cache_flush();
+        if (!empty($touched)) {
+            hozio_sug_clear_builder_cache();
+        }
         delete_transient('hozio_sug_lock');
         hozio_sug_scan();
 
@@ -959,7 +1136,7 @@ function hozio_sug_undo() {
         return array(false, 'There is no repair on record to undo.');
     }
 
-    $old_hosts = (array) $undo['old_host'];
+    $old_hosts = array_values(array_filter(array_map('hozio_sug_clean_host', (array) $undo['old_host'])));
     $new_host  = (string) $undo['new_host'];
     $scheme    = !empty($undo['scheme']) ? $undo['scheme'] : 'https';
 
@@ -984,7 +1161,10 @@ function hozio_sug_undo() {
         }
 
         // Each row goes back to the hostname it actually had.
-        $original = (!empty($row['h']) && is_array($row['h'])) ? reset($row['h']) : $fallback;
+        $original = (!empty($row['h']) && is_array($row['h'])) ? hozio_sug_clean_host(reset($row['h'])) : $fallback;
+        if ('' === $original) {
+            continue;
+        }
         $ctx      = array('hosts' => array($new_host), 'new' => $original, 'scheme' => $scheme);
 
         $changed = false;
@@ -998,6 +1178,9 @@ function hozio_sug_undo() {
 
     delete_option('hozio_sug_undo');
     wp_cache_flush();
+    if ($restored > 0) {
+        hozio_sug_clear_builder_cache();
+    }
     delete_transient('hozio_sug_lock');
     hozio_sug_scan();
 
@@ -1006,6 +1189,28 @@ function hozio_sug_undo() {
     }
 
     return array(true, 'Restored ' . $restored . ' rows to ' . implode(', ', $old_hosts) . '.');
+}
+
+/**
+ * Make Elementor rebuild what it generated from the rows just rewritten.
+ *
+ * Elementor writes each page's CSS to a file and caches rendered elements, both
+ * built from _elementor_data. A direct database rewrite does not tell it
+ * anything changed, so background images kept loading from the dev domain until
+ * someone happened to press "Regenerate CSS & Data". This is that same button.
+ */
+function hozio_sug_clear_builder_cache() {
+    if (!class_exists('\\Elementor\\Plugin') || !isset(\Elementor\Plugin::$instance)) {
+        return;
+    }
+    try {
+        $files = \Elementor\Plugin::$instance->files_manager;
+        if (is_object($files) && method_exists($files, 'clear_cache')) {
+            $files->clear_cache();
+        }
+    } catch (\Throwable $e) {
+        // A cache that could not be cleared is regenerated on the next save.
+    }
 }
 
 /* -------------------------------------------------------------------------
@@ -1060,6 +1265,9 @@ function hozio_sug_handle_preview() {
 function hozio_sug_handle_fix() {
     hozio_sug_guard_request('hozio_sug_fix');
 
+    $before         = hozio_sug_report();
+    $before_damaged = (int) (isset($before['damaged']) ? $before['damaged'] : 0);
+
     $result = hozio_sug_run('apply');
     if (empty($result['ok'])) {
         hozio_sug_notice(true, array($result['message']));
@@ -1071,6 +1279,9 @@ function hozio_sug_handle_fix() {
     $info      = (int) (isset($after['total_rows']) ? $after['total_rows'] : 0) - $remaining;
 
     $msg = 'Rewrote ' . (int) $result['applied'] . ' rows to ' . $result['new_host'] . '.';
+    if (!empty($before_damaged)) {
+        $msg .= ' That includes ' . $before_damaged . ' rows whose links an earlier version had broken - they are repaired.';
+    }
     if (!$result['finished']) {
         $msg .= ' There is more to do - press Fix again to continue.';
     }
@@ -1103,8 +1314,9 @@ function hozio_sug_url($action) {
  * ---------------------------------------------------------------------- */
 
 function hozio_sug_banner_html($report, $context) {
-    $count = (int) (isset($report['rewritable']) ? $report['rewritable'] : (isset($report['total_rows']) ? $report['total_rows'] : 0));
-    $hosts = !empty($report['hosts']) ? implode(', ', (array) $report['hosts']) : 'a dev domain';
+    $count   = (int) (isset($report['rewritable']) ? $report['rewritable'] : (isset($report['total_rows']) ? $report['total_rows'] : 0));
+    $hosts   = !empty($report['hosts']) ? implode(', ', (array) $report['hosts']) : 'a dev domain';
+    $damaged = (int) (isset($report['damaged']) ? $report['damaged'] : 0);
     // Sits just BELOW the WordPress toolbar (z-index 99999). The toolbar's
     // drop-down menus are children of it and share its stacking context, so a
     // banner above 99999 covers every menu the moment one opens. High enough to
@@ -1117,8 +1329,13 @@ function hozio_sug_banner_html($report, $context) {
         <div style="max-width:1400px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;">
             <span style="font-size:15px;font-weight:800;letter-spacing:.03em;white-space:nowrap;">LIVE SITE LINKS TO A DEV DOMAIN</span>
             <span style="font-weight:400;flex:1 1 320px;min-width:0;">
-                <?php echo esc_html($count); ?> database rows still point at <?php echo esc_html($hosts); ?>.
-                Search engines are being told your pages live there.
+                <?php if (empty($report['hosts']) && $damaged > 0) : ?>
+                    <?php echo esc_html($damaged); ?> database rows hold links an earlier dev-URL fix broke.
+                    Elementor cannot read them, so dynamic content on those pages may be missing.
+                <?php else : ?>
+                    <?php echo esc_html($count); ?> database rows still point at <?php echo esc_html($hosts); ?>.
+                    Search engines are being told your pages live there.
+                <?php endif; ?>
             </span>
             <?php if (current_user_can('manage_options')) : ?>
                 <a href="<?php echo esc_url(admin_url('admin.php?page=hozio-plugin-settings') . '#hozio-dev-urls'); ?>"
