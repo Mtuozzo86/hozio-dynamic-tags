@@ -2,6 +2,43 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.20.7 (September 2026) ==
+
+= Fixes =
+
+* Sites were not installing plugin updates on their own, which is why domains
+  starting with "2f" kept appearing: those sites were still running 4.20.5 and
+  still carried the old bug. The updater hooked itself ONLY on a wp-admin
+  screen, and WordPress installs updates unattended from WP-Cron, where that
+  test is false. During the one run that can actually install something,
+  neither the update check nor the approval filter existed, so the plugin's own
+  update was declined - while wp-admin, where the check DID run, kept reporting
+  an update was available.
+
+  The updater now also registers during cron, WP-CLI and REST requests. An
+  ordinary page view still registers nothing at all, and the GitHub release
+  behind the check is cached for 12 hours, so no visitor request can trigger
+  an HTTP call.
+
+= Added =
+
+* The red "live site links to a dev domain" banner can be dismissed for the
+  rest of the browser session. On a site with dev URLs it appeared on every
+  single page load, which is a lot of red for something already on the list.
+
+  It hides until the browser is closed, and comes back if a later scan finds a
+  DIFFERENT number of rows - a changed situation is news. The toolbar item
+  stays either way, so the panel is always one click away.
+
+  Dismissal lives entirely in the browser, in a session cookie. The server
+  never varies its output on it, so a cached page can never be served to
+  somebody else in a dismissed state.
+
+= Notes =
+
+* Dismissal is tested by running the real script against a DOM: first visit,
+  second page load, a changed row count, and other cookies on the site.
+
 == Version 4.20.6 (September 2026) ==
 
 = Fixes =

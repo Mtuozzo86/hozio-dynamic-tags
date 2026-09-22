@@ -58,8 +58,24 @@ class Hozio_Plugin_Updater {
 
         $this->current_version = $this->get_current_version();
 
-        // Only run in admin
-        if (!is_admin()) {
+        // WordPress installs updates unattended from WP-Cron, where is_admin() is
+        // FALSE. An earlier version returned here unless it was an admin screen, so
+        // during the only run that can actually install something, neither the
+        // update check nor the approval filter below existed. wp-admin reported
+        // "update available" (that check DID run, on an admin page load) and the
+        // nightly run then declined it, every night, forever: the fleet sat on an
+        // old version while the dashboard insisted a new one was ready.
+        //
+        // Registering costs nothing on a normal page load. check_for_update() only
+        // fires while WordPress is rebuilding its update transient - never on a
+        // front-end request - and the GitHub response behind it is cached for 12
+        // hours, so no page view can trigger an HTTP call.
+        $update_context = is_admin()
+            || wp_doing_cron()
+            || ( defined( 'WP_CLI' ) && WP_CLI )
+            || ( defined( 'REST_REQUEST' ) && REST_REQUEST );
+
+        if ( ! $update_context ) {
             return;
         }
 

@@ -1343,10 +1343,45 @@ function hozio_sug_banner_html($report, $context) {
                     Review and fix
                 </a>
             <?php endif; ?>
+            <button type="button" id="hozio-sug-dismiss" title="Hide until I close the browser"
+                    aria-label="Hide this notice until I close the browser"
+                    style="background:transparent;border:1px solid rgba(255,255,255,.55);color:#fff;font:700 16px/1 sans-serif;cursor:pointer;padding:6px 10px;border-radius:3px;margin-left:auto;">&times;</button>
         </div>
     </div>
+    <script><?php echo hozio_sug_dismiss_js($count); ?></script>
     <?php
     return ob_get_clean();
+}
+
+/**
+ * The dismiss behaviour: hide this banner for the rest of the browser session.
+ *
+ * A live site with dev URLs shows this on every single page load, which is a lot
+ * of red for something you already know about and intend to fix later.
+ *
+ * Kept entirely in the browser, in a session cookie that expires when the browser
+ * closes. Nothing is stored against the site or the user, and - this is the
+ * important part on a cached host - the SERVER never varies its output on that
+ * cookie, so no page can be cached in a dismissed state for somebody else. The
+ * markup is always sent; the script removes it before the page is painted.
+ *
+ * The count is part of the cookie, so dismissing what you have seen does not
+ * silence a DIFFERENT number later: if a later scan finds more rows, that is news
+ * and the banner comes back. The toolbar item stays regardless, so there is
+ * always a way back to the panel.
+ */
+function hozio_sug_dismiss_js($count) {
+    $count = (int) $count;
+
+    return "(function(){var K='hozio_sug_hide=',C='" . $count . "',"
+        . "b=document.getElementById('hozio-sug-bar');if(!b){return;}"
+        . "function g(){var p=document.cookie?document.cookie.split('; '):[];"
+        . "for(var i=0;i<p.length;i++){if(p[i].indexOf(K)===0){return p[i].slice(K.length);}}return '';}"
+        . "function k(){if(b.parentNode){b.parentNode.removeChild(b);}}"
+        . "if(g()===C){k();return;}"
+        . "var d=document.getElementById('hozio-sug-dismiss');"
+        . "if(d){d.addEventListener('click',function(){"
+        . "document.cookie=K+C+'; path=/; SameSite=Lax';k();});}})();";
 }
 
 function hozio_sug_render_admin_banner() {
