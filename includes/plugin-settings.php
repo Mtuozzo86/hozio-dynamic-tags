@@ -135,6 +135,7 @@ function hozio_ajax_clear_debug_log() {
     $result = hozio_clear_log();
 
     if ($result) {
+        hozio_audit_log('Debug log cleared by admin:' . wp_get_current_user()->user_login, 'Logger');
         wp_send_json_success(['message' => 'Debug log cleared successfully']);
     } else {
         wp_send_json_error('Failed to clear debug log');
@@ -157,29 +158,85 @@ function hozio_ajax_test_debug_log() {
         wp_send_json_error('Debug logging is not enabled. Please enable it first and save settings.');
     }
 
-    // Write a test entry to the log
+    // Write a test entry to the log. hozio_log_write() reports whether the row was
+    // stored, which is the honest test now that there is no file to look for.
     $test_message = 'Test log entry created from Settings page by user: ' . wp_get_current_user()->user_login;
-    hozio_log($test_message, 'SettingsTest');
+    $written = hozio_log_write('debug', 'SettingsTest', $test_message);
 
     // Also log some system info
     hozio_log('WordPress Version: ' . get_bloginfo('version'), 'SettingsTest');
     hozio_log('PHP Version: ' . PHP_VERSION, 'SettingsTest');
     hozio_log('Plugin Version: ' . hozio_get_plugin_version(), 'SettingsTest');
 
-    // Check if the log file was actually created
-    $log_path = hozio_get_log_path();
-    if (file_exists($log_path)) {
-        $log_size = hozio_get_log_size();
+    if ($written) {
         wp_send_json_success([
             'message' => 'Test log entry written successfully!',
-            'log_size' => $log_size,
-            'log_path' => $log_path
+            'log_size' => hozio_get_log_size(),
+            'log_path' => hozio_get_log_path() . ' (database table, not web-accessible)'
         ]);
     } else {
-        wp_send_json_error('Log file was not created. Check file permissions on wp-content directory.');
+        wp_send_json_error('The entry could not be stored: the log table is missing or the database refused the write. Entries are dropped rather than written to a public file. Check that the database user can create tables, then reload this page.');
     }
 }
 add_action('wp_ajax_hozio_test_debug_log', 'hozio_ajax_test_debug_log');
+
+/**
+ * Admin-only log viewer (admin-post.php?action=hozio_view_log&log=debug|audit).
+ *
+ * Replaces the old "View Log" link, which opened wp-content/hozio-debug.log by its
+ * public URL — it only ever worked because the file was public. Prints the newest
+ * entries as plain text, oldest first, the way the file read. Administrators only,
+ * nonce-checked; nosniff so no browser renders a logged value as HTML.
+ */
+function hozio_view_log_page() {
+    if (!current_user_can('manage_options')) {
+        wp_die('Permission denied', 403);
+    }
+    check_admin_referer('hozio_view_log');
+
+    $channel = (isset($_GET['log']) && $_GET['log'] === 'audit') ? 'audit' : 'debug';
+    $label   = $channel === 'audit' ? 'Hozio Pro audit log' : 'Hozio Pro debug log';
+    $limit   = 1000;
+    $total   = hozio_log_count($channel);
+    $entries = hozio_log_get_entries($channel, ['limit' => $limit]);
+
+    nocache_headers();
+    header('Content-Type: text/plain; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Robots-Tag: noindex, nofollow');
+
+    echo $label . ' — ' . home_url() . "\n";
+    $tz = function_exists('wp_timezone_string') ? wp_timezone_string() : (string) get_option('timezone_string', '');
+    echo 'Times are site time (' . ($tz !== '' ? $tz : 'UTC') . '). ';
+    if ($total > $limit) {
+        echo 'Showing the newest ' . number_format_i18n($limit) . ' of ' . hozio_log_count_label($total) . ".\n";
+    } else {
+        echo hozio_log_count_label($total) . ".\n";
+    }
+    if (!hozio_log_table_ready($channel)) {
+        echo "The log table does not exist on this site yet, so nothing has been stored.\n";
+    }
+    echo str_repeat('-', 72) . "\n";
+
+    foreach ($entries as $entry) {
+        echo hozio_log_format_line($entry) . "\n";
+    }
+    exit;
+}
+add_action('admin_post_hozio_view_log', 'hozio_view_log_page');
+
+/**
+ * Link to the admin-only log viewer.
+ *
+ * @param string $channel 'debug' or 'audit'
+ * @return string
+ */
+function hozio_view_log_url($channel) {
+    return wp_nonce_url(
+        admin_url('admin-post.php?action=hozio_view_log&log=' . ($channel === 'audit' ? 'audit' : 'debug')),
+        'hozio_view_log'
+    );
+}
 
 /**
  * Handle AJAX action to clear plugin caches
@@ -683,10 +740,10 @@ function hozio_plugin_settings_page() {
         'class' => 'hozio-license-empty'
     ];
 
-    // Get log info
-    $log_path = hozio_get_log_path();
-    $log_size = hozio_get_log_size();
-    $log_exists = file_exists($log_path);
+    // Get log info (both logs are database tables — see includes/hozio-logger.php)
+    $log_size    = hozio_get_log_size();
+    $log_exists  = hozio_log_count('debug') > 0;
+    $audit_size  = hozio_log_count_label(hozio_log_count('audit'));
 
     // Check if wp-config.php constant is set
     $constant_defined = defined('HOZIO_DEBUG');
@@ -1371,7 +1428,7 @@ Disallow: /</pre>
                         <div class="hozio-toggle-label">
                             <div class="hozio-toggle-title">Enable Debug Logging</div>
                             <div class="hozio-toggle-description">
-                                Write debug information to a log file. Useful for troubleshooting issues.
+                                Write debug information to the debug log. Useful for troubleshooting issues.
                             </div>
                         </div>
                     </div>
@@ -1379,8 +1436,7 @@ Disallow: /</pre>
 
                 <div class="hozio-log-info">
                     <div class="hozio-log-details">
-                        <span class="hozio-log-label">Log File:</span>
-                        <code><?php echo esc_html(basename($log_path)); ?></code>
+                        <span class="hozio-log-label">Debug Log:</span>
                         <span class="hozio-log-size">(<?php echo esc_html($log_size); ?>)</span>
                     </div>
                     <div class="hozio-log-actions">
@@ -1393,14 +1449,25 @@ Disallow: /</pre>
                                 <?php echo !$log_exists ? 'disabled' : ''; ?>>
                             Clear Log
                         </button>
-                        <?php if ($log_exists): ?>
-                        <a href="<?php echo esc_url(content_url('hozio-debug.log')); ?>"
-                           target="_blank" class="button">View Log</a>
-                        <?php endif; ?>
+                        <a href="<?php echo esc_url(hozio_view_log_url('debug')); ?>"
+                           target="_blank" rel="noopener" class="button">View Log</a>
+                    </div>
+                </div>
+                <div class="hozio-log-info">
+                    <div class="hozio-log-details">
+                        <span class="hozio-log-label">Audit Log:</span>
+                        <span>(<?php echo esc_html($audit_size); ?>)</span>
+                    </div>
+                    <div class="hozio-log-actions">
+                        <a href="<?php echo esc_url(hozio_view_log_url('audit')); ?>"
+                           target="_blank" rel="noopener" class="button">View Audit Log</a>
                     </div>
                 </div>
                 <p class="hozio-field-description" style="margin-top: 10px;">
                     Click "Test Logging" to write a test entry to the debug log. Make sure debug logging is enabled and saved first.
+                    The audit log is always on and records plugin updates, rollbacks, Hub commands and similar changes.
+                    Both logs are kept in this site's database, never in a file, so they can't be downloaded from the web.
+                    Each keeps its newest <?php echo esc_html(number_format_i18n(HOZIO_LOG_MAX_ROWS)); ?> entries.
                 </p>
             </div>
 
@@ -1979,7 +2046,7 @@ Disallow: /</pre>
                             <th>Debug</th>
                             <td><span class="hozio-status hozio-status-<?php echo ($debug_enabled === '1' || ($constant_defined && HOZIO_DEBUG)) ? 'on' : 'off'; ?>"><?php echo ($debug_enabled === '1' || ($constant_defined && HOZIO_DEBUG)) ? 'On' : 'Off'; ?></span></td>
                         </tr>
-                        <tr><th>Log File</th><td><code style="font-size:11px;"><?php echo esc_html(basename($log_path)); ?></code> <span style="color:#999;">(<?php echo esc_html($log_size); ?>)</span></td></tr>
+                        <tr><th>Debug Log</th><td>Database <span style="color:#999;">(<?php echo esc_html($log_size); ?>)</span></td></tr>
                     </table>
                 </div>
             </div>
@@ -2807,6 +2874,8 @@ Disallow: /</pre>
 
     .hozio-log-info {
         display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
         align-items: center;
         justify-content: space-between;
         padding: 15px;
@@ -2831,6 +2900,7 @@ Disallow: /</pre>
 
     .hozio-log-actions {
         display: flex;
+        flex-wrap: wrap;
         gap: 10px;
     }
 
@@ -3271,10 +3341,10 @@ Disallow: /</pre>
                     if (response.success) {
                         $btn.text('Success!').addClass('button-success');
                         $('.hozio-log-size').text('(' + response.data.log_size + ')');
-                        // Enable the Clear Log and View Log buttons since log now exists
+                        // Enable the Clear Log button since the log now has entries
                         $('.hozio-clear-log-btn').prop('disabled', false);
                         // Show alert with success message
-                        alert(response.data.message + '\n\nLog file: ' + response.data.log_path);
+                        alert(response.data.message + '\n\nStored in: ' + response.data.log_path);
                         setTimeout(function() {
                             $btn.text(originalText).prop('disabled', false).removeClass('button-success');
                         }, 2000);
@@ -3307,7 +3377,7 @@ Disallow: /</pre>
                 success: function(response) {
                     if (response.success) {
                         $btn.text('Cleared!');
-                        $('.hozio-log-size').text('(0 bytes)');
+                        $('.hozio-log-size').text('(0 entries)');
                         setTimeout(function() {
                             $btn.text('Clear Log').prop('disabled', false);
                         }, 2000);

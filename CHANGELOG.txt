@@ -2,6 +2,56 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.20.9 (September 2026) ==
+
+= Security =
+
+* The audit log could be downloaded by anyone. hozio_audit_log() wrote to
+  wp-content/hozio-audit.log, and on hosts that serve wp-content files
+  directly the file could be fetched by anyone who knew the URL. It held
+  admin usernames and user IDs, the full plugin list with versions, failed
+  updates with their error messages, and Hub activity: exactly what an
+  attacker uses to pick a target. The debug log, wp-content/hozio-debug.log,
+  was exposed the same way whenever debug mode was on. An .htaccess deny
+  would not have helped; Nginx ignores it.
+
+  Both logs now live in the site's database, which is never web-servable on
+  any host: {prefix}hozio_audit_log and {prefix}hozio_debug_log. Each keeps
+  its newest 5,000 entries (the old 500 KB cap, in rows) and caps a single
+  message at 4,000 bytes. Times are stored in UTC.
+
+  If a table is missing or the database refuses a write, the entry is
+  dropped. It never falls back to a file.
+
+* On the first request after updating, the newest entries of both old files
+  are copied into the new tables (their site-time stamps converted to UTC)
+  and the files are deleted. The check runs on every request, not once per
+  version, so a site rolled back to an older release - which writes the
+  files again - is cleaned up again when it comes forward. A file that
+  cannot be deleted is emptied instead, and the audit log says so.
+
+* The Hub's update_option command can no longer write the logger's own
+  bookkeeping options (hozio_log_*).
+
+= Changed =
+
+* Hozio Pro Settings > Debug & Logging: "View Log" used to open the debug
+  log by its public URL - it only worked because the file was public. It now
+  opens an administrators-only, nonce-checked viewer that prints the newest
+  1,000 entries as plain text in site time. A new "View Audit Log" button
+  does the same for the audit log, which had no viewer before. Sizes are
+  shown as entry counts. Clearing the debug log is recorded in the audit log.
+
+= Notes =
+
+* Tables are created on the first request after the update (init, priority
+  1), when the plugin is activated, and recreated if they go missing. A site
+  whose database user cannot create tables retries at most once an hour and
+  logs nothing in the meantime.
+
+* Nothing on the front end changes. The per-request cost is one autoloaded
+  option read and two file_exists() checks.
+
 == Version 4.20.7 (September 2026) ==
 
 = Fixes =

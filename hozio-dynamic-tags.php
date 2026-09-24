@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.20.7
+Version:         4.20.9
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -22,11 +22,12 @@ Text Domain:     hozio-dynamic-tags
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.20.7');
+define('HOZIO_VERSION', '4.20.9');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
-// Load custom logger first (enables HOZIO_DEBUG logging without WP_DEBUG)
+// Load custom logger first (enables HOZIO_DEBUG logging without WP_DEBUG).
+// Both logs live in private database tables, never in a web-servable file.
 require_once plugin_dir_path( __FILE__ ) . 'includes/hozio-logger.php';
 
 // Load plugin settings page (debug toggles, feature toggles, system info)
@@ -81,6 +82,12 @@ foreach ($hozio_hub_includes as $hozio_hub_file) {
 
 // Hub heartbeat cron: activation hook MUST be in main plugin file
 register_activation_hook(__FILE__, function() {
+    // The init hook that creates the log tables has already run for this request
+    // without this plugin loaded, so create them here or the first entry is dropped.
+    if (function_exists('hozio_log_maybe_upgrade')) {
+        hozio_log_maybe_upgrade();
+    }
+
     $current_user = wp_get_current_user();
     $user_info = $current_user->ID ? $current_user->user_login . ' (ID: ' . $current_user->ID . ')' : 'unknown/CLI';
     hozio_audit_log("Hozio Pro ACTIVATED by {$user_info}", 'Lifecycle');

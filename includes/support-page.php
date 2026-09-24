@@ -842,7 +842,7 @@ function hozio_support_page() {
                         <ol>
                             <li>Go to <strong>Hozio Pro &rarr; Hozio Pro Settings</strong>.</li>
                             <li><strong>Feature toggles:</strong> DOM Parsing, Service Menu Sync, Ghost Page Protection, Auto-Updates.</li>
-                            <li><strong>Enable HOZIO_DEBUG</strong> to start logging. Logs are written to <code>wp-content/hozio-debug.log</code>.</li>
+                            <li><strong>Enable HOZIO_DEBUG</strong> to start logging. Entries are kept privately in the site's database (never in a web-accessible file); read them with <strong>View Log</strong>.</li>
                             <li>Use <strong>"Test Log Entry"</strong> to verify logging and <strong>"Clear Log"</strong> to reset.</li>
                         </ol>
                     </div>
@@ -852,7 +852,7 @@ function hozio_support_page() {
                             <li>Debug logging works <strong>independently from WP_DEBUG</strong>.</li>
                             <li>Logs are categorized by component: ParentPagesQuery, CountyQuery, TownQuery, LoopConfig, MenuSync, GhostPage, etc.</li>
                             <li>Remember to <strong>disable debug logging</strong> on production sites.</li>
-                            <li><strong>Audit Log:</strong> All Hub commands, plugin updates, and rollbacks are written to <code>wp-content/hozio-audit.log</code> via <code>hozio_audit_log()</code>. The audit log auto-rotates at 500KB and is separate from the debug log. Useful for diagnosing unexpected changes on live sites.</li>
+                            <li><strong>Audit Log:</strong> All Hub commands, plugin updates, and rollbacks are recorded via <code>hozio_audit_log()</code> in a private database table (never a public file). It keeps the newest 5,000 entries and is separate from the debug log. Read it with <strong>View Audit Log</strong> under Plugin Settings &rarr; Debug &amp; Logging. Useful for diagnosing unexpected changes on live sites.</li>
                             <li><strong>Install History:</strong> A timeline in the Plugin Settings page shows every version installed, labeled as Update or Rollback, with Hub-triggered installs marked with a green Hub badge.</li>
                         </ul>
                     </div>

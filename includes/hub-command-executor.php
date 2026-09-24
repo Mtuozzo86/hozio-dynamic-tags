@@ -347,6 +347,13 @@ class Hozio_Command_Executor {
             return ['success' => false, 'error' => 'Hub connection options cannot be modified via remote commands.'];
         }
 
+        // Block the private log's bookkeeping (hozio_log_db_version, hozio_log_legacy_state).
+        // Written remotely, they could stop the log tables being recreated or stop an old
+        // public log file from being deleted.
+        if (strpos($option_name, 'hozio_log_') === 0) {
+            return ['success' => false, 'error' => 'Log storage options cannot be modified via remote commands.'];
+        }
+
         update_option($option_name, $option_value);
 
         return ['success' => true, 'data' => ['option' => $option_name, 'value' => $option_value]];
