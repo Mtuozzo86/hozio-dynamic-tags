@@ -1645,6 +1645,109 @@ Disallow: /</pre>
                     </p>
                 </div>
 
+                <?php
+                // Update holds and the freeze (includes/update-holds.php). Release and Unfreeze are
+                // links to admin-post.php, not buttons: this whole section sits inside the settings
+                // form, and a form cannot contain another form.
+                $hozio_holds_state  = function_exists('hozio_update_holds_status')
+                    ? hozio_update_holds_status()
+                    : array('holds' => array(), 'invalid' => 0, 'active' => 0, 'expired' => 0);
+                $hozio_freeze_state = function_exists('hozio_update_freeze_status')
+                    ? hozio_update_freeze_status()
+                    : array('active' => false, 'expired' => false, 'invalid' => 0, 'until' => null, 'reason' => '', 'source' => '');
+                $hozio_can_release  = current_user_can('update_plugins');
+                $hozio_holds_notice = function_exists('hozio_update_holds_notice_text') ? hozio_update_holds_notice_text() : '';
+                ?>
+                <div class="hozio-field" id="hozio-update-holds" style="margin-top:16px;">
+                    <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">
+                        Update holds and freeze
+                    </label>
+
+                    <?php if ($hozio_holds_notice !== ''): ?>
+                        <div style="margin:0 0 10px;padding:8px 12px;border-left:3px solid #2563eb;background:#eff6ff;font-size:12px;color:#1e3a8a;">
+                            <?php echo esc_html($hozio_holds_notice); ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($hozio_freeze_state['active']): ?>
+                        <div style="margin:0 0 10px;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:13px;color:#7f1d1d;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                            <span>
+                                <strong>All automatic updates are frozen</strong>
+                                until <?php echo esc_html(hozio_hold_local_date(strtotime($hozio_freeze_state['until']), true)); ?>
+                                &mdash; <?php echo esc_html($hozio_freeze_state['reason']); ?>
+                                (<?php echo esc_html($hozio_freeze_state['source']); ?>)
+                            </span>
+                            <?php if ($hozio_can_release): ?>
+                                <a class="button" href="<?php echo esc_url(hozio_unfreeze_url()); ?>"
+                                   onclick="return confirm('Lift the freeze? Automatic updates resume on the next run.');">Unfreeze</a>
+                            <?php endif; ?>
+                        </div>
+                    <?php elseif ($hozio_freeze_state['expired']): ?>
+                        <p style="margin:0 0 10px;font-size:12px;color:#6b7280;">
+                            A freeze ended <?php echo esc_html(hozio_hold_local_date(strtotime($hozio_freeze_state['until']), true)); ?>
+                            (<?php echo esc_html($hozio_freeze_state['reason']); ?>). Automatic updates are running again.
+                        </p>
+                    <?php endif; ?>
+
+                    <?php if (empty($hozio_holds_state['holds'])): ?>
+                        <p style="margin:0;font-size:12px;color:#9ca3af;">No plugin is held.</p>
+                    <?php else: ?>
+                        <table class="widefat striped" style="font-size:12px;">
+                            <thead>
+                                <tr>
+                                    <th>Plugin</th>
+                                    <th>Holds back</th>
+                                    <th>Until</th>
+                                    <th>Reason</th>
+                                    <th>Placed by</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($hozio_holds_state['holds'] as $hozio_hold): ?>
+                                <tr<?php echo $hozio_hold['expired'] ? ' style="opacity:.6;"' : ''; ?>>
+                                    <td><code><?php echo esc_html($hozio_hold['plugin']); ?></code></td>
+                                    <td><?php echo esc_html($hozio_hold['mode'] === 'pin' ? 'Every update' : 'Only ' . implode(', ', $hozio_hold['versions'])); ?></td>
+                                    <td>
+                                        <?php echo $hozio_hold['expired'] ? 'Expired ' : ''; ?>
+                                        <?php echo esc_html(hozio_hold_local_date(strtotime($hozio_hold['expires_at']))); ?>
+                                    </td>
+                                    <td><?php echo esc_html($hozio_hold['reason']); ?></td>
+                                    <td><?php echo esc_html($hozio_hold['source']); ?></td>
+                                    <td>
+                                        <?php if ($hozio_can_release): ?>
+                                            <a class="button button-small"
+                                               href="<?php echo esc_url(hozio_release_hold_url($hozio_hold['plugin'], 'settings')); ?>"
+                                               onclick="return confirm('<?php echo $hozio_hold['expired'] ? 'Remove this expired hold?' : 'Release this hold? Automatic updates for this plugin start again on the next run.'; ?>');">
+                                                <?php echo $hozio_hold['expired'] ? 'Remove' : 'Release'; ?>
+                                            </a>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+
+                    <?php if (!empty($hozio_holds_state['invalid']) || !empty($hozio_freeze_state['invalid'])): ?>
+                        <p style="margin:6px 0 0;font-size:12px;color:#b91c1c;">
+                            <?php echo esc_html(sprintf(
+                                'Ignored %d stored hold or freeze entr%s that did not pass validation. They were not written by Hozio Pro and block nothing.',
+                                (int) $hozio_holds_state['invalid'] + (int) $hozio_freeze_state['invalid'],
+                                ((int) $hozio_holds_state['invalid'] + (int) $hozio_freeze_state['invalid']) === 1 ? 'y' : 'ies'
+                            )); ?>
+                        </p>
+                    <?php endif; ?>
+
+                    <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">
+                        A <strong>hold</strong> stops <em>automatic</em> updates to one plugin &mdash; it is placed after a rollback
+                        so the version that broke the site isn't installed again. A <strong>freeze</strong> stops every automatic
+                        update on the site while a repair is in progress. Both are placed by the Hozio Studio Orchestrator, the Hub
+                        or <code>wp hozio updates</code>, and both end on their own. Neither stops you updating a plugin by hand
+                        from the Plugins screen.
+                    </p>
+                </div>
+
             </div>
 
             <!-- FAQ Schema Section -->
@@ -1858,12 +1961,14 @@ Disallow: /</pre>
         <div class="hozio-sidebar-col">
 
             <?php
+            // $current_ver first: the Quick Revert check below compares against it (it used
+            // to be read before it was set, so "previous == current" was never caught).
+            $current_ver    = hozio_get_plugin_version();
             $history        = get_option('hozio_version_history', []);
             $prev_entry     = !empty($history) ? $history[0] : null;
             $quick_revert_raw = $prev_entry && !empty($prev_entry['previous']) ? $prev_entry['previous'] : '';
             $quick_revert     = ($quick_revert_raw !== $current_ver) ? $quick_revert_raw : '';
             $rollback_nonce = wp_create_nonce('hozio_rollback_nonce');
-            $current_ver    = hozio_get_plugin_version();
             ?>
 
             <!-- Version Control Card -->

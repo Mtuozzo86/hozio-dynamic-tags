@@ -19,6 +19,10 @@
  * Hozio Pro itself is deliberately NOT decided here — includes/plugin-updater.php
  * owns that call, because it carries extra guards (valid license, version lock,
  * post-rollback pause) that must not be bypassed.
+ *
+ * Update holds and the site-wide freeze (includes/update-holds.php) sit on top of all of
+ * this. They have the last word on every automatic update, whether or not Auto-Update All
+ * is switched on.
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
@@ -52,6 +56,11 @@ function hozio_auto_update_force_enabled() {
  * those before the filter, and rightly so: they mean writes genuinely aren't permitted.
  */
 add_filter( 'automatic_updater_disabled', function ( $disabled ) {
+    // A freeze (update-holds.php) beats the override. Both sit at PHP_INT_MAX, so whichever
+    // runs last must honour it; this one does.
+    if ( function_exists( 'hozio_updates_frozen' ) && hozio_updates_frozen() ) {
+        return true;
+    }
     if ( hozio_auto_update_all_enabled() && hozio_auto_update_force_enabled() ) {
         return false;
     }
@@ -71,6 +80,11 @@ add_action( 'init', function () {
         return;
     }
     if ( ! wp_next_scheduled( 'wp_maybe_auto_update' ) ) {
+        // While updates are frozen this hook does nothing. Checked only here, when a
+        // reschedule is actually due, so an ordinary page view never reads the option.
+        if ( function_exists( 'hozio_updates_frozen' ) && hozio_updates_frozen() ) {
+            return;
+        }
         wp_schedule_event( time() + HOUR_IN_SECONDS, 'twicedaily', 'wp_maybe_auto_update' );
     }
 }, 20 );
@@ -357,8 +371,8 @@ function hozio_log_plugin_auto_updates( $results ) {
             hozio_audit_log( sprintf( 'Auto-update FAILED for %s (%s): %s', $name, $version, $reason ), 'AutoUpdate' );
         }
 
-        // The audit log is a flat text file — fine on one site, unqueryable across a
-        // fleet. Mirror each result into a small structured ring buffer so the Hub
+        // The audit log is free text — fine on one site, unqueryable across a fleet.
+        // Mirror each result into a small structured ring buffer so the Hub
         // heartbeat can report it. Deliberately NOT cleared on send: the heartbeat is
         // fire-and-forget, so a fixed-size buffer stays correct across a missed beat.
         hozio_record_auto_update_result( array(
@@ -409,17 +423,24 @@ function hozio_get_patch_status() {
     }
 
     // Pending = what WordPress already knows is available, from its own update check.
+    // 'held' marks an update a hold is deliberately stopping, so the Hub can tell "held
+    // back on purpose" from "behind".
     $pending   = array();
     $transient = get_site_transient( 'update_plugins' );
     if ( $transient && ! empty( $transient->response ) && is_array( $transient->response ) ) {
         foreach ( $transient->response as $file => $info ) {
+            $to = isset( $info->new_version ) ? $info->new_version : '';
             $pending[ $file ] = array(
                 'name' => $installed[ $file ]['name'] ?? $file,
                 'from' => $installed[ $file ]['version'] ?? '',
-                'to'   => isset( $info->new_version ) ? $info->new_version : '',
+                'to'   => $to,
+                'held' => function_exists( 'hozio_update_hold_blocks' ) && hozio_update_hold_blocks( $file, $to ),
             );
         }
     }
+
+    $holds  = function_exists( 'hozio_update_holds_status' ) ? hozio_update_holds_status() : array( 'holds' => array(), 'invalid' => 0 );
+    $freeze = function_exists( 'hozio_update_freeze_status' ) ? hozio_update_freeze_status() : array( 'active' => false );
 
     return array(
         'auto_update_enabled' => hozio_auto_update_all_enabled(),
@@ -435,8 +456,63 @@ function hozio_get_patch_status() {
         'next_run'            => (int) wp_next_scheduled( 'wp_maybe_auto_update' ),
         'pending'             => $pending,
         'installed'           => $installed,
-        'recent'              => get_option( 'hozio_auto_update_history', array() ),
+        'recent'              => hozio_auto_update_history_read(),
+        // Why a site is deliberately not patching: per-plugin holds, and a site-wide freeze.
+        'holds'               => $holds['holds'],
+        'holds_invalid'       => (int) $holds['invalid'],
+        'freeze'              => $freeze,
     );
+}
+
+/**
+ * The auto-update history ring buffer, validated entry by entry.
+ *
+ * The Hub's update_option command can write this option, so nothing in it is trusted:
+ * entries that are not the shape hozio_record_auto_update_result() writes are dropped.
+ *
+ * @param int|null $invalid Set to the number of entries dropped.
+ * @return array[]
+ */
+function hozio_auto_update_history_read( &$invalid = null ) {
+    $raw     = get_option( 'hozio_auto_update_history', array() );
+    $invalid = 0;
+    if ( ! is_array( $raw ) ) {
+        $invalid = empty( $raw ) ? 0 : 1;
+        return array();
+    }
+
+    $out = array();
+    foreach ( $raw as $e ) {
+        if ( ! is_array( $e ) ) {
+            $invalid++;
+            continue;
+        }
+        $clean = array();
+        foreach ( array( 'plugin', 'name', 'version', 'error', 'at' ) as $k ) {
+            $v = isset( $e[ $k ] ) ? $e[ $k ] : '';
+            if ( ! is_string( $v ) && ! is_int( $v ) && ! is_float( $v ) ) {
+                $clean = null;
+                break;
+            }
+            $clean[ $k ] = substr( (string) $v, 0, 500 );
+        }
+        if ( $clean === null || ! isset( $e['ok'] ) ) {
+            $invalid++;
+            continue;
+        }
+        $out[] = array(
+            'plugin'  => $clean['plugin'],
+            'name'    => $clean['name'],
+            'version' => $clean['version'],
+            'ok'      => (bool) $e['ok'],
+            'error'   => $clean['error'],
+            'at'      => $clean['at'],
+        );
+        if ( count( $out ) >= 20 ) {
+            break;
+        }
+    }
+    return $out;
 }
 add_action( 'automatic_updates_complete', 'hozio_log_plugin_auto_updates' );
 
@@ -467,8 +543,15 @@ function hozio_auto_update_blocked_reason() {
         $updater = new WP_Automatic_Updater();
 
         // Covers AUTOMATIC_UPDATER_DISABLED and the automatic_updater_disabled filter,
-        // which hosts and security plugins both commonly set.
-        if ( method_exists( $updater, 'is_disabled' ) && $updater->is_disabled() ) {
+        // which hosts and security plugins both commonly set. Asked with our own freeze
+        // set aside: a freeze is deliberate and reported on its own, not an environment fault.
+        $GLOBALS['hozio_freeze_ignored'] = true;
+        try {
+            $updater_disabled = method_exists( $updater, 'is_disabled' ) && $updater->is_disabled();
+        } finally {
+            unset( $GLOBALS['hozio_freeze_ignored'] );
+        }
+        if ( $updater_disabled ) {
             return 'WordPress automatic updates are switched off on this site, so nothing can install unattended. '
                  . 'Common causes: an update-management plugin that takes over updates (ManageWP Worker, MainWP Child), '
                  . 'a security plugin, the AUTOMATIC_UPDATER_DISABLED constant in wp-config.php, or a host mu-plugin. '
@@ -494,6 +577,129 @@ function hozio_auto_update_blocked_reason() {
 }
 
 /**
+ * Why an update run must not start right now, if it mustn't.
+ *
+ * Two deliberate states stop every run — the scheduled one, the settings-page button and
+ * the Hub's run_plugin_updates / update_plugin:
+ *   - an update freeze (update-holds.php), and
+ *   - maintenance mode that was already on. Someone switched it on for a reason (a repair,
+ *     a migration). WordPress's own updater switches maintenance mode on and OFF around
+ *     every plugin it installs, so a run would end that maintenance window part-way.
+ *
+ * @return string Empty when a run may start, otherwise the reason it may not.
+ */
+function hozio_update_run_refusal() {
+    if ( function_exists( 'hozio_update_freeze_read' ) ) {
+        $freeze = hozio_update_freeze_read();
+        if ( $freeze['active'] ) {
+            return sprintf(
+                'Updates are frozen until %s UTC by %s: %s',
+                gmdate( 'Y-m-d H:i', $freeze['freeze']['until'] ),
+                $freeze['freeze']['source'],
+                $freeze['freeze']['reason']
+            );
+        }
+    }
+    if ( hozio_maintenance_mode_active() ) {
+        return 'The site is in maintenance mode, so no update run will start. Turn maintenance mode off, then run again.';
+    }
+    return '';
+}
+
+/**
+ * The $upgrading time written into .maintenance, or 0.
+ *
+ * Read as text rather than include()d: it is a PHP file anyone with file access may have
+ * written, and a number is all we need from it.
+ *
+ * @return int
+ */
+function hozio_maintenance_timestamp() {
+    $file = ABSPATH . '.maintenance';
+    if ( ! @file_exists( $file ) ) {
+        return 0;
+    }
+    $contents = @file_get_contents( $file, false, null, 0, 4096 );
+    if ( is_string( $contents ) && preg_match( '/\$upgrading\s*=\s*(\d+)/', $contents, $m ) ) {
+        return (int) $m[1];
+    }
+    return 0;
+}
+
+/**
+ * Is the site in maintenance mode right now?
+ *
+ * WordPress's own rule (wp_is_maintenance_mode()): a .maintenance file whose $upgrading
+ * time is under ten minutes old. `wp maintenance-mode activate` writes the same file, and
+ * WordPress treats an older one as over, so a leftover file never blocks updates for good.
+ *
+ * @return bool
+ */
+function hozio_maintenance_mode_active() {
+    $ts = hozio_maintenance_timestamp();
+    return $ts > 0 && ( time() - $ts ) < 10 * MINUTE_IN_SECONDS;
+}
+
+/**
+ * Delete .maintenance, but only if THIS run created it.
+ *
+ * "Created by this run" means its $upgrading time — or, when that can't be read, its
+ * modification time — is at or after the moment the run started. A maintenance file that
+ * was already there belongs to someone else, typically `wp maintenance-mode activate`
+ * during a repair, and is left alone.
+ *
+ * @return bool True when a file was removed.
+ */
+function hozio_clear_own_maintenance() {
+    $file = ABSPATH . '.maintenance';
+    clearstatcache( true, $file );
+    if ( ! @file_exists( $file ) ) {
+        return false;
+    }
+
+    $started = isset( $GLOBALS['hozio_update_run_started'] ) ? (int) $GLOBALS['hozio_update_run_started'] : 0;
+    if ( $started <= 0 ) {
+        return false;
+    }
+
+    $stamp = hozio_maintenance_timestamp();
+    if ( ! $stamp ) {
+        $stamp = (int) @filemtime( $file );
+    }
+    if ( $stamp < $started ) {
+        return false;
+    }
+
+    return @unlink( $file );
+}
+
+/**
+ * Stops WordPress's updater for the rest of this request. See hozio_guard_deliberate_maintenance().
+ *
+ * @return bool
+ */
+function hozio_updater_off_for_this_run() {
+    return true;
+}
+
+/**
+ * The scheduled run has no caller to refuse it, so when maintenance mode was already on as
+ * the run started, switch WordPress's updater off for this request instead. The file is
+ * then never touched.
+ *
+ * @return void
+ */
+function hozio_guard_deliberate_maintenance() {
+    if ( ! hozio_maintenance_mode_active() ) {
+        return;
+    }
+    add_filter( 'automatic_updater_disabled', 'hozio_updater_off_for_this_run', PHP_INT_MAX );
+    if ( function_exists( 'hozio_audit_log' ) ) {
+        hozio_audit_log( 'Skipped the scheduled update run: the site was already in maintenance mode, so it was left exactly as it was', 'AutoUpdate' );
+    }
+}
+
+/**
  * Arm the crash guard for an update run.
  *
  * WordPress puts the site into maintenance mode (a .maintenance file in the web root)
@@ -507,29 +713,40 @@ function hozio_auto_update_blocked_reason() {
  * A shutdown handler runs even on timeout and fatal error, so the cleanup lives there.
  * Armed for the cron run as well as the button: unattended is the case where nobody is
  * watching the site to notice it went down.
+ *
+ * The cleanup only undoes what THIS run did. Other people change sites while a run is in
+ * progress — the Hozio Studio Orchestrator deactivates a crashing plugin, an operator puts
+ * the site into maintenance mode for a repair — and a run that "restored" the state it saw
+ * at the start would switch the crashing plugin back on and end the maintenance window.
  */
 function hozio_arm_update_crash_guard() {
-    // Snapshot what is switched on right now, so anything the run turns off can be
-    // turned back on. See hozio_restore_deactivated_plugins() for why that happens.
-    $GLOBALS['hozio_active_plugins_before'] = (array) get_option( 'active_plugins', array() );
+    // The moment this run started: maintenance files are judged against it.
+    $GLOBALS['hozio_update_run_started'] = time();
+    // Plugins switched off INSIDE this request while the run is going. Only these are
+    // ever switched back on; see hozio_note_run_deactivations().
+    $GLOBALS['hozio_deactivated_during_run'] = array();
 
     if ( isset( $GLOBALS['hozio_update_crash_guard_armed'] ) ) {
         $GLOBALS['hozio_update_run_active'] = true; // Already registered; just re-arm.
+        hozio_guard_deliberate_maintenance();
         return;
     }
     $GLOBALS['hozio_update_crash_guard_armed'] = true;
     $GLOBALS['hozio_update_run_active']        = true;
+
+    add_action( 'update_option_active_plugins', 'hozio_note_run_deactivations', 10, 2 );
+    add_action( 'update_site_option_active_sitewide_plugins', 'hozio_note_run_network_deactivations', 10, 3 );
+
+    hozio_guard_deliberate_maintenance();
 
     register_shutdown_function( function () {
         if ( empty( $GLOBALS['hozio_update_run_active'] ) ) {
             return; // Finished normally; nothing to undo.
         }
 
-        // Get the site back online first — this is the visitor-facing symptom.
-        $maintenance = ABSPATH . '.maintenance';
-        if ( file_exists( $maintenance ) ) {
-            @unlink( $maintenance );
-        }
+        // Get the site back online first — this is the visitor-facing symptom. Only a
+        // maintenance file this run wrote; one that was already there is somebody else's.
+        $cleared = hozio_clear_own_maintenance();
 
         if ( class_exists( 'WP_Upgrader' ) && method_exists( 'WP_Upgrader', 'release_lock' ) ) {
             WP_Upgrader::release_lock( 'auto_updater' );
@@ -540,7 +757,8 @@ function hozio_arm_update_crash_guard() {
         if ( function_exists( 'hozio_audit_log' ) ) {
             $err = error_get_last();
             hozio_audit_log(
-                'Update run ended unexpectedly (timeout or fatal error) — cleared maintenance mode and the updater lock so the site stays online'
+                'Update run ended unexpectedly (timeout or fatal error) — '
+                    . ( $cleared ? 'cleared its maintenance mode and the updater lock so the site stays online' : 'released the updater lock' )
                     . ( $err && ! empty( $err['message'] ) ? '. Last error: ' . $err['message'] : '' ),
                 'AutoUpdate'
             );
@@ -555,46 +773,127 @@ function hozio_arm_update_crash_guard() {
 /**
  * Stand the crash guard down after a run that reached its own end.
  *
- * Also clears maintenance mode defensively: whatever happened during the run, a site
- * that is finished updating must never be left showing the maintenance page.
+ * Also clears maintenance mode defensively — but only a maintenance file this run wrote.
  */
 function hozio_disarm_update_crash_guard() {
     $GLOBALS['hozio_update_run_active'] = false;
+    remove_filter( 'automatic_updater_disabled', 'hozio_updater_off_for_this_run', PHP_INT_MAX );
 
-    if ( file_exists( ABSPATH . '.maintenance' ) ) {
-        @unlink( ABSPATH . '.maintenance' );
-    }
-
+    hozio_clear_own_maintenance();
     hozio_restore_deactivated_plugins();
 }
 
 /**
- * Switch back on any plugin that was active before the run and isn't now.
+ * Record a plugin switched off inside this request during a run.
+ *
+ * Hooked to update_option_active_plugins rather than the deactivated_plugin action on
+ * purpose: core's own mid-upgrade deactivation (deactivate_plugin_before_upgrade) is
+ * SILENT and fires no deactivation actions, and that is the case this net exists for. A
+ * change to active_plugins made by ANOTHER request never passes through this request's
+ * hook, which is exactly the point.
+ *
+ * @param mixed $old
+ * @param mixed $new
+ * @return void
+ */
+function hozio_note_run_deactivations( $old, $new ) {
+    if ( empty( $GLOBALS['hozio_update_run_active'] ) ) {
+        return;
+    }
+    foreach ( array_diff( (array) $old, (array) $new ) as $plugin_file ) {
+        $GLOBALS['hozio_deactivated_during_run'][ (string) $plugin_file ] = false;
+    }
+}
+
+/**
+ * Network-activated plugins (multisite) switched off inside this request during a run.
+ *
+ * @param string $option
+ * @param mixed  $new
+ * @param mixed  $old
+ * @return void
+ */
+function hozio_note_run_network_deactivations( $option, $new, $old ) {
+    if ( empty( $GLOBALS['hozio_update_run_active'] ) ) {
+        return;
+    }
+    foreach ( array_keys( array_diff_key( (array) $old, (array) $new ) ) as $plugin_file ) {
+        $GLOBALS['hozio_deactivated_during_run'][ (string) $plugin_file ] = true;
+    }
+}
+
+/**
+ * Has WordPress's recovery mode paused this plugin for crashing?
+ *
+ * @param string $plugin_file
+ * @return bool
+ */
+function hozio_plugin_paused_by_recovery_mode( $plugin_file ) {
+    // Recovery mode keys paused plugins by folder (or file name for a single-file plugin).
+    $slug = strtok( (string) $plugin_file, '/' );
+
+    if ( ! empty( $GLOBALS['_paused_plugins'] ) && is_array( $GLOBALS['_paused_plugins'] )
+        && array_key_exists( $slug, $GLOBALS['_paused_plugins'] ) ) {
+        return true;
+    }
+
+    if ( function_exists( 'wp_paused_plugins' ) ) {
+        try {
+            $paused = wp_paused_plugins()->get( $slug );
+            if ( ! empty( $paused ) ) {
+                return true;
+            }
+        } catch ( \Throwable $e ) {
+            return false;
+        }
+    }
+    return false;
+}
+
+/**
+ * Drop this request's cached active-plugin list so the next read comes from the database.
+ *
+ * Another request (a person, the Orchestrator) may have changed it since this request
+ * loaded it. activate_plugin() reads the cached list and writes it back with one plugin
+ * added, so working from a stale copy would silently switch THEIR change back.
+ *
+ * @return void
+ */
+function hozio_refresh_active_plugins_cache() {
+    wp_cache_delete( 'alloptions', 'options' );
+    wp_cache_delete( 'active_plugins', 'options' );
+    wp_cache_delete( 'notoptions', 'options' );
+}
+
+/**
+ * Switch back on the plugins THIS request switched off during the run.
  *
  * The safety net for the deactivation problem, kept even though the run now declares
  * cron context (which stops core deactivating anything in the first place). Two cases
  * it still covers: a run killed after core deactivated a plugin but before the files
- * finished swapping, and any other code on the site that deactivates during an upgrade.
+ * finished swapping, and any other code on the site that deactivates during an upgrade
+ * in the same request.
+ *
+ * Never switched back on:
+ *   - a plugin deactivated by anyone else (another request), even mid-run — it isn't
+ *     in this request's list in the first place;
+ *   - a plugin that is active again already;
+ *   - a held plugin (update-holds.php);
+ *   - a plugin WordPress's recovery mode has paused for crashing (wp_paused_plugins).
  *
  * Reactivation is SILENT — no activation hooks. The deactivation was silent too, so the
  * plugin never ran its deactivation routine and its stored state is untouched; firing
  * activation hooks on a plugin that never really deactivated could re-run installers.
  *
  * Safe against reactivating something genuinely broken: activate_plugin() validates the
- * plugin first and returns WP_Error if its files are missing or unreadable. WordPress's
- * own fatal-error protection works through wp_paused_plugins, not active_plugins, so
- * this cannot fight it or resurrect a plugin core has paused for crashing.
+ * plugin first and returns WP_Error if its files are missing or unreadable.
  *
  * @return int How many plugins were switched back on.
  */
 function hozio_restore_deactivated_plugins() {
-    if ( empty( $GLOBALS['hozio_active_plugins_before'] ) ) {
-        return 0;
-    }
-
-    $before = (array) $GLOBALS['hozio_active_plugins_before'];
-    $now    = (array) get_option( 'active_plugins', array() );
-    $lost   = array_diff( $before, $now );
+    $lost = isset( $GLOBALS['hozio_deactivated_during_run'] ) ? (array) $GLOBALS['hozio_deactivated_during_run'] : array();
+    // Don't repeat the work if this runs twice (normal path, then shutdown).
+    $GLOBALS['hozio_deactivated_during_run'] = array();
 
     if ( empty( $lost ) ) {
         return 0;
@@ -605,7 +904,25 @@ function hozio_restore_deactivated_plugins() {
     }
 
     $restored = 0;
-    foreach ( $lost as $plugin_file ) {
+    foreach ( $lost as $plugin_file => $network_wide ) {
+        hozio_refresh_active_plugins_cache();
+
+        $active = $network_wide ? is_plugin_active_for_network( $plugin_file ) : in_array( $plugin_file, (array) get_option( 'active_plugins', array() ), true );
+        if ( $active ) {
+            continue;
+        }
+
+        $hold = function_exists( 'hozio_update_hold_get_active' ) ? hozio_update_hold_get_active( $plugin_file ) : null;
+        if ( $hold ) {
+            hozio_audit_log( sprintf( 'Left %s switched off after the update: it is held (%s)', $plugin_file, $hold['reason'] ), 'AutoUpdate' );
+            continue;
+        }
+
+        if ( hozio_plugin_paused_by_recovery_mode( $plugin_file ) ) {
+            hozio_audit_log( sprintf( 'Left %s switched off after the update: WordPress recovery mode paused it for crashing', $plugin_file ), 'AutoUpdate' );
+            continue;
+        }
+
         if ( ! file_exists( WP_PLUGIN_DIR . '/' . $plugin_file ) ) {
             if ( function_exists( 'hozio_audit_log' ) ) {
                 hozio_audit_log(
@@ -616,7 +933,7 @@ function hozio_restore_deactivated_plugins() {
             continue;
         }
 
-        $result = activate_plugin( $plugin_file, '', false, true );
+        $result = activate_plugin( $plugin_file, '', (bool) $network_wide, true );
 
         if ( function_exists( 'hozio_audit_log' ) ) {
             if ( is_wp_error( $result ) ) {
@@ -626,7 +943,7 @@ function hozio_restore_deactivated_plugins() {
                 );
             } else {
                 hozio_audit_log(
-                    sprintf( 'Reactivated %s — WordPress deactivated it during the update', $plugin_file ),
+                    sprintf( 'Reactivated %s — it was switched off during the update run', $plugin_file ),
                     'AutoUpdate'
                 );
             }
@@ -636,9 +953,6 @@ function hozio_restore_deactivated_plugins() {
             $restored++;
         }
     }
-
-    // Don't repeat the work if this runs twice (normal path, then shutdown).
-    $GLOBALS['hozio_active_plugins_before'] = (array) get_option( 'active_plugins', array() );
 
     return $restored;
 }
@@ -652,13 +966,13 @@ add_action( 'wp_maybe_auto_update', 'hozio_disarm_update_crash_guard', PHP_INT_M
  * Break down what WordPress currently has pending for this site.
  *
  * "Pending" is whatever core's own update check found. "Eligible" is the part this
- * plugin would actually install — majors and exclusions are declined by policy, so
+ * plugin would actually install — majors, exclusions and holds are declined by policy, so
  * counting them as outstanding work makes a fully-patched site look behind forever.
  *
- * @return array{pending:int,eligible:int,skipped_major:int,excluded:int}
+ * @return array{pending:int,eligible:int,skipped_major:int,excluded:int,held:int}
  */
 function hozio_count_pending_updates() {
-    $out = array( 'pending' => 0, 'eligible' => 0, 'skipped_major' => 0, 'excluded' => 0 );
+    $out = array( 'pending' => 0, 'eligible' => 0, 'skipped_major' => 0, 'excluded' => 0, 'held' => 0 );
 
     $transient = get_site_transient( 'update_plugins' );
     if ( ! $transient || empty( $transient->response ) || ! is_array( $transient->response ) ) {
@@ -673,6 +987,12 @@ function hozio_count_pending_updates() {
 
     foreach ( $transient->response as $file => $info ) {
         $out['pending']++;
+
+        if ( function_exists( 'hozio_update_hold_blocks' )
+            && hozio_update_hold_blocks( $file, isset( $info->new_version ) ? $info->new_version : '' ) ) {
+            $out['held']++;
+            continue;
+        }
 
         $folder = strpos( $file, '/' ) !== false ? strtok( $file, '/' ) : '';
         if ( isset( $exclusions[ strtolower( $file ) ] ) || ( $folder && isset( $exclusions[ strtolower( $folder ) ] ) ) ) {
@@ -704,9 +1024,16 @@ function hozio_count_pending_updates() {
  * @param int $max Cap for THIS run only (0 = use the normal per-run cap). The
  *                 settings-page button passes 1 and repeats, so a host with a tight
  *                 max_execution_time never has to finish several updates in one request.
- * @return array{updated:int,failed:int,messages:string[]}
+ * @return array{updated:int,failed:int,messages:string[],refused?:string}
  */
 function hozio_run_plugin_auto_updates_now( $max = 0 ) {
+    // A freeze or deliberate maintenance mode stops the run before anything is touched.
+    // Callers check first and explain; this is the backstop for any that don't.
+    $refusal = hozio_update_run_refusal();
+    if ( $refusal !== '' ) {
+        return array( 'updated' => 0, 'failed' => 0, 'messages' => array(), 'refused' => $refusal );
+    }
+
     if ( ! function_exists( 'wp_maybe_auto_update' ) ) {
         require_once ABSPATH . 'wp-admin/includes/update.php';
     }
@@ -842,6 +1169,12 @@ add_action( 'wp_ajax_hozio_run_plugin_updates', function () {
         wp_send_json_error( 'Auto-Update All Plugins is turned off for this site.' );
     }
 
+    // A freeze or deliberate maintenance mode beats the button too.
+    $refusal = hozio_update_run_refusal();
+    if ( $refusal !== '' ) {
+        wp_send_json_error( $refusal );
+    }
+
     // Report an environmental blocker plainly rather than letting the run come back
     // empty and read as "everything is current".
     $blocked = hozio_auto_update_blocked_reason();
@@ -868,8 +1201,8 @@ add_action( 'wp_ajax_hozio_run_plugin_updates', function () {
             if ( $remaining <= 0 ) {
                 wp_send_json_success( array(
                     'summary'   => sprintf(
-                        'Nothing eligible to install: of %d pending, %d are major-version updates (skipped by design) and %d are excluded. Install majors manually alongside any paid add-on.',
-                        $counts['pending'], $counts['skipped_major'], $counts['excluded']
+                        'Nothing eligible to install: of %d pending, %d are major-version updates (skipped by design), %d are excluded and %d are held. Install majors manually alongside any paid add-on.',
+                        $counts['pending'], $counts['skipped_major'], $counts['excluded'], $counts['held']
                     ),
                     'remaining' => 0,
                     'installed' => 0,

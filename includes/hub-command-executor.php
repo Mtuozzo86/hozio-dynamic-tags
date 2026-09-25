@@ -51,6 +51,16 @@ class Hozio_Command_Executor {
                 case 'update_plugin':
                     return self::cmd_update_plugin($command_payload);
 
+                // Update holds and the site-wide freeze (includes/update-holds.php)
+                case 'hold_plugin_updates':
+                    return self::cmd_hold_plugin_updates($command_payload);
+                case 'release_plugin_updates':
+                    return self::cmd_release_plugin_updates($command_payload);
+                case 'freeze_updates':
+                    return self::cmd_freeze_updates($command_payload);
+                case 'unfreeze_updates':
+                    return self::cmd_unfreeze_updates($command_payload);
+
                 // Rollback
                 case 'rollback_plugin':
                     return self::cmd_rollback_plugin($command_payload);
@@ -338,8 +348,16 @@ class Hozio_Command_Executor {
         }
 
         // Restrict to hozio_ prefixed options only
-        if (strpos($option_name, 'hozio_') !== 0) {
+        if (!is_string($option_name) || strpos($option_name, 'hozio_') !== 0) {
             return ['success' => false, 'error' => 'Only hozio_ prefixed options can be updated remotely.'];
+        }
+
+        // Lower case letters, digits, _ and - only. MySQL compares option names without
+        // regard to case or trailing spaces, so "hozio_Hub_site_token" or a name with a
+        // trailing space would pass the checks below as a PHP string yet overwrite the
+        // protected row in the database.
+        if (!preg_match('/^hozio_[a-z0-9_\-]+$/', $option_name)) {
+            return ['success' => false, 'error' => 'Option names may only contain lower-case letters, digits, _ and -.'];
         }
 
         // Block hub connection options from remote modification
@@ -354,27 +372,74 @@ class Hozio_Command_Executor {
             return ['success' => false, 'error' => 'Log storage options cannot be modified via remote commands.'];
         }
 
+        // Block update holds and the freeze. They have their own commands, which validate
+        // and audit-log every change; a raw write here would do neither.
+        if (in_array($option_name, ['hozio_update_holds', 'hozio_update_freeze'], true)) {
+            return ['success' => false, 'error' => 'Update holds and the freeze cannot be written directly. Use hold_plugin_updates, release_plugin_updates, freeze_updates or unfreeze_updates.'];
+        }
+
         update_option($option_name, $option_value);
 
         return ['success' => true, 'data' => ['option' => $option_name, 'value' => $option_value]];
     }
 
     /**
+     * The Hub's temporary support login.
+     *
+     * Deliberately NOT "hoziowpadmin". That account belongs to the Hozio Studio Orchestrator
+     * on every site: its shared password is the orchestrator's login, and its application
+     * passwords are the orchestrator's REST keys. When these commands used that name,
+     * create_admin_login reset its password and remove_admin_login deleted it, application
+     * passwords and all. The Hub now gets an account of its own, and neither command will
+     * ever touch hoziowpadmin.
+     */
+    const HUB_SUPPORT_LOGIN  = 'hozio-hub-support';
+    const HUB_SUPPORT_EMAIL  = 'hozio-hub-support@localhost.invalid';
+    const HUB_SUPPORT_MARKER = '_hozio_hub_support_account';
+
+    /**
+     * Accounts these commands must never create, reset or delete.
+     */
+    private static function is_reserved_login($username) {
+        return in_array(strtolower((string) $username), ['hoziowpadmin'], true);
+    }
+
+    /**
+     * Was this account created by create_admin_login? Only then may the Hub reset or
+     * delete it — an unrelated person who happens to use the name is left alone.
+     */
+    private static function is_hub_support_account($user) {
+        if (!$user || self::is_reserved_login($user->user_login)) {
+            return false;
+        }
+        return get_user_meta($user->ID, self::HUB_SUPPORT_MARKER, true) === '1'
+            || strtolower((string) $user->user_email) === self::HUB_SUPPORT_EMAIL;
+    }
+
+    /**
      * Create a temporary admin login (or reset password if exists)
      */
     private static function cmd_create_admin_login($payload) {
-        $username = 'hoziowpadmin';
+        $username = self::HUB_SUPPORT_LOGIN;
+        if (self::is_reserved_login($username)) {
+            return ['success' => false, 'error' => 'Refusing to touch a reserved account.'];
+        }
+
         // Generate a strong, random one-time password. It is returned ONCE in this
         // command result so the operator can use it, and is never stored in an option
         // or written to a log. Each create/reset issues a fresh password.
         $password = wp_generate_password(20, true, false);
-        $email    = 'hoziowpadmin@localhost.invalid';
+        $email    = self::HUB_SUPPORT_EMAIL;
 
         $existing = get_user_by('login', $username);
 
         if ($existing) {
+            if (!self::is_hub_support_account($existing)) {
+                return ['success' => false, 'error' => 'An account named ' . $username . ' exists that the Hub did not create; it was left alone.'];
+            }
             // Reset password on existing account
             wp_set_password($password, $existing->ID);
+            hozio_audit_log(sprintf('Hub reset the password of the temporary support login %s (user ID %d)', $username, $existing->ID), 'HubLogin');
             return [
                 'success' => true,
                 'data'    => [
@@ -399,6 +464,9 @@ class Hozio_Command_Executor {
             return ['success' => false, 'error' => $user_id->get_error_message()];
         }
 
+        update_user_meta($user_id, self::HUB_SUPPORT_MARKER, '1');
+        hozio_audit_log(sprintf('Hub created the temporary support login %s (user ID %d)', $username, $user_id), 'HubLogin');
+
         return [
             'success' => true,
             'data'    => [
@@ -414,11 +482,15 @@ class Hozio_Command_Executor {
      * Remove the temporary admin login
      */
     private static function cmd_remove_admin_login($payload) {
-        $username = 'hoziowpadmin';
+        $username = self::HUB_SUPPORT_LOGIN;
         $user = get_user_by('login', $username);
 
         if (!$user) {
             return ['success' => false, 'error' => 'Login account not found.'];
+        }
+
+        if (!self::is_hub_support_account($user)) {
+            return ['success' => false, 'error' => 'The account named ' . $username . ' was not created by the Hub; it was left alone.'];
         }
 
         if (!function_exists('wp_delete_user')) {
@@ -435,6 +507,7 @@ class Hozio_Command_Executor {
         $reassign_to = !empty($admins) ? $admins[0]->ID : null;
 
         wp_delete_user($user->ID, $reassign_to);
+        hozio_audit_log(sprintf('Hub removed the temporary support login %s (user ID %d)', $username, $user->ID), 'HubLogin');
 
         return [
             'success' => true,
@@ -462,6 +535,14 @@ class Hozio_Command_Executor {
     private static function cmd_run_plugin_updates($payload) {
         if (!function_exists('hozio_run_plugin_auto_updates_now')) {
             return ['success' => false, 'error' => 'Auto-update module not available on this site.'];
+        }
+
+        // A freeze (or maintenance mode someone switched on) beats a Hub-triggered run.
+        if (function_exists('hozio_update_run_refusal')) {
+            $refusal = hozio_update_run_refusal();
+            if ($refusal !== '') {
+                return ['success' => false, 'error' => $refusal];
+            }
         }
 
         // A site that physically cannot write updates should say so, rather than
@@ -548,6 +629,31 @@ class Hozio_Command_Executor {
             return ['success' => false, 'error' => 'That plugin is not installed on this site.'];
         }
 
+        // A freeze beats this command, force or not.
+        if (function_exists('hozio_update_run_refusal')) {
+            $refusal = hozio_update_run_refusal();
+            if ($refusal !== '') {
+                return ['success' => false, 'error' => $refusal];
+            }
+        }
+
+        // So does a hold. The $only filter below sits at PHP_INT_MAX and runs after the hold
+        // filter, so with force it would otherwise override the hold. Only
+        // release_plugin_updates lifts a hold.
+        if (function_exists('hozio_update_hold_get_active')) {
+            $hold = hozio_update_hold_get_active($plugin_file);
+            if ($hold) {
+                $pending = get_site_transient('update_plugins');
+                $target  = ($pending && isset($pending->response[$plugin_file]->new_version)) ? $pending->response[$plugin_file]->new_version : '';
+                // A pin refuses outright. A skip hold refuses when the pending version is one
+                // it names; if nothing is pending yet, the filter checks during the run.
+                if ($hold['mode'] === 'pin' || ($target !== '' && hozio_update_hold_blocks($plugin_file, $target))) {
+                    hozio_audit_log(sprintf('Refused a Hub update of %s%s: it is held until %s (%s)', $plugin_file, $force ? ' (forced)' : '', hozio_hold_iso($hold['expires_at']), $hold['reason']), 'AutoUpdate');
+                    return ['success' => false, 'error' => sprintf('%s is held until %s (%s, by %s). Send release_plugin_updates first.', $plugin_file, hozio_hold_iso($hold['expires_at']), $hold['reason'], $hold['source'])];
+                }
+            }
+        }
+
         // Leave plugins owned by another updater alone unless explicitly forced —
         // two systems writing the same directory is how directories get corrupted.
         if (!$force
@@ -574,6 +680,12 @@ class Hozio_Command_Executor {
         $only = function ($update, $item) use ($plugin_file, $force) {
             $file = isset($item->plugin) ? (string) $item->plugin : '';
             if ($file !== $plugin_file) {
+                return false;
+            }
+            // Checked again here in case the update the run finds is a version a skip hold
+            // names, which the check above could not see before the run looked.
+            if (function_exists('hozio_update_hold_blocks')
+                && hozio_update_hold_blocks($file, isset($item->new_version) ? $item->new_version : '')) {
                 return false;
             }
             return $force ? true : $update;
@@ -635,8 +747,8 @@ class Hozio_Command_Executor {
     // ─── Rollback ────────────────────────────────────────────────────
 
     private static function cmd_rollback_plugin($payload) {
-        $version = $payload['version'] ?? '';
-        if (empty($version)) {
+        $version = isset($payload['version']) && is_string($payload['version']) ? ltrim(sanitize_text_field($payload['version']), 'vV') : '';
+        if ($version === '') {
             return ['success' => false, 'error' => 'version is required.'];
         }
 
@@ -644,18 +756,122 @@ class Hozio_Command_Executor {
             return ['success' => false, 'error' => 'Rollback system not loaded.'];
         }
 
+        // A freeze means nothing changes on this site until it is lifted, Hozio Pro included.
+        if (function_exists('hozio_updates_frozen') && hozio_updates_frozen()) {
+            return ['success' => false, 'error' => 'Updates are frozen on this site. Send unfreeze_updates first.'];
+        }
+
+        $before = hozio_get_plugin_version();
+
         hozio_audit_log("Hub-triggered rollback to v{$version}", 'Rollback');
 
         $result = hozio_perform_rollback($version, true);
 
         if ($result['success']) {
-            update_option('hozio_auto_updates_enabled', '1');
+            if (version_compare($version, $before, '<') && function_exists('hozio_update_hold_place')) {
+                // A DOWNGRADE. Previously this switched auto-updates back on, and the only
+                // thing then stopping WordPress reinstalling the release just rolled back
+                // was a one-hour pause. Hold Hozio Pro instead, for the default 30 days,
+                // until someone releases it.
+                $hold = hozio_update_hold_place(plugin_basename(HOZIO_PLUGIN_FILE), [
+                    'mode'     => 'pin',
+                    'versions' => [$before],
+                    'reason'   => sprintf('Hub rolled Hozio Pro back from %s to %s', $before, $version),
+                    'source'   => 'hub',
+                ]);
+                $result['hold'] = is_wp_error($hold) ? ['ok' => false, 'error' => $hold->get_error_message()] : $hold;
+            } else {
+                update_option('hozio_auto_updates_enabled', '1');
+            }
         }
 
         return [
             'success' => $result['success'],
             'data'    => $result,
         ];
+    }
+
+    // ─── Update holds and freeze ─────────────────────────────────────
+    //
+    // The same functions `wp hozio updates ...` calls (includes/update-holds.php), with the
+    // same validation and audit logging. The source is always "hub", whatever the payload says.
+
+    /**
+     * Turn an update-holds result into a command result.
+     */
+    private static function hold_result($result) {
+        if (is_wp_error($result)) {
+            return ['success' => false, 'error' => $result->get_error_message(), 'code' => $result->get_error_code()];
+        }
+        return ['success' => true, 'data' => $result];
+    }
+
+    /**
+     * Payload value as a string, or null when it isn't one (so validation rejects it).
+     */
+    private static function payload_string($payload, $key) {
+        if (!isset($payload[$key])) {
+            return null;
+        }
+        return (is_string($payload[$key]) || is_int($payload[$key])) ? (string) $payload[$key] : null;
+    }
+
+    /**
+     * Payload: { plugin, reason, mode?: pin|skip, versions?: [..] | "a,b", until?: "+30d" | "YYYY-MM-DD", ref? }
+     */
+    private static function cmd_hold_plugin_updates($payload) {
+        if (!function_exists('hozio_update_hold_place')) {
+            return ['success' => false, 'error' => 'Update holds are not available on this site.'];
+        }
+        return self::hold_result(hozio_update_hold_place(self::payload_string($payload, 'plugin'), [
+            'reason'   => self::payload_string($payload, 'reason'),
+            'mode'     => self::payload_string($payload, 'mode'),
+            'versions' => isset($payload['versions']) ? $payload['versions'] : null,
+            'until'    => self::payload_string($payload, 'until'),
+            'ref'      => self::payload_string($payload, 'ref'),
+            'source'   => 'hub',
+        ]));
+    }
+
+    /**
+     * Payload: { plugin, reason }
+     */
+    private static function cmd_release_plugin_updates($payload) {
+        if (!function_exists('hozio_update_hold_release')) {
+            return ['success' => false, 'error' => 'Update holds are not available on this site.'];
+        }
+        return self::hold_result(hozio_update_hold_release(self::payload_string($payload, 'plugin'), [
+            'reason' => self::payload_string($payload, 'reason'),
+            'source' => 'hub',
+        ]));
+    }
+
+    /**
+     * Payload: { until: "+1d" | "YYYY-MM-DD" (at most 7 days), reason, ref? }
+     */
+    private static function cmd_freeze_updates($payload) {
+        if (!function_exists('hozio_updates_freeze')) {
+            return ['success' => false, 'error' => 'Update freeze is not available on this site.'];
+        }
+        return self::hold_result(hozio_updates_freeze([
+            'until'  => self::payload_string($payload, 'until'),
+            'reason' => self::payload_string($payload, 'reason'),
+            'ref'    => self::payload_string($payload, 'ref'),
+            'source' => 'hub',
+        ]));
+    }
+
+    /**
+     * Payload: { reason }
+     */
+    private static function cmd_unfreeze_updates($payload) {
+        if (!function_exists('hozio_updates_unfreeze')) {
+            return ['success' => false, 'error' => 'Update freeze is not available on this site.'];
+        }
+        return self::hold_result(hozio_updates_unfreeze([
+            'reason' => self::payload_string($payload, 'reason'),
+            'source' => 'hub',
+        ]));
     }
 
     // ─── Tier 2: REST API Proxy ──────────────────────────────────────

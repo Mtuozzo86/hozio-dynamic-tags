@@ -2,6 +2,93 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.21.0 (September 2026) ==
+
+= Fixes =
+
+* A plugin that had been rolled back could be updated straight back to the
+  version that broke the site. "Auto-Update All Plugins" approves every
+  plugin, and WordPress only records which plugins have auto-updates turned
+  ON, never which were turned off, so nothing short of the exclusion list
+  could say "not this one".
+
+  Update holds fix this. A hold is a stored "do not auto-update this plugin"
+  with a reason, who placed it and an end date: 30 days by default, never
+  more than 180. It has the last word on every automatic path - the scheduled
+  run, "Run Plugin Updates Now", the Hub's run_plugin_updates and
+  update_plugin (even with force), WordPress's own per-plugin setting and
+  Hozio Pro's own self-update - whether or not Auto-Update All is on. A
+  "skip" hold blocks only the versions it names. An expired hold stops
+  blocking at once and stays visible for 7 days.
+
+* The Hub's rollback of Hozio Pro switched automatic updates back on, and
+  only a one-hour pause then stood between the site and the release it had
+  just been rolled back from. A Hub downgrade now places a 30-day hold on
+  Hozio Pro instead. This protects releases from 4.21.0 on; an older release
+  does not read holds and still relies on its own one-hour pause.
+
+* The update crash guard could undo other people's changes. After a run it
+  switched back on every plugin that had been active when the run started,
+  including one somebody deactivated during the run because it was crashing.
+  It now switches back on only plugins deactivated inside the run itself,
+  and never a held plugin or one WordPress's recovery mode has paused.
+
+* The crash guard deleted the maintenance-mode file at the end of every run,
+  ending a maintenance window someone had opened on purpose. It now deletes
+  only a file its own run wrote. And because WordPress's updater switches
+  maintenance mode on and off around every plugin it installs, no update run
+  starts at all while maintenance mode is already on.
+
+* The Hub's temporary admin login used the same username as the account
+  another management tool relies on on every site: creating it reset that
+  account's password, and removing it deleted the account along with its
+  application passwords. The Hub now gets its own account,
+  hozio-hub-support, and neither command will touch any other.
+
+* The Hub's update_option command compared option names exactly, but MySQL
+  does not: a name differing only in letter case or a trailing space reached
+  a protected option. Names must now be lower case letters, digits, _ and -.
+
+* Plugin Settings: the Version Control card compared the previous version
+  against a value it had not read yet, so it could offer "revert" to the
+  version already installed, and it raised a PHP warning.
+
+= Added =
+
+* A site-wide update freeze: no automatic plugin, theme, core or Hozio Pro
+  update runs while it lasts (at most 7 days). It beats "Override and force
+  updates on", the settings-page button and every Hub update command.
+
+* WP-CLI commands for managing tools: wp hozio info, wp hozio log, and wp
+  hozio updates hold / release / holds / freeze / unfreeze / history. Each
+  prints one line of JSON and never prints a secret; email and IP addresses
+  in log lines are redacted.
+
+* Hub commands hold_plugin_updates, release_plugin_updates, freeze_updates
+  and unfreeze_updates. The heartbeat now reports holds and the freeze, so
+  a held plugin is not shown as permanently behind.
+
+* Plugins screen: the Auto-updates column says "Auto-updates managed by
+  Hozio Pro", or for a held plugin when and why it is held, with a Release
+  hold link for users who can update plugins. A held plugin's update row
+  warns that updating it may bring back the version that broke the site.
+  Updating by hand is never blocked.
+
+* Plugin Settings > Feature Toggles: an "Update holds and freeze" panel
+  listing active and expired holds and any freeze, with Release and
+  Unfreeze buttons.
+
+= Notes =
+
+* Holds and the freeze live in two non-autoloaded options (hozio_update_holds,
+  hozio_update_freeze). Every entry is validated each time it is read, and
+  anything that fails is ignored and counted. The Hub's update_option
+  command refuses both; they are changed only through the commands above,
+  which audit-log every change.
+
+* A logger call with an unknown log name now writes nothing instead of
+  falling back to the audit log.
+
 == Version 4.20.9 (September 2026) ==
 
 = Security =

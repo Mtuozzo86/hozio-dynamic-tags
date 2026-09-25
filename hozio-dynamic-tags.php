@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.20.9
+Version:         4.21.0
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -22,13 +22,17 @@ Text Domain:     hozio-dynamic-tags
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.20.9');
+define('HOZIO_VERSION', '4.21.0');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
 // Load custom logger first (enables HOZIO_DEBUG logging without WP_DEBUG).
 // Both logs live in private database tables, never in a web-servable file.
 require_once plugin_dir_path( __FILE__ ) . 'includes/hozio-logger.php';
+
+// Update holds and the site-wide update freeze. Loaded before the updater, the auto-update
+// module and the Hub files, which all consult it.
+require_once plugin_dir_path( __FILE__ ) . 'includes/update-holds.php';
 
 // Load plugin settings page (debug toggles, feature toggles, system info)
 require_once plugin_dir_path( __FILE__ ) . 'includes/plugin-settings.php';
@@ -78,6 +82,11 @@ foreach ($hozio_hub_includes as $hozio_hub_file) {
     if (file_exists($hozio_hub_path)) {
         require_once $hozio_hub_path;
     }
+}
+
+// `wp hozio ...` — the Hozio Studio Orchestrator's interface. Only ever loaded under WP-CLI.
+if (defined('WP_CLI') && WP_CLI) {
+    require_once plugin_dir_path(__FILE__) . 'includes/wp-cli.php';
 }
 
 // Hub heartbeat cron: activation hook MUST be in main plugin file

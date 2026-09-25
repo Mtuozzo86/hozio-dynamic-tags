@@ -854,6 +854,7 @@ function hozio_support_page() {
                             <li>Remember to <strong>disable debug logging</strong> on production sites.</li>
                             <li><strong>Audit Log:</strong> All Hub commands, plugin updates, and rollbacks are recorded via <code>hozio_audit_log()</code> in a private database table (never a public file). It keeps the newest 5,000 entries and is separate from the debug log. Read it with <strong>View Audit Log</strong> under Plugin Settings &rarr; Debug &amp; Logging. Useful for diagnosing unexpected changes on live sites.</li>
                             <li><strong>Install History:</strong> A timeline in the Plugin Settings page shows every version installed, labeled as Update or Rollback, with Hub-triggered installs marked with a green Hub badge.</li>
+                            <li><strong>Update holds and freeze:</strong> A <em>hold</em> stops automatic updates to one plugin (placed after a rollback, so the version that broke the site is not reinstalled). A <em>freeze</em> stops every automatic update while a repair is in progress. Both end on their own and are listed under Feature Toggles, with Release and Unfreeze buttons. Neither stops you updating a plugin by hand.</li>
                         </ul>
                     </div>
                 </div>

@@ -241,6 +241,16 @@ class Hozio_Plugin_Updater {
             return false;
         }
 
+        // A freeze, or a hold on Hozio Pro itself (placed, for one, after the Hub rolls
+        // Hozio Pro back), stops the self-update the same way it stops every other plugin.
+        if (function_exists('hozio_updates_frozen') && hozio_updates_frozen()) {
+            return false;
+        }
+        if (function_exists('hozio_update_hold_blocks')
+            && hozio_update_hold_blocks($this->plugin_file, isset($item->new_version) ? $item->new_version : '')) {
+            return false;
+        }
+
         // Check if version is locked (blocks all auto-updates)
         if (function_exists('hozio_is_version_locked') && hozio_is_version_locked()) {
             return false;

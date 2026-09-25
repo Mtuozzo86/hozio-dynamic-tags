@@ -20,7 +20,7 @@
  * WHY THE DATABASE AND NOT A FILE (4.20.9)
  *
  * Up to 4.20.8 both logs were plain files in wp-content/ — hozio-audit.log and
- * hozio-debug.log. wp-content is web-servable, and on Nginx hosts (Pressable included)
+ * hozio-debug.log. wp-content is web-servable, and on hosts that serve its files directly
  * nothing stopped a stranger downloading them: the audit log held admin usernames and
  * user IDs, the full plugin list with versions, failed updates with their error messages,
  * and Hub activity. That is exactly the reconnaissance an attacker uses to pick a target.
@@ -165,11 +165,18 @@ function hozio_log_count_label($count) {
  * Table name for a log.
  *
  * @param string $channel 'audit' or 'debug'
- * @return string
+ * @return string Empty for any other channel, which every reader and writer treats as
+ *                "no such log" — never as the audit log.
  */
 function hozio_log_table($channel = 'audit') {
     global $wpdb;
-    return $wpdb->prefix . ($channel === 'debug' ? 'hozio_debug_log' : 'hozio_audit_log');
+    if ($channel === 'debug') {
+        return $wpdb->prefix . 'hozio_debug_log';
+    }
+    if ($channel === 'audit') {
+        return $wpdb->prefix . 'hozio_audit_log';
+    }
+    return '';
 }
 
 /**
@@ -191,6 +198,9 @@ function hozio_log_table_ready($channel = 'audit', $refresh = false) {
     }
 
     $table = hozio_log_table($channel);
+    if ($table === '') {
+        return false;
+    }
     if ($refresh) {
         unset($ready[$table]);
     }
@@ -316,7 +326,11 @@ function hozio_log_write($channel, $context, $message) {
         return false;
     }
 
-    $channel = ($channel === 'debug') ? 'debug' : 'audit';
+    // Only the two known logs. Anything else is a caller's mistake: write nothing rather
+    // than guess, so a typo can never put debug chatter into the audit trail.
+    if ($channel !== 'audit' && $channel !== 'debug') {
+        return false;
+    }
 
     // A log call usually lands in the middle of someone else's database work — a hook
     // fired between their INSERT and their read of $wpdb->insert_id, say. Put wpdb's
@@ -883,6 +897,44 @@ function hozio_log_unlock() {
     $wpdb->query($wpdb->prepare("DELETE FROM `{$wpdb->options}` WHERE option_name = %s", 'hozio_log_migration_lock'));
     $wpdb->suppress_errors($suppress);
     wp_cache_delete('hozio_log_migration_lock', 'options');
+}
+
+/**
+ * Strip email addresses and IP addresses from text that leaves the site.
+ *
+ * WP-CLI output can end up in the host's activity log, readable by every collaborator on
+ * the site. Log lines can quote an error message that holds either.
+ *
+ * Deliberately broad on IPv4: a four-part number like 1.2.3.4 is replaced even when it is
+ * a version string. Losing a version from a log line is cheap; leaking an address is not.
+ *
+ * @param string $text
+ * @return string
+ */
+function hozio_log_redact($text) {
+    $text = (string) $text;
+    if ($text === '') {
+        return $text;
+    }
+
+    $patterns = array(
+        // Email addresses.
+        '/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/' => '[email]',
+        // IPv4.
+        '/(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])/' => '[ip]',
+        // IPv6, full form (three or more colons, so times like 12:34:56 are left alone).
+        '/(?<![\w:])(?:[0-9A-Fa-f]{1,4}:){3,7}[0-9A-Fa-f]{1,4}(?![\w:])/' => '[ip]',
+        // IPv6, compressed form (::1, fe80::1, 2001:db8::1).
+        '/(?<![\w:])(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?(?![\w:])/' => '[ip]',
+    );
+
+    foreach ($patterns as $pattern => $replacement) {
+        $clean = preg_replace($pattern, $replacement, $text);
+        if (is_string($clean)) {
+            $text = $clean;
+        }
+    }
+    return $text;
 }
 
 /**
