@@ -226,6 +226,15 @@ function hozio_auto_update_all_plugins_filter( $update, $item ) {
         }
     }
 
+    // A held plugin (update-holds.php) is declined at PHP_INT_MAX whatever this returns.
+    // Decline it HERE as well, before the per-run cap below counts it: otherwise a held
+    // plugin that happens to come first uses up the run's slot (the button's cap is one),
+    // and the plugin after it is refused for nothing.
+    if ( $file !== '' && function_exists( 'hozio_update_hold_blocks' )
+        && hozio_update_hold_blocks( $item->plugin, isset( $item->new_version ) ? $item->new_version : '' ) ) {
+        return false;
+    }
+
     // ── Another updater owns this plugin ─────────────────────────────────────
     // If Git Updater is running the site, leave the plugins it manages alone. Two
     // updaters writing the same directory is how you get a half-installed plugin, and
