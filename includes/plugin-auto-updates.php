@@ -650,12 +650,30 @@ function hozio_maintenance_mode_active() {
 }
 
 /**
+ * A fingerprint of .maintenance as it is right now: its $upgrading time, or its
+ * modification time when that can't be read. '' when there is no file.
+ *
+ * @return string
+ */
+function hozio_maintenance_signature() {
+    $file = ABSPATH . '.maintenance';
+    clearstatcache( true, $file );
+    if ( ! @file_exists( $file ) ) {
+        return '';
+    }
+    $stamp = hozio_maintenance_timestamp();
+    return $stamp ? 'u' . $stamp : 'm' . (int) @filemtime( $file );
+}
+
+/**
  * Delete .maintenance, but only if THIS run created it.
  *
  * "Created by this run" means its $upgrading time — or, when that can't be read, its
- * modification time — is at or after the moment the run started. A maintenance file that
- * was already there belongs to someone else, typically `wp maintenance-mode activate`
- * during a repair, and is left alone.
+ * modification time — is at or after the moment the run started, AND it is not the very
+ * file that was already there when the run was armed. A maintenance file that was already
+ * there belongs to someone else, typically `wp maintenance-mode activate` during a repair,
+ * and is left alone — including one switched on in the same second the run started, which
+ * the timestamp alone cannot tell apart.
  *
  * @return bool True when a file was removed.
  */
@@ -668,6 +686,12 @@ function hozio_clear_own_maintenance() {
 
     $started = isset( $GLOBALS['hozio_update_run_started'] ) ? (int) $GLOBALS['hozio_update_run_started'] : 0;
     if ( $started <= 0 ) {
+        return false;
+    }
+
+    // Unchanged since the run was armed: somebody else's file.
+    $before = isset( $GLOBALS['hozio_maintenance_before_run'] ) ? (string) $GLOBALS['hozio_maintenance_before_run'] : '';
+    if ( $before !== '' && hozio_maintenance_signature() === $before ) {
         return false;
     }
 
@@ -729,8 +753,10 @@ function hozio_guard_deliberate_maintenance() {
  * at the start would switch the crashing plugin back on and end the maintenance window.
  */
 function hozio_arm_update_crash_guard() {
-    // The moment this run started: maintenance files are judged against it.
-    $GLOBALS['hozio_update_run_started'] = time();
+    // The moment this run started, and the maintenance file as it was then (if any):
+    // maintenance files are judged against both.
+    $GLOBALS['hozio_update_run_started']     = time();
+    $GLOBALS['hozio_maintenance_before_run'] = hozio_maintenance_signature();
     // Plugins switched off INSIDE this request while the run is going. Only these are
     // ever switched back on; see hozio_note_run_deactivations().
     $GLOBALS['hozio_deactivated_during_run'] = array();
