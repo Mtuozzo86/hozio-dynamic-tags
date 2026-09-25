@@ -782,6 +782,12 @@ class Hozio_Command_Executor {
                 $result['hold'] = is_wp_error($hold) ? ['ok' => false, 'error' => $hold->get_error_message()] : $hold;
             } else {
                 update_option('hozio_auto_updates_enabled', '1');
+                // Same version or newer: lift the hold an earlier Hub downgrade placed, or
+                // Hozio Pro would stop self-updating for up to 30 days. Only a hold the Hub
+                // placed; an orchestrator, wp-admin or WP-CLI hold stays until its owner
+                // releases it.
+                $result['hold_released'] = function_exists('hozio_update_hold_release_hub_self')
+                    && hozio_update_hold_release_hub_self(sprintf('Hub installed Hozio Pro %s (was %s)', $version, $before));
             }
         }
 

@@ -2,6 +2,44 @@
 HOZIO PRO - CHANGELOG
 ================================================================================
 
+== Version 4.21.1 (September 2026) ==
+
+= Fixes =
+
+* The HTML sitemap no longer lists categories or tags whose URL the
+  Redirection plugin sends elsewhere. On sites that strip the category base,
+  an old category can share its URL with a legacy page that now redirects to
+  a service page, so the sitemap listed links that bounced. A category or tag
+  is left out when an enabled Redirection rule, exact or regex, redirects
+  every visitor from its URL (or answers it with a 404 or 410). Rules that
+  only apply to some visitors (logged-in users, a referrer, a cookie and the
+  like) and "pass-through" or "do nothing" rules leave the link listed.
+  Category and tag links are now also escaped.
+
+  Sites without Redirection run no extra query at all. With it, the sitemap
+  makes one check for the table, one query for regex rules and one indexed
+  lookup for its own links, whatever the number of rules; exact rules are
+  never loaded into memory. A regex rule that does not compile is skipped
+  without a warning, and regex testing stops after a fixed budget, leaving
+  any remaining links listed.
+
+* After a Hub downgrade placed a 30-day hold on Hozio Pro, a later Hub
+  install of the same or a newer version left that hold in place, so Hozio
+  Pro stopped updating itself for up to 30 days. That install now releases
+  the hold (and says so in its result), and a newer release also releases it
+  on its first run, since the install may have been carried out by an older
+  release. Only a hold the Hub placed is released this way; holds placed by
+  managing tools, from wp-admin or with WP-CLI stay until their owner lifts
+  them.
+
+= Notes =
+
+* Redirection matches regex rules against the path WITH its leading slash,
+  so a rule written as ^old-service-(.*)/ never fires in Redirection itself.
+  The sitemap tests both forms and leaves the category out either way, so it
+  can leave out a category that a broken rule aims at even though the URL
+  still loads.
+
 == Version 4.21.0 (September 2026) ==
 
 = Fixes =

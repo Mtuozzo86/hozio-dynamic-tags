@@ -2,7 +2,7 @@
 /*
 Plugin Name:     Hozio Pro
 Description:     Next-generation tools to power your website's performance and unlock new levels of speed, efficiency, and impact.
-Version:         4.21.0
+Version:         4.21.1
 Author:          Hozio Web Dev
 Author URI:      https://hozio.com
 License:         GPL2
@@ -22,7 +22,7 @@ Text Domain:     hozio-dynamic-tags
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define('HOZIO_VERSION', '4.21.0');
+define('HOZIO_VERSION', '4.21.1');
 define('HOZIO_PLUGIN_FILE', __FILE__);
 define('HOZIO_HUB_URL', 'https://www.hozio.com');
 
@@ -136,6 +136,11 @@ add_action('init', function() {
     $last_version = get_option('hozio_last_flushed_version', '0');
     if (version_compare($last_version, HOZIO_VERSION, '<')) {
         flush_rewrite_rules(true);
+        // First run of a newer release: lift a Hub downgrade's pin on Hozio Pro that this
+        // release has outgrown (includes/update-holds.php). Hub-placed holds only.
+        if (function_exists('hozio_update_hold_release_stale_hub_pin')) {
+            hozio_update_hold_release_stale_hub_pin(HOZIO_VERSION);
+        }
         update_option('hozio_last_flushed_version', HOZIO_VERSION);
     }
 }, 99);

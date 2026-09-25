@@ -628,6 +628,62 @@ function hozio_update_hold_release( $plugin_file, $args ) {
 }
 
 /**
+ * Release the hold on Hozio Pro itself, but only one the Hub placed (a Hub downgrade does).
+ *
+ * A hold placed by the orchestrator, from wp-admin or with WP-CLI is never touched: its
+ * owner releases it. The release is audit-logged by hozio_update_hold_release().
+ *
+ * @param string $reason Why, for the audit log.
+ * @return bool True when a hold was released.
+ */
+function hozio_update_hold_release_hub_self( $reason ) {
+    if ( ! defined( 'HOZIO_PLUGIN_FILE' ) ) {
+        return false;
+    }
+    $file = plugin_basename( HOZIO_PLUGIN_FILE );
+    $hold = hozio_update_hold_get_active( $file );
+    if ( ! $hold || $hold['source'] !== 'hub' ) {
+        return false;
+    }
+    $r = hozio_update_hold_release( $file, array( 'reason' => $reason, 'source' => 'hub' ) );
+    return ! is_wp_error( $r ) && ! empty( $r['released'] );
+}
+
+/**
+ * Once a newer Hozio Pro runs, release the Hub's pin from an earlier downgrade.
+ *
+ * A Hub downgrade pins Hozio Pro at the version it rolled back to (held_at), naming the
+ * release it rolled back from in versions. The Hub's later rollback_plugin to a newer
+ * release is carried out by the OLDER code, which may predate releasing that pin, so the
+ * newer code checks on its first run: running version newer than held_at and not one the
+ * hold names as broken means the pin has done its job. Without this Hozio Pro would stop
+ * updating for up to 30 days. Only a hold with source "hub" is ever released here.
+ *
+ * Called once per version bump (hozio-dynamic-tags.php), never per request.
+ *
+ * @param string $running The version now running.
+ * @return bool True when a hold was released.
+ */
+function hozio_update_hold_release_stale_hub_pin( $running ) {
+    if ( ! defined( 'HOZIO_PLUGIN_FILE' ) ) {
+        return false;
+    }
+    $running = (string) $running;
+    $hold    = hozio_update_hold_get_active( plugin_basename( HOZIO_PLUGIN_FILE ) );
+    if ( ! $hold || $hold['source'] !== 'hub' || $hold['held_at'] === '' || ! hozio_hold_valid_version( $running ) ) {
+        return false;
+    }
+    if ( ! version_compare( $running, $hold['held_at'], '>' ) || in_array( $running, $hold['versions'], true ) ) {
+        return false;
+    }
+    return hozio_update_hold_release_hub_self( sprintf(
+        'Released automatically: Hozio Pro %s is running, newer than the %s this hold pinned',
+        $running,
+        $hold['held_at']
+    ) );
+}
+
+/**
  * A free-text field on its way out of wp-admin: email and IP addresses removed.
  *
  * Reasons, sources and refs are free text. A source can be admin:<login>, and a login is

@@ -2030,13 +2030,45 @@ echo '</style>';
                             'order' => 'ASC',
                             'hide_empty' => true
                         ));
-                        
+                        if (!is_array($categories)) {
+                            $categories = array();
+                        }
+
+                        // Tags are fetched here, not in the Tags section, so ONE redirect check
+                        // covers both lists (includes/sitemap-redirects.php).
+                        $tags = get_tags(array(
+                            'orderby' => 'count',
+                            'order' => 'DESC',
+                            'hide_empty' => true,
+                            'number' => 30
+                        ));
+                        if (!is_array($tags)) {
+                            $tags = array();
+                        }
+
+                        // Leave out categories and tags whose URL the Redirection plugin sends
+                        // elsewhere, e.g. an old category slug that now matches a legacy page's
+                        // 301. No query at all on sites without Redirection.
+                        require_once dirname(__DIR__) . '/sitemap-redirects.php';
+                        $hozio_term_links = array();
                         foreach ($categories as $category) {
+                            $hozio_term_links['c' . $category->term_id] = (string) get_category_link($category->term_id);
+                        }
+                        foreach ($tags as $tag) {
+                            $hozio_term_links['t' . $tag->term_id] = (string) get_tag_link($tag->term_id);
+                        }
+                        $hozio_redirected = hozio_sitemap_redirected_links(array_values($hozio_term_links));
+
+                        foreach ($categories as $category) {
+                            $category_link = $hozio_term_links['c' . $category->term_id];
+                            if (isset($hozio_redirected[$category_link])) {
+                                continue;
+                            }
                             echo '<li class="sitemap-item">';
-                            echo '<a href="' . get_category_link($category->term_id) . '" class="sitemap-link">';
+                            echo '<a href="' . esc_url($category_link) . '" class="sitemap-link">';
                             echo esc_html($category->name);
                             echo '</a>';
-                            echo '<span class="post-count">(' . $category->count . ')</span>';
+                            echo '<span class="post-count">(' . (int) $category->count . ')</span>';
                             echo '</li>';
                         }
                         ?>
@@ -2054,15 +2086,13 @@ echo '</style>';
                     </h3>
                     <div class="tag-cloud">
                         <?php
-                        $tags = get_tags(array(
-                            'orderby' => 'count',
-                            'order' => 'DESC',
-                            'hide_empty' => true,
-                            'number' => 30
-                        ));
-                        
+                        // $tags and $hozio_redirected come from the Categories section above.
                         foreach ($tags as $tag) {
-                            echo '<a href="' . get_tag_link($tag->term_id) . '" class="tag-link">';
+                            $tag_link = $hozio_term_links['t' . $tag->term_id];
+                            if (isset($hozio_redirected[$tag_link])) {
+                                continue;
+                            }
+                            echo '<a href="' . esc_url($tag_link) . '" class="tag-link">';
                             echo esc_html($tag->name);
                             echo '</a>';
                         }
