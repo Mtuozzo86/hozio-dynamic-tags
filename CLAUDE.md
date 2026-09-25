@@ -28,19 +28,27 @@ Run `php -n -l` on every PHP file. The `-n` matters: it runs without php.ini, so
 
 ```powershell
 $php = 'php'   # or the full path to a local php.exe
-$files = @('hozio-dynamic-tags.php') + (Get-ChildItem includes -Recurse -Filter *.php | % FullName)
+$files = @('hozio-dynamic-tags.php') + (Get-ChildItem includes, tests -Recurse -Filter *.php | % FullName)
 $bad = 0; foreach ($f in $files) { & $php -n -l $f | Out-Null; if ($LASTEXITCODE) { $bad++; & $php -n -l $f } }; "$($files.Count) files, $bad failures"
 ```
 
-Behaviour tests (harnesses with WordPress stubs) live outside the plugin folder and never ship.
+## Behaviour tests (required before every release)
+
+`tests/` holds command-line harnesses that run the plugin's logic against WordPress stubs and a fake `wpdb`; no WordPress install is needed. Run them all with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tests/run.ps1 -Php php
+```
+
+`-Php` takes any PHP 7.4+ binary; the default is `php` on the PATH. Any local PHP works. On a machine with Local (by Flywheel), for example, its bundled `php.exe` under `...\Local\lightning-services\php-<version>\bin\win64\` will do, but that is an example, not a requirement. The script exits 1 if any check fails, and the stubs turn any new PHP warning into a failure. Add or update a harness with every behaviour change; `tests/README.md` has the conventions (generic test data only). `tests/` never ships: the release ZIP is an allow-list (below), `.gitattributes` keeps it out of GitHub's source archives, and every test file exits unless run from the command line.
 
 ## Release steps (summary of RELEASE.md, which is kept locally and not committed)
 
 1. Bump **both** version strings in `hozio-dynamic-tags.php`: the `Version:` header and `define('HOZIO_VERSION', ...)`.
 2. Add a CHANGELOG entry at the top of `CHANGELOG.txt`, in its existing voice (`= Security =`, `= Fixes =`, `= Added =`, `= Changed =`, `= Notes =`), with no client identifiers.
-3. Commit, and push the branch.
+3. Lint (above) and **run the tests**: `tests/run.ps1` must end with 0 failed. Then commit, and push the branch.
 4. Build the ZIP with `System.IO.Compression.ZipFile` and **forward slashes**. The top folder must be `hozio-dynamic-tags/`. Include only `hozio-dynamic-tags.php`, `CHANGELOG.txt`, `README.md`, `includes/` and `assets/`. **Never use `Compress-Archive`**: its backslash paths break installs on Linux.
-5. Verify the ZIP: every entry is `hozio-dynamic-tags/...`, no backslashes, no stray files (this file, tests, `.git`), and `php -n -l` passes on the extracted PHP.
+5. Verify the ZIP: every entry is `hozio-dynamic-tags/...`, no backslashes, no stray files (this file, `FEATURES.md`, `tests/`, `.git`), and `php -n -l` passes on the extracted PHP.
 6. Create the **pre-release** (rule 1), test, and promote later.
 
 Updater safety: `after_install()` must never move or delete directories. `fix_source_directory()` renames the folder before install. `after_install()` only reactivates and clears the cache.

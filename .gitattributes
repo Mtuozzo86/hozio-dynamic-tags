@@ -1,0 +1,3 @@
+# Keep the test harnesses out of GitHub's auto-generated source archives (zipball/tarball).
+# The plugin updater falls back to the source zipball when a release has no ZIP asset.
+/tests export-ignore
