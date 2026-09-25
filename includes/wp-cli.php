@@ -163,21 +163,21 @@ class Hozio_CLI_Command {
         if ( $lines === null ) {
             $lines = '200';
         }
-        if ( ! preg_match( '/^\d{1,4}$/', $lines ) || (int) $lines < 1 || (int) $lines > 1000 ) {
+        if ( ! preg_match( '/^\d{1,4}\z/', $lines ) || (int) $lines < 1 || (int) $lines > 1000 ) {
             Hozio_CLI_Output::fail( 'bad_lines', '--lines must be a number from 1 to 1000.' );
         }
 
         $since = 0;
         $raw   = Hozio_CLI_Output::arg( $assoc_args, 'since' );
         if ( $raw !== null ) {
-            $since = preg_match( '/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+\-]\d{2}:?\d{2})?)?$/', $raw ) ? strtotime( $raw ) : false;
+            $since = preg_match( '/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+\-]\d{2}:?\d{2})?)?\z/', $raw ) ? strtotime( $raw ) : false;
             if ( ! $since ) {
                 Hozio_CLI_Output::fail( 'bad_since', '--since must be an ISO date or time, e.g. 2026-09-24T10:00:00Z.' );
             }
         }
 
         $category = Hozio_CLI_Output::arg( $assoc_args, 'category' );
-        if ( $category !== null && ! preg_match( '/^[A-Za-z0-9_.:\-]{1,64}$/', $category ) ) {
+        if ( $category !== null && ! preg_match( '/^[A-Za-z0-9_.:\-]{1,64}\z/', $category ) ) {
             Hozio_CLI_Output::fail( 'bad_category', '--category may only use letters, digits and _ . : -' );
         }
 
@@ -293,18 +293,13 @@ class Hozio_CLI_Updates_Command {
     public function holds( $args, $assoc_args ) {
         Hozio_CLI_Output::require_json( $assoc_args );
 
-        $status = hozio_update_holds_status();
-        $list   = array();
-        foreach ( $status['holds'] as $h ) {
-            $h['reason'] = hozio_log_redact( $h['reason'] );
-            $list[]      = $h;
-        }
-        $freeze           = hozio_update_freeze_status();
-        $freeze['reason'] = hozio_log_redact( $freeze['reason'] );
+        // Redacted (reason, source, ref): this output ends up in the host's activity log.
+        $status = hozio_update_holds_status( true );
+        $freeze = hozio_update_freeze_status( true );
 
         Hozio_CLI_Output::emit( array(
             'ok'            => true,
-            'holds'         => $list,
+            'holds'         => $status['holds'],
             'holds_invalid' => $status['invalid'],
             'freeze'        => $freeze,
         ) );

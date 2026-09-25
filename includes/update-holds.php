@@ -51,7 +51,7 @@ function hozio_hold_valid_plugin_file( $file ) {
     if ( ! is_string( $file ) || $file === '' || strlen( $file ) > 200 || strpos( $file, '..' ) !== false ) {
         return false;
     }
-    return (bool) preg_match( '#^[A-Za-z0-9_\-][A-Za-z0-9_.\-]*(?:/[A-Za-z0-9_\-][A-Za-z0-9_.\-]*)?\.php$#', $file );
+    return (bool) preg_match( '#^[A-Za-z0-9_\-][A-Za-z0-9_.\-]*(?:/[A-Za-z0-9_\-][A-Za-z0-9_.\-]*)?\.php\z#', $file );
 }
 
 /**
@@ -59,7 +59,7 @@ function hozio_hold_valid_plugin_file( $file ) {
  * @return bool
  */
 function hozio_hold_valid_version( $v ) {
-    return is_string( $v ) && (bool) preg_match( '/^[0-9A-Za-z][0-9A-Za-z.+_\-]{0,39}$/', $v );
+    return is_string( $v ) && (bool) preg_match( '/^[0-9A-Za-z][0-9A-Za-z.+_\-]{0,39}\z/', $v );
 }
 
 /**
@@ -69,7 +69,7 @@ function hozio_hold_valid_version( $v ) {
  * @return bool
  */
 function hozio_hold_valid_source( $s ) {
-    return is_string( $s ) && (bool) preg_match( '/^(?:orchestrator|hub|wp-cli|admin:[A-Za-z0-9_.@\-]{1,60})$/', $s );
+    return is_string( $s ) && (bool) preg_match( '/^(?:orchestrator|hub|wp-cli|admin:[A-Za-z0-9_.@\-]{1,60})\z/', $s );
 }
 
 /**
@@ -79,7 +79,7 @@ function hozio_hold_valid_source( $s ) {
  * @return bool
  */
 function hozio_hold_valid_ref( $r ) {
-    return is_string( $r ) && ( $r === '' || (bool) preg_match( '/^[A-Za-z0-9_.:\-]{1,100}$/', $r ) );
+    return is_string( $r ) && ( $r === '' || (bool) preg_match( '/^[A-Za-z0-9_.:\-]{1,100}\z/', $r ) );
 }
 
 /**
@@ -210,10 +210,10 @@ function hozio_hold_parse_until( $raw, $max_days ) {
     }
     $raw = trim( (string) $raw );
 
-    if ( preg_match( '/^\+(\d{1,6})([mhd])$/', $raw, $m ) ) {
+    if ( preg_match( '/^\+(\d{1,6})([mhd])\z/', $raw, $m ) ) {
         $unit = array( 'm' => MINUTE_IN_SECONDS, 'h' => HOUR_IN_SECONDS, 'd' => DAY_IN_SECONDS );
         $ts   = $now + (int) $m[1] * $unit[ $m[2] ];
-    } elseif ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?Z)?$/', $raw, $m ) ) {
+    } elseif ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?Z)?\z/', $raw, $m ) ) {
         if ( ! checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ) {
             return new WP_Error( 'bad_until', 'That date does not exist.' );
         }
@@ -287,7 +287,7 @@ function hozio_hold_int( $v ) {
     if ( is_int( $v ) ) {
         return $v;
     }
-    if ( is_string( $v ) && preg_match( '/^\d{1,12}$/', $v ) ) {
+    if ( is_string( $v ) && preg_match( '/^\d{1,12}\z/', $v ) ) {
         return (int) $v;
     }
     return null;
@@ -628,11 +628,35 @@ function hozio_update_hold_release( $plugin_file, $args ) {
 }
 
 /**
+ * A free-text field on its way out of wp-admin: email and IP addresses removed.
+ *
+ * Reasons, sources and refs are free text. A source can be admin:<login>, and a login is
+ * often an email address; a ref can look like an IP address. WP-CLI output lands in the
+ * host's activity log, readable by every collaborator on the site. If the redactor is
+ * somehow missing, nothing is shown rather than the raw text.
+ *
+ * @param mixed $s
+ * @param bool  $redact
+ * @return string
+ */
+function hozio_hold_public_text( $s, $redact ) {
+    $s = (string) $s;
+    if ( ! $redact ) {
+        return $s;
+    }
+    return function_exists( 'hozio_log_redact' ) ? hozio_log_redact( $s ) : '';
+}
+
+/**
  * Holds as the status output shows them.
  *
+ * Redacted by default: this feeds `wp hozio updates holds`, `wp hozio info` and the Hub
+ * heartbeat. Only the wp-admin settings panel (administrators only) passes false.
+ *
+ * @param bool $redact Remove email and IP addresses from reason, source and ref.
  * @return array{holds: array[], invalid: int, active: int, expired: int}
  */
-function hozio_update_holds_status() {
+function hozio_update_holds_status( $redact = true ) {
     $state = hozio_update_holds_read();
     $list  = array();
     $live  = 0;
@@ -643,9 +667,9 @@ function hozio_update_holds_status() {
             'mode'       => $h['mode'],
             'versions'   => $h['versions'],
             'held_at'    => $h['held_at'],
-            'reason'     => $h['reason'],
-            'source'     => $h['source'],
-            'ref'        => $h['ref'],
+            'reason'     => hozio_hold_public_text( $h['reason'], $redact ),
+            'source'     => hozio_hold_public_text( $h['source'], $redact ),
+            'ref'        => hozio_hold_public_text( $h['ref'], $redact ),
             'created_at' => hozio_hold_iso( $h['created_at'] ),
             'expires_at' => hozio_hold_iso( $h['expires_at'] ),
             'expired'    => $h['expired'],
@@ -839,9 +863,13 @@ function hozio_updates_unfreeze( $args ) {
 /**
  * The freeze as the status output shows it.
  *
+ * Redacted by default, like hozio_update_holds_status(); only the wp-admin settings panel
+ * passes false.
+ *
+ * @param bool $redact Remove email and IP addresses from reason, source and ref.
  * @return array
  */
-function hozio_update_freeze_status() {
+function hozio_update_freeze_status( $redact = true ) {
     $f   = hozio_update_freeze_read();
     $out = array(
         'active'  => $f['active'],
@@ -854,9 +882,9 @@ function hozio_update_freeze_status() {
     );
     if ( $f['freeze'] ) {
         $out['until']  = hozio_hold_iso( $f['freeze']['until'] );
-        $out['reason'] = $f['freeze']['reason'];
-        $out['source'] = $f['freeze']['source'];
-        $out['ref']    = $f['freeze']['ref'];
+        $out['reason'] = hozio_hold_public_text( $f['freeze']['reason'], $redact );
+        $out['source'] = hozio_hold_public_text( $f['freeze']['source'], $redact );
+        $out['ref']    = hozio_hold_public_text( $f['freeze']['ref'], $redact );
     }
     return $out;
 }
@@ -956,8 +984,9 @@ define( 'HOZIO_ORCHESTRATOR_CONTRACT', 1 );
  * @return array
  */
 function hozio_orchestrator_info( $compact = false ) {
-    $holds   = hozio_update_holds_status();
-    $freeze  = hozio_update_freeze_status();
+    // Both redacted (reason, source, ref): this output ends up in the host's activity log.
+    $holds   = hozio_update_holds_status( true );
+    $freeze  = hozio_update_freeze_status( true );
     $license = function_exists( 'hozio_get_license_status' ) ? hozio_get_license_status() : array();
 
     $out = array(
@@ -968,7 +997,7 @@ function hozio_orchestrator_info( $compact = false ) {
         'hub_connected'  => class_exists( 'Hozio_Hub_Client' ) && Hozio_Hub_Client::is_connected(),
         'freeze'         => $compact
             ? array( 'active' => $freeze['active'], 'until' => $freeze['until'] )
-            : array_merge( $freeze, array( 'reason' => hozio_log_redact( $freeze['reason'] ) ) ),
+            : $freeze,
         'holds_active'   => $holds['active'],
         'holds_expired'  => $holds['expired'],
         'holds_invalid'  => $holds['invalid'],
@@ -998,12 +1027,7 @@ function hozio_orchestrator_info( $compact = false ) {
         'git_updater'    => ! empty( $patch['git_updater'] ),
     );
 
-    $list = array();
-    foreach ( $holds['holds'] as $h ) {
-        $h['reason'] = hozio_log_redact( $h['reason'] );
-        $list[]      = $h;
-    }
-    $out['holds'] = $list;
+    $out['holds'] = $holds['holds'];
 
     // An object even when empty, so the type never changes between sites.
     $out['pending'] = (object) ( isset( $patch['pending'] ) ? $patch['pending'] : array() );

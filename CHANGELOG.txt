@@ -61,8 +61,10 @@ HOZIO PRO - CHANGELOG
 
 * WP-CLI commands for managing tools: wp hozio info, wp hozio log, and wp
   hozio updates hold / release / holds / freeze / unfreeze / history. Each
-  prints one line of JSON and never prints a secret; email and IP addresses
-  in log lines are redacted.
+  prints one line of JSON and never prints a secret. Email and IP addresses
+  are removed from log lines and from the reason, source and reference of
+  every hold and freeze they print (the heartbeat too); the Hozio Pro
+  settings page still shows them in full to the site's administrators.
 
 * Hub commands hold_plugin_updates, release_plugin_updates, freeze_updates
   and unfreeze_updates. The heartbeat now reports holds and the freeze, so

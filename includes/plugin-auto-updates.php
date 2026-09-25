@@ -448,8 +448,9 @@ function hozio_get_patch_status() {
         }
     }
 
-    $holds  = function_exists( 'hozio_update_holds_status' ) ? hozio_update_holds_status() : array( 'holds' => array(), 'invalid' => 0 );
-    $freeze = function_exists( 'hozio_update_freeze_status' ) ? hozio_update_freeze_status() : array( 'active' => false );
+    // Redacted (reason, source, ref): this is the Hub heartbeat and `wp hozio info` data.
+    $holds  = function_exists( 'hozio_update_holds_status' ) ? hozio_update_holds_status( true ) : array( 'holds' => array(), 'invalid' => 0 );
+    $freeze = function_exists( 'hozio_update_freeze_status' ) ? hozio_update_freeze_status( true ) : array( 'active' => false );
 
     return array(
         'auto_update_enabled' => hozio_auto_update_all_enabled(),
@@ -601,11 +602,12 @@ function hozio_update_run_refusal() {
     if ( function_exists( 'hozio_update_freeze_read' ) ) {
         $freeze = hozio_update_freeze_read();
         if ( $freeze['active'] ) {
+            // Redacted: this message also goes back to the Hub.
             return sprintf(
                 'Updates are frozen until %s UTC by %s: %s',
                 gmdate( 'Y-m-d H:i', $freeze['freeze']['until'] ),
-                $freeze['freeze']['source'],
-                $freeze['freeze']['reason']
+                hozio_hold_public_text( $freeze['freeze']['source'], true ),
+                hozio_hold_public_text( $freeze['freeze']['reason'], true )
             );
         }
     }

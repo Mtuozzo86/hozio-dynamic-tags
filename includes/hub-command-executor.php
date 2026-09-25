@@ -355,8 +355,8 @@ class Hozio_Command_Executor {
         // Lower case letters, digits, _ and - only. MySQL compares option names without
         // regard to case or trailing spaces, so "hozio_Hub_site_token" or a name with a
         // trailing space would pass the checks below as a PHP string yet overwrite the
-        // protected row in the database.
-        if (!preg_match('/^hozio_[a-z0-9_\-]+$/', $option_name)) {
+        // protected row in the database. \z, not $: $ also matches before a final newline.
+        if (!preg_match('/^hozio_[a-z0-9_\-]+\z/', $option_name)) {
             return ['success' => false, 'error' => 'Option names may only contain lower-case letters, digits, _ and -.'];
         }
 
@@ -649,7 +649,7 @@ class Hozio_Command_Executor {
                 // it names; if nothing is pending yet, the filter checks during the run.
                 if ($hold['mode'] === 'pin' || ($target !== '' && hozio_update_hold_blocks($plugin_file, $target))) {
                     hozio_audit_log(sprintf('Refused a Hub update of %s%s: it is held until %s (%s)', $plugin_file, $force ? ' (forced)' : '', hozio_hold_iso($hold['expires_at']), $hold['reason']), 'AutoUpdate');
-                    return ['success' => false, 'error' => sprintf('%s is held until %s (%s, by %s). Send release_plugin_updates first.', $plugin_file, hozio_hold_iso($hold['expires_at']), $hold['reason'], $hold['source'])];
+                    return ['success' => false, 'error' => sprintf('%s is held until %s (%s, by %s). Send release_plugin_updates first.', $plugin_file, hozio_hold_iso($hold['expires_at']), hozio_hold_public_text($hold['reason'], true), hozio_hold_public_text($hold['source'], true))];
                 }
             }
         }

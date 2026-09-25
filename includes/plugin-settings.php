@@ -1649,11 +1649,12 @@ Disallow: /</pre>
                 // Update holds and the freeze (includes/update-holds.php). Release and Unfreeze are
                 // links to admin-post.php, not buttons: this whole section sits inside the settings
                 // form, and a form cannot contain another form.
+                // Unredacted (false): this panel is for the site's administrators only.
                 $hozio_holds_state  = function_exists('hozio_update_holds_status')
-                    ? hozio_update_holds_status()
+                    ? hozio_update_holds_status(false)
                     : array('holds' => array(), 'invalid' => 0, 'active' => 0, 'expired' => 0);
                 $hozio_freeze_state = function_exists('hozio_update_freeze_status')
-                    ? hozio_update_freeze_status()
+                    ? hozio_update_freeze_status(false)
                     : array('active' => false, 'expired' => false, 'invalid' => 0, 'until' => null, 'reason' => '', 'source' => '');
                 $hozio_can_release  = current_user_can('update_plugins');
                 $hozio_holds_notice = function_exists('hozio_update_holds_notice_text') ? hozio_update_holds_notice_text() : '';

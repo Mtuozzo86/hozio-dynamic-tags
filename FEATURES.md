@@ -253,7 +253,7 @@ Two custom taxonomies (`parent_pages`, `town_taxonomies`) on the `page` post typ
 No REST route exposes holds, the freeze or the audit log. That is deliberate: the orchestrator's interface is WP-CLI.
 
 ### WP-CLI (`includes/wp-cli.php`) — the orchestrator contract
-Registered only under WP-CLI. Every command: one line of compact JSON (only `--format=json`, the default), exit 1 with `{"ok":false,"error":"<code>","message":"..."}` on failure, no prompts, no secrets, email/IP addresses redacted from free text. Hosts that keep command output in an activity log must never see a secret there, and the orchestrator reads roughly the first 500 characters of a successful command.
+Registered only under WP-CLI. Every command: one line of compact JSON (only `--format=json`, the default), exit 1 with `{"ok":false,"error":"<code>","message":"..."}` on failure, no prompts, no secrets, email/IP addresses redacted from free text (log lines, and the `reason`, `source` and `ref` of holds and the freeze; `hozio_update_holds_status()` / `hozio_update_freeze_status()` redact by default and only the settings panel passes `false`). Validators anchor with `\z`, never `$`, which also matches before a trailing newline. Hosts that keep command output in an activity log must never see a secret there, and the orchestrator reads roughly the first 500 characters of a successful command.
 
 | Command | Output (keys, in order) |
 |---|---|
